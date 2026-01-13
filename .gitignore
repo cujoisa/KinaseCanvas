@@ -1,0 +1,10 @@
+.Rhistory
+.Rproj.user/
+.RData
+.Rproj
+renv/library/
+renv/staging/
+.DS_Store
+*.html
+*.rds
+*.fst

@@ -1,0 +1,521 @@
+---
+title: "Explorer for integrated kinase–substrate + substrate–substrate network"
+editor: visual
+author: "Chinmaya Joisa"
+date: "10/01/2025"
+toc: true
+toc-depth: 5
+toc-title: Table of Contents
+highlight-style: pygments
+format: 
+  html:
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+execute:
+  echo: false
+  cache: true
+  message: false
+  warning: false
+  out-width: "100%"
+  fig-align: center
+  fig-dpi: 300
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+require("knitr")
+## setting working directory
+knitr::opts_knit$set(root.dir = here::here())
+set.seed(123)
+```
+
+```{r load_libraries, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(tidygraph)
+library(here)
+library(igraph)
+library(ggraph)
+library(scales)
+library(readxl)
+library(ggpubr)
+library(jsonlite)
+library(htmltools)
+
+library(ggupset)
+library(patchwork)
+
+```
+
+```{r, echo=FALSE, results='asis'}
+
+full_interaction_data <- read_csv(here("results/extended_kinome_network_summary.csv"))
+
+flt3_nodes = full_interaction_data %>%
+  filter(Protein1 == "FLT3" | Protein2 == "FLT3") %>%
+  select(Protein1, Protein2) %>%
+  pivot_longer(everything(), values_to = "Gene") %>%
+  distinct() %>%
+  arrange(Gene)
+
+test = full_interaction_data %>%
+  filter(Protein1 %in% flt3_nodes$Gene & Protein2 %in% flt3_nodes$Gene)
+
+# Label edge type from Source
+curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet")
+
+edge_tbl <- full_interaction_data %>%
+  mutate(
+    edgeType = case_when(
+      Sources == "HIPPIE" ~ "Inter-substrate PPI",
+      Sources == "Cantley" ~ "Novel",
+      TRUE ~ "Curated"  # fallback: treat unknown curated-like rows as curated
+    ),
+    directed = if_else(edgeType == "Inter-substrate PPI", "false", "true")
+  ) %>%
+  transmute(
+    source = Protein1,
+    target = Protein2,
+    source_entrez = as.character(Protein1_entrez),
+    target_entrez = as.character(Protein2_entrez),
+    edgeType,
+    directed,
+    edgeLabel = paste0(edgeType),
+    SourceList = Sources
+  ) %>%
+  distinct()
+
+# Build node roles from edges:
+#  - KS edges (directed=true): Protein1 is Kinase; Protein2 is Substrate
+#  - PPI (directed=false): both Substrate
+role_from_edges <- bind_rows(
+  edge_tbl %>% filter(directed == "true") %>%
+    transmute(Gene = source, role = "Kinase") %>% distinct(),
+  edge_tbl %>% filter(directed == "true") %>%
+    transmute(Gene = target, role = "Substrate") %>% distinct(),
+  edge_tbl %>% filter(directed == "false") %>%
+    transmute(Gene = source, role = "Substrate") %>% distinct(),
+  edge_tbl %>% filter(directed == "false") %>%
+    transmute(Gene = target, role = "Substrate") %>% distinct()
+) %>%
+  group_by(Gene) %>%
+  summarise(role = paste(sort(unique(role)), collapse=","), .groups="drop")
+
+# Node table (union of endpoints), attach Entrez when present in either direction
+node_tbl <- bind_rows(
+  edge_tbl %>% transmute(Gene = source, Entrez = source_entrez),
+  edge_tbl %>% transmute(Gene = target, Entrez = target_entrez)
+) %>%
+  arrange(Gene) %>%
+  group_by(Gene) %>%
+  summarise(Entrez = dplyr::first(na.omit(Entrez)), .groups="drop") %>%
+  left_join(role_from_edges, by = "Gene") %>%
+  mutate(role = coalesce(role, "Substrate"))
+
+# Simple degrees for tooltips
+deg_tbl <- edge_tbl %>%
+  count(source, name = "outdeg") %>%
+  full_join(edge_tbl %>% count(target, name = "indeg"), by = c("source" = "target")) %>%
+  mutate(outdeg = coalesce(outdeg, 0L), indeg = coalesce(indeg, 0L)) %>%
+  transmute(Gene = source, outdeg, indeg) %>%
+  distinct()
+
+node_tbl <- node_tbl %>%
+  left_join(deg_tbl, by = "Gene") %>%
+  mutate(outdeg = coalesce(outdeg, 0L), indeg = coalesce(indeg, 0L))
+
+# JSON payloads
+nodes_json <- node_tbl %>%
+  transmute(data = pmap(list(id = Gene, label = Gene, Entrez = Entrez, role = role,
+                             indeg = indeg, outdeg = outdeg),
+                        ~ list(id = ..1, label = ..2, Entrez = ..3, role = ..4,
+                               indeg = ..5, outdeg = ..6))) %>%
+  tidyr::unnest_wider(data)
+
+edges_json <- edge_tbl %>%
+  transmute(data = pmap(list(source, target, edgeType, edgeLabel, SourceList, directed),
+                        ~ list(source = ..1, target = ..2,
+                               edgeType = ..3,
+                               edgeLabel = ..4,
+                               SourceList = ..5,
+                               directed = ..6))) %>%
+  tidyr::unnest_wider(data)
+
+payload <- list(nodes = nodes_json, edges = edges_json)
+
+json_payload <- jsonlite::toJSON(payload, auto_unbox = TRUE)
+json_kinases <- jsonlite::toJSON(sort(role_from_edges$Gene[grepl("Kinase", role_from_edges$role, fixed=TRUE)]), auto_unbox = TRUE)
+json_subs    <- jsonlite::toJSON(sort(role_from_edges$Gene[grepl("Substrate", role_from_edges$role, fixed=TRUE)]), auto_unbox = TRUE)
+
+```
+
+```{r}
+
+# Embed payloads
+data_tags <- tagList(
+  tags$script(id = "ks-data",  type = "application/json", HTML(json_payload)),
+  tags$script(id = "kin-data", type = "application/json", HTML(json_kinases)),
+  tags$script(id = "sub-data", type = "application/json", HTML(json_subs))
+)
+
+viewer_tags <- tags$div(
+  `data-quarto-disable-processing` = "true",
+
+  # CSS
+  tags$style(HTML("
+    #controls {display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+    #exportbar {display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 16px 0}
+    #legend {display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:8px 0 12px 0;font-size:13px}
+    #legend .chip{display:inline-flex;align-items:center;gap:6px}
+    #legend .line{width:32px;height:0;border-top:3px solid #999}
+    #legend .line.cur{border-color:#4c78a8}
+    #legend .line.nov{border-color:#b279a2}
+    #legend .line.ppi{border-color:#03da38ff}
+    #legend .dot{width:14px;height:14px;border-radius:50%;display:inline-block;border:1px solid #333}
+    #legend .kin{background:#e6f0ff}
+    #legend .sub{background:#fbeadd}
+    .legend-note{color:#555}
+    #cy {width:100%;height:720px;border:1px solid #ddd;border-radius:8px}
+    .label {font-weight:600}
+    .badge {display:inline-block;padding:2px 8px;border-radius:999px;margin-left:6px;border:1px solid #ccc}
+    .kbadge{background:#e6f0ff;border-color:#7aa8ff}
+    .sbadge{background:#fbeadd;border-color:#ffb27a}
+    .tablewrap{margin-top:14px}
+    .filters {display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}
+    .filters input {padding:4px 6px;border:1px solid #ccc;border-radius:6px;font-size:13px}
+    .tablebox {max-height:360px; overflow:auto; border:1px solid #eee; border-radius:6px}
+    .tbl {border-collapse:collapse;width:100%}
+    .tbl th, .tbl td{border-bottom:1px solid #eee;padding:6px 8px;font-size:13px;text-align:left;white-space:nowrap}
+    .tbl th{background:#fafafa; position: sticky; top: 0; z-index: 1;}
+    .btn{padding:6px 10px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer}
+    .btn:hover{background:#f6f6f6}
+  ")),
+
+  # Controls
+  tags$div(
+    id = "controls",
+    tags$label(class="label", "Kinase:", `for`="kinSel"),
+    tags$input(id="kinSel", list="kinList", placeholder="Type a kinase…", style="min-width:240px"),
+    tags$datalist(id="kinList"),
+    tags$span(class="badge kbadge", "Kinase seed"),
+
+    tags$label(class="label", "Substrate:", `for`="subSel", style="margin-left:16px"),
+    tags$input(id="subSel", list="subList", placeholder="Type a substrate…", style="min-width:240px"),
+    tags$datalist(id="subList"),
+    tags$span(class="badge sbadge", "Substrate seed"),
+
+    tags$label(class="label", "Layout:", `for`="layoutSel", style="margin-left:16px"),
+    tags$select(
+      id="layoutSel",
+      tags$option(value="cose","COSE"),
+      tags$option(value="fcose","fCoSE"),
+      tags$option(value="concentric","Concentric"),
+      tags$option(value="breadthfirst","Breadthfirst")
+    ),
+
+    tags$label(tags$input(type="checkbox", id="labelsChk", checked=NA), " Node labels"),
+    tags$label(tags$input(type="checkbox", id="edgeLabelsChk", checked=NA), " Edge labels"),
+    tags$label(tags$input(type="checkbox", id="arrowsChk", checked=NA), " Arrows")
+  ),
+
+  # Legend
+  tags$div(
+    id="legend",
+    tags$span(class="chip", tags$span(class="dot kin"), "Kinase"),
+    tags$span(class="chip", tags$span(class="dot sub"), "Substrate"),
+    tags$span(class="chip", tags$span(class="line cur"), "Curated"),
+    tags$span(class="chip", tags$span(class="line nov"), "Novel"),
+    tags$span(class="chip", tags$span(class="line ppi"), "Inter-substrate PPI"),
+    tags$span(class="legend-note", "PPIs are undirected; KS edges are directed.")
+  ),
+
+  # Export bar
+  tags$div(
+    id="exportbar",
+    tags$button(id="btnPng", class="btn", "Export PNG"),
+    tags$button(id="btnPdf", class="btn", "Export PDF"),
+    tags$button(id="btnCsvEdges", class="btn", "Download Edges CSV")
+  ),
+
+  # Graph
+  tags$div(id="cy"),
+
+  # Edges table
+  tags$div(
+    class="tablewrap",
+    tags$h4("Edges in View"),
+    tags$div(id="edgesFilters", class="filters"),
+    tags$div(id="edgesTable", class="tablebox")
+  ),
+
+  # JS libs
+  tags$script(src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"),
+  tags$script(src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"),
+
+  # Viewer JS
+  tags$script(HTML("
+  (function(){
+    const data       = JSON.parse(document.getElementById('ks-data').textContent);
+    const kinases    = JSON.parse(document.getElementById('kin-data').textContent);
+    const substrates = JSON.parse(document.getElementById('sub-data').textContent);
+
+    // Build quick lookup maps once
+    const nodeIndex = new Map(data.nodes.map(n => [n.id, n]));
+    // adjacency to find neighbors quickly
+    const neighborsByNode = new Map();
+    data.edges.forEach(e => {
+      if(!neighborsByNode.has(e.source)) neighborsByNode.set(e.source, new Set());
+      if(!neighborsByNode.has(e.target)) neighborsByNode.set(e.target, new Set());
+      neighborsByNode.get(e.source).add(e.target);
+      neighborsByNode.get(e.target).add(e.source);
+    });
+
+    // populate datalists
+    const kinDL = document.getElementById('kinList');
+    kinases.forEach(g => { const opt = document.createElement('option'); opt.value = g; kinDL.appendChild(opt); });
+    const subDL = document.getElementById('subList');
+    substrates.forEach(g => { const opt = document.createElement('option'); opt.value = g; subDL.appendChild(opt); });
+
+    const cy = cytoscape({
+      container: document.getElementById('cy'),
+      elements: [],
+      style: [
+        // Nodes
+        { selector: 'node',
+          style: {
+            'shape': 'round-rectangle',
+            'background-color': '#4c78a8',         // default; role-specific below
+            'label': 'data(label)',
+            'font-size': 11,
+            'color': '#222',
+            'text-opacity': 1,
+            'text-margin-y': -2,
+            'text-halign': 'center',
+            'text-valign': 'center',
+            'border-color': '#1f2a44',
+            'border-width': 0.8,
+            'width': 'label',
+            'height': 'label',
+            'padding': '6px'
+          }
+        },
+        { selector: 'node[role *= \"Substrate\"]:not([role *= \"Kinase\"])',
+          style: { 'background-color': '#fbeadd', 'border-color': '#b27f52' } },
+        { selector: 'node[role *= \"Kinase\"]',
+          style: { 'background-color': '#e6f0ff', 'border-color': '#7aa8ff' } },
+
+        // Seed highlighting
+        { selector: 'node.qk', style: { 'border-width': 2.5 } },
+        { selector: 'node.qs', style: { 'border-width': 2.5 } },
+
+        // Edges
+        { selector: 'edge',
+          style: {
+            'width': 1.6,
+            'curve-style': 'bezier',
+            'line-color': '#999',
+            'target-arrow-color': '#999',
+            'target-arrow-shape': 'triangle',
+            'label': 'data(edgeLabel)',
+            'font-size': 9,
+            'text-rotation': 'autorotate',
+            'text-background-color': '#ffffff',
+            'text-background-opacity': 0.85,
+            'text-background-padding': 2,
+            'text-margin-y': -2
+          }
+        },
+        // Edge color by type
+        { selector: 'edge[edgeType = \"Curated\"]',
+          style: { 'line-color': '#4c78a8', 'target-arrow-color': '#4c78a8' } },
+        { selector: 'edge[edgeType = \"Novel\"]',
+          style: { 'line-color': '#b279a2', 'target-arrow-color': '#b279a2' } },
+        { selector: 'edge[edgeType = \"Inter-substrate PPI\"]',
+          style: { 'line-color': '#03da38ff', 'target-arrow-color': '#03da38ff' } },
+
+        // Directed vs undirected
+        { selector: 'edge[directed = \"true\"]',
+          style: { 'target-arrow-shape': 'triangle' } },
+        { selector: 'edge[directed = \"false\"]',
+          style: { 'target-arrow-shape': 'none' } }
+      ],
+      layout: { name: 'cose' }
+    });
+
+    function setNodeLabels(show){
+      cy.style().selector('node').style('label', show ? 'data(label)' : '').update();
+    }
+    function setEdgeLabels(show){
+      cy.style().selector('edge').style('label', show ? 'data(edgeLabel)' : '').update();
+    }
+    function setArrows(show){
+      if(!show){
+        cy.style().selector('edge').style('target-arrow-shape','none').update();
+      } else {
+        cy.style().selector('edge[directed = \"true\"]').style('target-arrow-shape','triangle').update();
+        cy.style().selector('edge[directed = \"false\"]').style('target-arrow-shape','none').update();
+      }
+    }
+
+    function renderFilterableTable(filtersId, tableBoxId, headers, rows){
+      const fwrap = document.getElementById(filtersId);
+      const box   = document.getElementById(tableBoxId);
+      fwrap.innerHTML = '';
+      box.innerHTML   = '';
+
+      const filters = headers.map(h => {
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.placeholder = 'Filter ' + h;
+        fwrap.appendChild(inp);
+        return inp;
+      });
+
+      const table = document.createElement('table');
+      table.className = 'tbl';
+      const thead = document.createElement('thead');
+      const trh   = document.createElement('tr');
+      headers.forEach(h => { const th = document.createElement('th'); th.textContent = h; trh.appendChild(th); });
+      thead.appendChild(trh); table.appendChild(thead);
+
+      const tbody = document.createElement('tbody'); table.appendChild(tbody); box.appendChild(table);
+
+      function passes(row, query){
+        for(let i=0;i<query.length;i++){
+          const q = query[i];
+          if(q && !String(row[i] ?? '').toLowerCase().includes(q)) return false;
+        }
+        return true;
+      }
+      function draw(){
+        const q = filters.map(x => x.value.trim().toLowerCase());
+        tbody.innerHTML = '';
+        rows.forEach(r => {
+          if(!passes(r, q)) return;
+          const tr = document.createElement('tr');
+          r.forEach(v => { const td = document.createElement('td'); td.textContent = (v ?? '').toString(); tr.appendChild(td); });
+          tbody.appendChild(tr);
+        });
+      }
+      filters.forEach(inp => inp.addEventListener('input', draw));
+      draw();
+    }
+
+    // 1-hop neighborhood induced subgraph
+    function inducedNeighborhood(seeds){
+      const validSeeds = seeds.filter(s => nodeIndex.has(s));
+      if(!validSeeds.length) return {nodes:[], edges:[]};
+
+      // collect seed + all 1-hop neighbors
+      const nset = new Set(validSeeds);
+      validSeeds.forEach(s => {
+        const nbrs = neighborsByNode.get(s);
+        if(nbrs) nbrs.forEach(v => nset.add(v));
+      });
+
+      // include ALL edges whose endpoints are both in the neighborhood
+      const edges = data.edges.filter(e => nset.has(e.source) && nset.has(e.target));
+
+      const nodes = Array.from(nset).map(id => ({
+        data: nodeIndex.get(id),
+        classes: validSeeds.includes(id) ? 'qk' : ''   // keep your seed highlight if you want
+      }));
+
+      return { nodes: nodes.map(n => ({ data: n.data, classes: n.classes })), edges: edges.map(e => ({ data: e })) };
+    }
+
+    function relayout(name){
+      const opts = (name==='concentric') ? { name, minNodeSpacing: 20 } :
+                   (name==='breadthfirst') ? { name, directed: true, padding: 10 } :
+                   (name==='fcose') ? { name, quality: 'proof', randomize: true } :
+                   { name: 'cose', animate: false };
+      cy.layout(opts).run();
+    }
+
+    function refreshEdgesTable(){
+      const rows = cy.edges(':visible').map(e => [
+        e.data('source'),
+        e.data('target'),
+        e.data('edgeType'),
+        e.data('SourceList') ?? ''
+      ]);
+      renderFilterableTable('edgesFilters','edgesTable',
+        ['From','To','Type','Sources'], rows);
+    }
+
+    function render(){
+      const kin   = document.getElementById('kinSel').value.trim();
+      const sub   = document.getElementById('subSel').value.trim();
+      const seeds = [kin, sub].filter(s => s && s.length);
+      if(!seeds.length) return;
+
+      const elems = inducedNeighborhood(seeds);
+      cy.elements().remove();
+      cy.add(elems.nodes);
+      cy.add(elems.edges);
+      relayout(document.getElementById('layoutSel').value);
+      refreshEdgesTable();
+    }
+
+    // UI wiring
+    document.getElementById('kinSel').addEventListener('change', render);
+    document.getElementById('subSel').addEventListener('change', render);
+    document.getElementById('layoutSel').addEventListener('change', () => relayout(document.getElementById('layoutSel').value));
+    document.getElementById('labelsChk').addEventListener('change', e => setNodeLabels(e.target.checked));
+    document.getElementById('edgeLabelsChk').addEventListener('change', e => setEdgeLabels(e.target.checked));
+    document.getElementById('arrowsChk').addEventListener('change', e => setArrows(e.target.checked));
+
+    // Exports
+    function download(filename, blob){
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+    function csvBlob(rows, header){
+      const esc = v => '\"' + String(v ?? '').replaceAll('\"','\"\"') + '\"';
+      const lines = [header.map(esc).join(',')].concat(rows.map(r => r.map(esc).join(',')));
+      return new Blob([lines.join('\\n')], {type:'text/csv'});
+    }
+    document.getElementById('btnPng').addEventListener('click', () => {
+      const uri = cy.png({full:true, scale:2});
+      fetch(uri).then(r => r.blob()).then(b => download('kinome_network.png', b));
+    });
+    document.getElementById('btnPdf').addEventListener('click', () => {
+      const uri = cy.png({full:true, scale:2});
+      fetch(uri).then(r => r.blob()).then(b => {
+        const reader = new FileReader();
+        reader.onload = function(){
+          const { jsPDF } = window.jspdf;
+          const pdf  = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'});
+          const img  = reader.result;
+          const pageW = pdf.internal.pageSize.getWidth();
+          const pageH = pdf.internal.pageSize.getHeight();
+          pdf.addImage(img, 'PNG', 20, 20, pageW-40, pageH-40);
+          pdf.save('kinome_network.pdf');
+        };
+        reader.readAsDataURL(b);
+      });
+    });
+    document.getElementById('btnCsvEdges').addEventListener('click', () => {
+      const rows = cy.edges(':visible').map(e => [
+        e.data('source'),
+        e.data('target'),
+        e.data('edgeType'),
+        e.data('SourceList') ?? ''
+      ]);
+      const blob = csvBlob(rows, ['From','To','Type','Sources']);
+      download('kinome_edges.csv', blob);
+    });
+
+    // Defaults
+    setNodeLabels(true);
+    setEdgeLabels(true);
+    setArrows(true);
+  })();
+  "))
+)
+
+browsable(tagList(data_tags, viewer_tags))
+```

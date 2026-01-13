@@ -1,0 +1,2108 @@
+---
+title: "Analysis and INtegration of Cantley Atlas, PhosphoSitePlus, and HIPPIE Data"
+editor: visual
+author: "Chinmaya Joisa"
+date: "08/15/2025"
+toc: true
+toc-depth: 5
+toc-title: Table of Contents
+highlight-style: pygments
+format: 
+  html:
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+execute:
+  echo: false
+  cache: true
+  message: false
+  warning: false
+  out-width: "100%"
+  fig-align: center
+  fig-dpi: 300
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+require("knitr")
+## setting working directory
+knitr::opts_knit$set(root.dir = here::here())
+```
+
+```{r, include=FALSE}
+
+library(tidyverse)
+library(here)
+library(readxl)
+library(DarkKinaseTools)
+library(biomaRt)
+library(clipr)
+library(conflicted)
+library(tidymodels)
+library(pROC)
+library(glue)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(AnnotationDbi)
+library(data.table)
+library(fastmatch) 
+library(Biostrings)
+library(tidytext)
+
+library(tidygraph)
+library(ggraph)
+library(igraph)
+library(ggpubr)
+library(ggrepel)
+library(scales)
+library(patchwork)
+library(cowplot)
+library(ggupset)
+library(ggalluvial)
+
+all_kinases = all_kinases
+
+pal_src <- c(
+  "PhosphoSitePlus" = "#4C78A8",
+  "PhosphoELM"      = "#F58518",
+  "PhosphoNetworks" = "#54A24B",
+  "Cantley"         = "#B279A2",
+  "Cantley≥99%"     = "#B279A2"
+)
+
+pal_role <- c(Kinase="#2F4B7C", Substrate="#F95D6A", `Kinase,Substrate`="#2CA02C")
+
+theme_pub <- function(base_size = 11){
+  theme_pubr(base_size = base_size) %+replace%
+    theme(
+      panel.grid.major = element_line(color="grey90", linewidth=0.2),
+      panel.grid.minor = element_blank(),
+      axis.title = element_text(face="bold"),
+      plot.title = element_text(face="bold", hjust=0),
+      legend.title = element_text(face="bold")
+    )
+}
+
+
+conflict_prefer("select", "dplyr")
+conflict_prefer("filter", "dplyr")
+conflict_prefer("rename", "dplyr")
+conflicts_prefer(base::setdiff)
+conflicts_prefer(base::union)
+conflicts_prefer(dplyr::coalesce)
+conflicts_prefer(dplyr::slice)
+conflicts_prefer(dplyr::first)
+conflicts_prefer(base::as.factor)
+conflicts_prefer(base::intersect)
+conflicts_prefer(dplyr::desc)
+```
+    
+```{r} 
+#Read in data
+    # Read in Cantley Atlas data
+    cantley_atlas <- read_csv(here("data/CantleyData/CantleyAtlas.csv"))
+    
+    cantley_tyrosine = read_csv(here("data/CantleyData/CantleyTyrosine.csv"))
+
+    # Read in PhosphoSitePlus data
+    # phosphosite_plus <- read_tsv(here("data/Kinase_Substrate_Dataset"), skip = 3)
+
+    # phospho_elm = read_tsv(here("data/phosphoELM_all_2015-04.dump")) %>%
+    #   mutate(
+    #     kinases = case_when(
+    #       kinases == "Lck" ~ "LCK",
+    #       kinases == "Fyn" ~ "FYN",
+    #       kinases == "Abl" ~ "ABL1",
+    #       kinases == "Aurora B" ~ "AURKB",
+    #       kinases == "PDK-1" ~ "PDPK1",
+    #       kinases == "PKC_theta" ~ "PRKCQ",
+    #       kinases == "IKK_beta" ~ "IKBKB",
+    #       kinases == "CaM-KII_alpha" ~ "CAMK2A",
+    #       kinases == "PKC_alpha" ~ "PRKCA",
+    #       kinases == "CK2_alpha" ~ "CSNK2A1",
+    #       kinases == "GSK-3_alpha" ~ "GSK3A",
+    #       kinases == "GSK-3_beta" ~ "GSK3B",
+    #       kinases == "PKB_beta" ~ "AKT2",
+    #       kinases == "DNA-PK" ~ "PRKDC",
+    #       kinases == "ErbB2" ~ "ERBB2",
+    #       kinases == "Aurora A" ~ "AURKA",
+    #       kinases == "PKC_delta" ~ "PRKCD",
+    #       kinases == "Csk" ~ "CSK",
+    #       kinases == "PDGFR_beta" ~ "PDGFRB",
+    #       kinases == "Mnk1" ~ "MKNK1",
+    #       kinases == "Mnk2" ~ "MKNK2",
+    #       kinases == "GRK-2" ~ "ADRBK1",
+    #       kinases == "GRK-5" ~ "GRK5",
+    #       kinases == "CK1_alpha" ~ "CSNK1A1",
+    #       kinases == "Lyn" ~ "LYN",
+    #       kinases == "PDHK1" ~ "PDK1",
+    #       kinases == "PDHK3" ~ "PDK3",
+    #       kinases == "PDHK4" ~ "PDK4",
+    #       kinases == "PKC_epsilon" ~ "PRKCE",
+    #       kinases == "PKG1/cGK-I" ~ "PRKG1",
+    #       kinases == "Fgr" ~ "FGR",
+    #       kinases == "p70S6K" ~ "RPS6KB1",
+    #       kinases == "PKC_beta" ~ "PRKCB",
+    #       kinases == "CK1_delta" ~ "CSNK1D",
+    #       kinases == "CK2_beta" ~ "CSNK2B",
+    #       kinases == "RSK-3" ~ "RPS6KA2",
+    #       kinases == "RSK-2" ~ "RPS6KA3",
+    #       kinases == "CaM-KIV" ~ "CAMK4",
+    #       kinases == "Tyk2" ~ "TYK2",
+    #       kinases == "RSK-1" ~ "RPS6KA1",
+    #       kinases == "IKK_alpha" ~ "CHUK",
+    #       kinases == "mTOR" ~ "MTOR",
+    #       kinases == "CK1_epsilon" ~ "CSNK1E",
+    #       kinases == "PIM-1" ~ "PIM1",
+    #       kinases == "Eg3 kinase" ~ "MELK",
+    #       kinases == "GRK-4" ~ "GRK4",
+    #       kinases == "PKC_zeta" ~ "PRKCZ",
+    #       kinases == "PDKC" ~ "PRKCH",
+    #       kinases == "Chak1" ~ "BRSK1",
+    #       kinases == "TGFbR2" ~ "TGFBR2",
+    #       kinases == "Brk" ~ "PTK6",
+    #       kinases == "RSK-5" ~ "RPS6KA5",
+    #       kinases == "IKK_epsilon" ~ "IKBKE",
+    #       kinases == "TGFbR1" ~ "TGFBR1",
+    #       kinases == "Fes" ~ "FES",
+    #       kinases == "PKA_alpha" ~ "PRKACA",
+    #       kinases == "EphA3" ~ "EPHA3",
+    #       kinases == "EphA4" ~ "EPHA4",
+    #       kinases == "EphA8" ~ "EPHA8",
+    #       kinases == "Kit" ~ "KIT",
+    #       kinases == "EphB3" ~ "EPHB3",
+    #       kinases == "Mer" ~ "MERTK",
+    #       kinases == "PKC_eta" ~ "PRKCH",
+    #       kinases == "PDK-2" ~ "PDPK1",  # ambiguous, often a site not a gene
+    #       kinases == "GRK-6" ~ "GRK6",
+    #       kinases == "Titin kinase" ~ "TTN",
+    #       kinases == "CaM-KI_alpha" ~ "CAMK1",
+    #       kinases == "GRK-1" ~ "GRK1",
+    #       kinases == "EphB2" ~ "EPHB2",
+    #       kinases == "PDGFR_alpha" ~ "PDGFRA",
+    #       kinases == "CCDPK" ~ "CDK5",
+    #       kinases == "Axl" ~ "AXL",
+    #       kinases == "GRK-3" ~ "ADRBK2",
+    #       kinases == "MRCKa" ~ "CDC42BPA",
+    #       kinases == "PKG2/cGK-II" ~ "PRKG2",
+    #       kinases == "NuaK1" ~ "NUAK1",
+    #       kinases == "Abl2" ~ "ABL2",
+    #       kinases == "PKC_gamma" ~ "PRKCG",
+    #       kinases == "PKC_iota" ~ "PRKCI",
+    #       kinases == "CaM-KK_alpha" ~ "CAMKK1",
+    #       kinases == "EphA2" ~ "EPHA2",
+    #       TRUE ~ kinases # fallback to original if no match
+    #     )
+    #   )
+
+    subcellular_localization = read_tsv(here("data/CantleyData/subcellular_location.tsv"))
+
+    #phospho_networks <- read_csv(here("data/phospho_networks_kinase_substrate_sites.csv"))
+
+    kinet <- read_csv(here("data/kinet_data/ksi_source_full_dataset.csv"))
+
+    ochoa_fs = read_excel(here("data/41587_2019_344_MOESM5_ESM.xlsx"), sheet = "functional_score")
+
+    ochoa = read_excel(here("data/41587_2019_344_MOESM4_ESM.xlsx"), sheet = "annotated_phosphoproteome")
+
+    kinase_list = read_excel(here("data/Comprehensive_Kinase_Simple.xlsx")) %>%
+      select(Kinase = Gene, Kinase_Uniprot_ID = `Human Uniprot`, Family = `Kinase Family`) %>%
+      distinct()
+
+```    
+
+### Protein name matching
+```{r}
+
+# Helper: normalize UniProt accessions (drop isoform suffix)
+norm_uniprot <- function(x) str_replace(x, "-\\d+$", "")
+
+# Build canonical symbol map for a vector of gene-like names
+build_symbol_map <- function(x_symbols) {
+  x_symbols <- unique(na.omit(x_symbols))
+  # 1) direct SYMBOL→ENTREZ
+  m1 <- tryCatch(bitr(x_symbols, fromType="SYMBOL", toType="ENTREZID", OrgDb=org.Hs.eg.db), error = function(e) NULL)
+  if (is.null(m1)) m1 <- tibble::tibble(SYMBOL=character(), ENTREZID=character())
+
+  # 2) remaining via ALIAS→ENTREZ
+  left <- setdiff(x_symbols, m1$SYMBOL)
+  m2 <- if (length(left)) tryCatch(bitr(left, fromType="ALIAS", toType="ENTREZID", OrgDb=org.Hs.eg.db), error = function(e) NULL) else NULL
+  if (is.null(m2)) m2 <- tibble::tibble(ALIAS=character(), ENTREZID=character()) else m2 <- rename(m2, SYMBOL=ALIAS)
+
+  mm <- bind_rows(m1, m2) %>% distinct()
+
+  # canonical SYMBOL for each ENTREZ
+  can_sym <- AnnotationDbi::select(org.Hs.eg.db, keys=unique(mm$ENTREZID), keytype="ENTREZID", columns="SYMBOL")
+  left_join(mm, can_sym, by="ENTREZID") %>%
+    transmute(input_symbol = SYMBOL.x, ENTREZID, SYMBOL = SYMBOL.y) %>%
+    distinct()
+}
+
+# 1) Collect all kinase/substrate names we’ll need to harmonize
+kinases_cantley <- colnames(cantley_atlas %>% select(matches("_(rank|percentile)$"))) %>%
+  str_replace("(_percentile|_rank)$","") %>% unique()
+kinases_tyr     <- colnames(cantley_tyrosine %>% select(matches("_(rank|percentile)$"))) %>%
+  str_replace("(_percentile|_rank)$","") %>% unique()
+#kinases_psp     <- unique(phosphosite_plus$KINASE)
+genes_hpa       <- unique(subcellular_localization$`Gene name`)
+#kinases_pselm   <- unique(phospho_elm %>% filter(!str_detect(kinases, "group")) %>% pull(kinases))
+#kinases_pn <- unique(phospho_networks$kinase)
+kinases_kinet = kinet %>% filter(!is.na(`Kinase Name`)) %>% pull(`Kinase Name`) %>% unique()
+
+subs_cantley    <- unique(c(cantley_atlas$Gene, cantley_tyrosine$Gene))
+#subs_psp        <- unique(phosphosite_plus$SUBSTRATE)
+#subs_pselm = bitr(unique(phospho_elm$acc), fromType="UNIPROT", toType="SYMBOL", OrgDb=org.Hs.eg.db) %>%
+#  pull(SYMBOL)
+#subs_pn = unique(phospho_networks$gene)
+subs_kinet = kinet %>% filter(!is.na(`Substrate Name`)) %>% pull(`Substrate Name`) %>% unique()
+
+# 2) Build symbol maps
+symmap_kinase <- build_symbol_map(unique(c(kinases_cantley, kinases_tyr, genes_hpa, kinases_kinet)))
+symmap_subs   <- build_symbol_map(unique(c(subs_cantley, genes_hpa, subs_kinet)))
+
+# # 3) Normalize UniProt IDs early
+# phosphosite_plus <- phosphosite_plus %>%
+#   mutate(SUB_ACC_ID = norm_uniprot(SUB_ACC_ID))
+
+```
+
+### Weights and Helper Functions
+```{r}
+# ── Tunable weights ────────────────────────────────────────────────────────────
+# PSP evidence weights (you can re-tune these later if desired)
+w_invitro <- 0.5
+w_invivo  <- 1.0
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+safe_scale <- function(x) {
+  if (all(is.na(x))) return(rep(NA_real_, length(x)))
+  s <- sd(x, na.rm = TRUE)
+  m <- mean(x, na.rm = TRUE)
+  if (is.na(s) || s == 0) return((x - m) * 0)
+  (x - m) / s
+}
+
+make_site_key <- function(entrez, site_chr) {
+  site_chr <- str_trim(site_chr)
+  site    <- str_extract(site_chr, "^[STY]\\d+$")
+  res     <- str_sub(site, 1, 1)
+  pos     <- suppressWarnings(as.integer(str_sub(site, 2)))
+  paste(entrez, res, pos, sep=":")
+}
+
+```
+
+# Process Cantley (Ser/Thr + Tyr)
+
+```{r}
+
+# Motif priors from Cantley
+
+# Build site-bearing Cantley features (no combined score)
+cantley_serthr_long <- cantley_atlas %>%
+  pivot_longer(cols = matches("_(rank|percentile)$"),
+               names_to = "Kinase", values_to = "Value") %>%
+  mutate(Metric = if_else(str_detect(Kinase, "_rank$"), "Rank", "Percentile"),
+         Kinase = str_replace(Kinase, "(_percentile|_rank)$",""))
+
+cantley_tyr_long <- cantley_tyrosine %>%
+  pivot_longer(cols = matches("_(rank|percentile)$"),
+               names_to = "Kinase", values_to = "Value") %>%
+  mutate(Metric = if_else(str_detect(Kinase, "_rank$"), "Rank", "Percentile"),
+         Kinase = str_replace(Kinase, "(_percentile|_rank)$",""))
+
+cantley_feats <- bind_rows(cantley_serthr_long, cantley_tyr_long) %>%
+  pivot_wider(names_from = Metric, values_from = Value) %>%
+  # harmonize symbols (using your symmap_kinase / symmap_subs)
+  left_join(symmap_kinase, by = c("Kinase" = "input_symbol")) %>%
+  rename(Kinase_input = Kinase, Kinase = SYMBOL, Kinase_entrez = ENTREZID) %>%
+  left_join(symmap_subs,   by = c("Gene"   = "input_symbol")) %>%
+  rename(Substrate_input = Gene, Substrate = SYMBOL, Substrate_entrez = ENTREZID) %>%
+  transmute(
+    Substrate_Uniprot_ID = norm_uniprot(`Uniprot Primary Accession`),
+    Substrate, Substrate_entrez, Kinase, Kinase_entrez,
+    Phosphosite = Phosphosite,
+    Percentile, Rank, promiscuity_index
+  ) %>%
+  mutate(
+    Phosphosite = str_trim(Phosphosite),
+    Site        = str_extract(Phosphosite, "^[STY]\\d+$"),
+    residue     = str_sub(Site, 1, 1),
+    position    = suppressWarnings(as.integer(str_sub(Site, 2))),
+    zP  = as.numeric(scale(Percentile)),
+    zR  = as.numeric(scale(-Rank)),
+    zPI = as.numeric(scale(-log1p(promiscuity_index)))
+  ) %>%
+  distinct()
+
+# quick sanity
+cantley_feats %>%
+  summarise(
+    n_pairs      = n(),
+    n_kinases    = n_distinct(Kinase),
+    n_substrates = n_distinct(Substrate_Uniprot_ID)
+  )
+
+promiscuity_index_cutoff = quantile(cantley_feats$promiscuity_index, 0.5, na.rm=TRUE)
+
+# cantley_proximity = cantley_feats %>%
+#   filter(!is.na(Percentile)) %>%
+#   filter(promiscuity_index < promiscuity_index_cutoff)
+
+# #quick look at percentile distribution after promiscuity filtering
+# ggplot(cantley_proximity, aes(x=Percentile)) +
+#   geom_histogram() +
+#   #add quantile lines and labels
+#   geom_vline(xintercept = quantile(cantley_proximity$Percentile, 0.75, na.rm=TRUE), linetype="dashed", color="red") +
+#   geom_vline(xintercept = quantile(cantley_proximity$Percentile, 0.9, na.rm=TRUE), linetype="dashed", color="blue") +
+#   geom_vline(xintercept = quantile(cantley_proximity$Percentile, 0.99, na.rm=TRUE), linetype="dashed", color="green") +
+#   annotate("text", x=quantile(cantley_proximity$Percentile, 0.75, na.rm=TRUE), y=50, label="75%", color="red", angle=90, vjust=-0.5) +
+#   annotate("text", x=quantile(cantley_proximity$Percentile, 0.9, na.rm=TRUE), y=50, label="90%", color="blue", angle=90, vjust=-0.5) +
+#   annotate("text", x=quantile(cantley_proximity$Percentile, 0.99, na.rm=TRUE), y=50, label="99%", color="green", angle=90, vjust=-0.5) +
+#   theme_pubr() +
+#   labs(title="Cantley Atlas Percentile Distribution after Promiscuity Filtering",
+#        x="Percentile", y="Count")
+
+cantley_top <- cantley_feats %>%
+  filter(!is.na(Percentile), Percentile > 95) %>%
+  filter(promiscuity_index < promiscuity_index_cutoff) %>%
+  # standardize a site key for filtering
+  mutate(site_key = make_site_key(Substrate_entrez, Site)) %>%
+  distinct()
+
+
+```
+
+## Phosphositeplus, PhosphoELM, Phosphonetwork processing
+
+```{r eval=FALSE}
+## Phsophositeplus processing ----------------------------------
+phosphosite_processed <- phosphosite_plus %>%
+  rename(
+    Kinase               = KINASE,
+    Substrate       = SUBSTRATE,
+    Substrate_Uniprot_ID = SUB_ACC_ID,
+    Kinase_Uniprot_ID = KIN_ACC_ID) %>%
+  mutate(
+    score_raw = (if_else(!is.na(IN_VIVO_RXN),  w_invivo,  0)) +
+                (if_else(!is.na(IN_VITRO_RXN), w_invitro, 0))
+  ) %>%
+  distinct() %>%
+  filter(KIN_ORGANISM == "human", SUB_ORGANISM == "human") %>%
+  left_join(symmap_kinase, by = c("Kinase" = "input_symbol")) %>%
+  rename(Kinase_input = Kinase, Kinase = SYMBOL, Kinase_entrez = ENTREZID) %>%
+  left_join(symmap_subs,   by = c("Substrate" = "input_symbol")) %>%
+  rename(Substrate_input = Substrate, Substrate = SYMBOL, Substrate_entrez = ENTREZID) %>%
+  mutate(Substrate = coalesce(Substrate, Substrate_input))
+
+psp_pairs <- phosphosite_processed %>%
+  select(Kinase, Kinase_entrez, Kinase_Uniprot_ID, Substrate, Substrate_entrez, Substrate_Uniprot_ID) %>%
+  distinct()
+
+psp_sites <- phosphosite_processed %>%
+  rename(Site_raw = SUB_MOD_RSD) %>%
+  separate_rows(Site_raw, sep = "[,;|]") %>%
+  mutate(Site_raw = str_trim(Site_raw),
+         Site     = str_extract(Site_raw, "^[STY]\\d+$")) %>%
+  filter(!is.na(Site)) %>%
+  mutate(residue  = str_sub(Site, 1, 1),
+         position = as.integer(str_sub(Site, 2))) %>%
+  distinct(Substrate, Substrate_entrez, Substrate_Uniprot_ID, Site, residue, position)
+
+
+## PhosphoELM processing ----------------------------------
+
+phosphoelm_sub_symbols = bitr(unique(phospho_elm$acc), fromType="UNIPROT", toType="SYMBOL", OrgDb=org.Hs.eg.db)
+phosphoelm_kinase_uniprot = bitr(unique(phospho_elm$kinases), fromType="SYMBOL", toType="UNIPROT", OrgDb=org.Hs.eg.db) %>%
+  #select first uniprot symbol per kinase
+  group_by(SYMBOL) %>%
+  slice(1) %>%
+  ungroup()
+
+phospho_elm_processed = phospho_elm %>%
+  rename(Substrate_Uniprot_ID = acc,
+        Kinase = kinases) %>%
+  filter(!is.na(Kinase)) %>%
+  filter(!str_detect(Kinase, "group")) %>%
+  filter(species == "Homo sapiens") %>%
+  select(-species) %>%
+  left_join(phosphoelm_sub_symbols, by = c("Substrate_Uniprot_ID" = "UNIPROT")) %>%
+  rename(Substrate = SYMBOL) %>%
+  mutate(Substrate = coalesce(Substrate, Substrate_Uniprot_ID)) %>%
+  left_join(symmap_subs, by = c("Substrate" = "input_symbol")) %>%
+  rename(Substrate_input = Substrate, Substrate = SYMBOL, Substrate_entrez = ENTREZID) %>%
+  mutate(Substrate = coalesce(Substrate, Substrate_input)) %>%
+  left_join(symmap_kinase, by = c("Kinase" = "input_symbol")) %>%
+  rename(Kinase_input = Kinase, Kinase = SYMBOL, Kinase_entrez = ENTREZID) %>%
+  mutate(Kinase = coalesce(Kinase, Kinase_input)) %>%
+  left_join(phosphoelm_kinase_uniprot, by = c("Kinase" = "SYMBOL"))
+
+phosphoelm_pairs = phospho_elm_processed %>%
+  distinct(Kinase, Kinase_entrez, Substrate, Substrate_entrez, Substrate_Uniprot_ID)
+
+phospho_elm_sites <- phospho_elm_processed %>%
+  rename(residue = code,
+         position = position) %>%
+  distinct(Substrate, Substrate_entrez, Substrate_Uniprot_ID, Site = paste0(residue, position), residue, position)
+
+```
+
+```{r eval=FALSE}
+# ## Phosphonetwork Processing
+# fasta_path = here("data/UP000005640_9606.fasta")
+#   # Identify header lines (start with ">")
+#   header_idx <- grep("^>", phospho_networks)
+  
+#   # Add an end marker at the last line
+#   header_idx <- c(header_idx, length(phospho_networks) + 1)
+
+#   # Iterate over each block
+#   entries <- map_dfr(seq_along(header_idx[-length(header_idx)]), function(i) {
+#     start <- header_idx[i]
+#     end <- header_idx[i+1] - 1
+
+#     header <- sub("^>", "", phospho_networks[start])
+#     fields <- strsplit(header, "\t")[[1]]
+#     kinase <- fields[1]
+#     residue <- fields[2]
+#     count <- as.integer(fields[3])
+
+#     peptides <- phospho_networks[(start+1):end]
+#     tibble(kinase = kinase,
+#            residue = residue,
+#            count = count,
+#            peptide = peptides)
+#   })
+
+# # -------- 1) Reader for the FASTA-like PhosphoNetworks file --------
+# read_phosphonetworks <- function(path) {
+#   lines <- readLines(path)
+#   hdr_idx <- grep("^>", lines)
+#   hdr_idx <- c(hdr_idx, length(lines) + 1)
+
+#   map_dfr(seq_along(hdr_idx[-length(hdr_idx)]), function(i) {
+#     start <- hdr_idx[i]; end <- hdr_idx[i+1] - 1
+#     header <- sub("^>", "", lines[start])
+#     fields <- strsplit(header, "\t")[[1]]
+#     stopifnot(length(fields) >= 3)
+#     tibble(
+#       kinase  = fields[1],
+#       residue_class = fields[2],           # "ST" or "Y"
+#       n_reported = suppressWarnings(as.integer(fields[3])),
+#       peptide_raw = lines[(start+1):end]
+#     )
+#   }) %>%
+#     unnest(peptide_raw) %>%
+#     filter(!is.na(peptide_raw), peptide_raw != "")
+# }
+
+# # -------- 2) Helpers for peptide cleaning & center residue logic --------
+# # Keep AA letters only, uppercase; return cleaned string
+# clean_peptide <- function(x) {
+#   x <- toupper(x)
+#   x <- gsub("[^ACDEFGHIKLMNPQRSTVWY]", "", x)  # drop hyphens/unknowns/spaces
+#   x
+# }
+
+# # Find the "central" residue defined by the center of the *raw* string,
+# # then map that index into the cleaned string (ignoring hyphens etc.)
+# central_index_info <- function(raw_seq) {
+#   c_raw <- ceiling(nchar(raw_seq)/2)
+#   chars <- strsplit(toupper(raw_seq), "")[[1]]
+#   aa_set <- strsplit("ACDEFGHIKLMNPQRSTVWY","")[[1]]
+#   aa_idx <- which(chars %in% aa_set)
+
+#   if (length(aa_idx) == 0L) return(NA_integer_)   # <- important guard
+
+#   if (!(c_raw %in% aa_idx)) {
+#     nearest <- aa_idx[which.min(abs(aa_idx - c_raw))]
+#     c_raw <- nearest
+#   }
+#   as.integer(match(c_raw, aa_idx))
+# }
+
+# # Check that the center AA matches expected class
+# center_matches_class <- function(clean_seq, c_idx, class_str) {
+#   if (is.na(c_idx) || c_idx < 1 || c_idx > nchar(clean_seq)) return(FALSE)
+#   aa <- substr(clean_seq, c_idx, c_idx)
+#   if (class_str == "Y") {
+#     return(aa == "Y")
+#   } else { # "ST"
+#     return(aa %in% c("S","T"))
+#   }
+# }
+
+# # -------- 3) Parse UniProt FASTA headers (sp|...|ENTRY OS=... GN=... etc.) --------
+# parse_uniprot_header <- function(h) {
+#   # typical header: >sp|Q9Y5Q8|TF3C5_HUMAN ... OS=Homo sapiens GN=GTF3C5 PE=1 SV=2
+#   reviewed <- ifelse(grepl("^sp\\|", h), TRUE, FALSE)
+#   acc <- sub("^..\\|([^|]+)\\|.*$", "\\1", h)
+#   entry <- sub("^..\\|[^|]+\\|([^ ]+).*$", "\\1", h)
+#   gene <- ifelse(grepl("\\bGN=[^ ]+", h),
+#                  sub(".*\\bGN=([^ ]+).*", "\\1", h),
+#                  NA_character_)
+#   tibble(accession = acc, entry = entry, gene = gene, reviewed = reviewed)
+# }
+
+# map_one <- function(pep, c_idx, proteome) {
+#   # Guard against NA/empty
+#   if (is.na(c_idx) || nchar(pep) == 0L) return(tibble())
+
+#   hits <- vmatchPattern(AAString(pep), proteome, fixed = TRUE)
+#   if (length(hits) == 0L) return(tibble())
+
+#   subj_idx <- which(lengths(hits) > 0L)
+#   # Build rows for all subjects with any hit
+#   rows <- lapply(subj_idx, function(si) {
+#     st <- start(hits[[si]])
+#     en <- end(hits[[si]])
+#     # coerce to plain integer vectors
+#     st <- as.integer(st)
+#     en <- as.integer(en)
+#     # center_pos per match in this subject
+#     cp <- st + (as.integer(c_idx) - 1L)
+#     tibble(seq_index = si, start = st, end = en, center_pos = cp)
+#   })
+#   bind_rows(rows)
+# }
+
+# # -------- 4) Map peptides to the proteome --------
+# map_peptides_to_proteome <- function(df_pep, proteome_fasta, species_regex = "Homo sapiens",
+#                                      prefer_reviewed = TRUE,
+#                                      require_unique_in_proteome = TRUE,
+#                                      require_unique_in_protein = TRUE) {
+#   proteome <- readAAStringSet(proteome_fasta)
+#   headers  <- names(proteome)
+
+#   # keep only human (defensive)
+#   keep_idx <- grepl(species_regex, headers)
+#   proteome <- proteome[keep_idx]
+#   headers  <- headers[keep_idx]
+
+#   # parse UniProt meta
+#   meta <- purrr::map_dfr(headers, parse_uniprot_header) |>
+#     mutate(seq_index = row_number())
+
+#   # Pre-clean peptides & center
+#   prep <- df_pep |>
+#     mutate(
+#       pep_clean         = map_chr(peptide_raw, clean_peptide),
+#       center_clean_idx  = map_int(peptide_raw, central_index_info),
+#       center_ok         = mapply(center_matches_class, pep_clean, center_clean_idx, residue_class),
+#       pep_len           = nchar(pep_clean)
+#     ) |>
+#     filter(pep_len > 0, center_ok) |>
+#     distinct(kinase, residue_class, peptide_raw, pep_clean, center_clean_idx, .keep_all = TRUE) |>
+#     mutate(pid = row_number())   # stable peptide id
+
+#   # Map each peptide independently, keep pid with results
+#   mapped <- prep |>
+#     select(pid, kinase, residue_class, peptide_raw, pep_clean, center_clean_idx) |>
+#     pmap_dfr(function(pid, kinase, residue_class, peptide_raw, pep_clean, center_clean_idx) {
+#       out <- map_one(pep_clean, center_clean_idx, proteome)
+#       if (nrow(out) == 0L) return(tibble())
+#       out |>
+#         mutate(pid = pid, kinase = kinase, residue_class = residue_class,
+#                peptide_raw = peptide_raw, pep_clean = pep_clean)
+#     })
+
+#   if (nrow(mapped) == 0L) {
+#     message("No peptide mapped to the proteome.")
+#     return(tibble())
+#   }
+
+#   # Join UniProt meta, verify residue at center, label site
+#   mapped2 <- mapped |>
+#     left_join(meta, by = "seq_index") |>
+#     mutate(center_letter = mapply(function(si, pos) {
+#       if (is.na(pos) || pos < 1L) return(NA_character_)
+#       as.character(subseq(proteome[[si]], start = pos, end = pos))
+#     }, seq_index, center_pos)) |>
+#     filter(!is.na(center_letter)) |>
+#     mutate(center_ok_proteome = case_when(
+#       residue_class == "Y"  ~ center_letter == "Y",
+#       residue_class == "ST" ~ center_letter %in% c("S","T"),
+#       TRUE ~ FALSE
+#     )) |>
+#     filter(center_ok_proteome) |>
+#     mutate(site = paste0(center_letter, center_pos),
+#            source = "PhosphoNetworks_motif→UniProt_map")
+
+#   # Ambiguity controls
+#   if (prefer_reviewed) {
+#     mapped2 <- mapped2 |>
+#       group_by(pid) |>
+#       mutate(any_reviewed = any(reviewed)) |>
+#       ungroup() |>
+#       filter(!any_reviewed | reviewed) |>
+#       select(-any_reviewed)
+#   }
+
+#   if (require_unique_in_proteome) {
+#     mapped2 <- mapped2 |>
+#       group_by(pid) |>
+#       mutate(n_hits_proteome = n()) |>
+#       ungroup() |>
+#       filter(n_hits_proteome == 1L)
+#   }
+
+#   if (require_unique_in_protein) {
+#     mapped2 <- mapped2 |>
+#       group_by(pid, accession) |>
+#       mutate(n_hits_this_protein = n()) |>
+#       ungroup() |>
+#       filter(n_hits_this_protein == 1L)
+#   }
+
+#   mapped2 |>
+#     select(kinase, residue_class, peptide = pep_clean, peptide_raw,
+#            accession, entry, gene, reviewed,
+#            site, residue_letter = center_letter, position = center_pos,
+#            source) |>
+#     arrange(kinase, gene, position)
+# }
+
+# # -------- 5) DRIVER --------
+# # paths (change to your actual files)
+# pn_path   <- here("data/motifSite.csv")        # your motif file
+# fasta_path <- here("data/UP000005640_9606.fasta")   # Swiss-Prot HUMAN proteome FASTA
+
+# pn_df <- read_phosphonetworks(pn_path)
+
+# # ks_sites <- map_peptides_to_proteome(
+# #   df_pep = pn_df,
+# #   proteome_fasta = fasta_path,
+# #   species_regex = "Homo sapiens",
+# #   prefer_reviewed = TRUE,
+# #   require_unique_in_proteome = TRUE,   # strong ambiguity guard
+# #   require_unique_in_protein = TRUE
+# # )
+
+# write_csv(ks_sites, here("data/phospho_networks_kinase_substrate_sites.csv"))
+
+```
+
+```{r eval=FALSE}
+pn_kinase_uniprot = bitr(phospho_networks$kinase, fromType = "SYMBOL", toType = "UNIPROT", OrgDb = org.Hs.eg.db)
+
+phospho_networks_processed = phospho_networks %>%
+  rename(Kinase = kinase, Substrate_Uniprot_ID = accession, Substrate = gene) %>%
+  left_join(symmap_kinase, by = c("Kinase" = "input_symbol")) %>%
+  rename(Kinase_entrez = ENTREZID, Kinase_input = Kinase, Kinase = SYMBOL) %>%
+  mutate(Kinase = coalesce(Kinase, Kinase_input)) %>%
+  distinct() %>%
+  left_join(symmap_subs, by = c("Substrate" = "input_symbol")) %>%
+  rename(Substrate_entrez = ENTREZID, Substrate_input = Substrate, Substrate = SYMBOL) %>%
+  mutate(Substrate = coalesce(Substrate, Substrate_input)) %>%
+  left_join(pn_kinase_uniprot, by = c("Kinase" = "SYMBOL")) %>%
+  rename(Kinase_Uniprot_ID = UNIPROT)
+
+phospho_networks_pairs = phospho_networks_processed %>%
+  distinct(Kinase, Kinase_Uniprot_ID, Kinase_entrez, Substrate, Substrate_entrez, Substrate_Uniprot_ID)
+
+phospho_networks_sites = phospho_networks_processed %>%
+  select(Substrate, Substrate_Uniprot_ID, Site = site, residue = residue_letter, position) %>%
+  distinct()
+
+```
+
+## Kinet processing
+```{r}
+
+kinet_processed = kinet %>%
+  rename(
+    Kinase_Uniprot_ID = Kinase,
+    Kinase = `Kinase Name`,
+    Substrate_Uniprot_ID = Substrate,
+    Substrate = `Substrate Name`,
+    Source = `Source Database`,
+    Reference_PMID = `Reference (PMID)`
+  ) %>%
+  filter(!is.na(Kinase), !is.na(Substrate)) %>%
+  left_join(symmap_kinase, by = c("Kinase" = "input_symbol")) %>%
+  rename(Kinase_entrez = ENTREZID, Kinase_input = Kinase, Kinase = SYMBOL) %>%
+  mutate(Kinase = coalesce(Kinase, Kinase_input)) %>%
+  left_join(symmap_subs, by = c("Substrate" = "input_symbol")) %>%
+  rename(Substrate_entrez = ENTREZID, Substrate_input = Substrate, Substrate = SYMBOL) %>%
+  mutate(Substrate = coalesce(Substrate, Substrate_input)) %>%
+  select(-Kinase_input, -Substrate_input) %>%
+  select(Kinase, Kinase_entrez, Kinase_Uniprot_ID,
+         Substrate, Substrate_entrez, Substrate_Uniprot_ID, Site,
+         Source, Evidence, Reference_PMID) %>%
+  distinct()
+
+```
+
+## Ochoa functional score processing
+
+```{r}
+
+ochoa_fs_processed = ochoa_fs %>%
+  rename(Substrate_Uniprot_ID = uniprot)
+
+# #quick look at functional score distribution
+# ochoa_fs_processed %>%
+#   ggplot(aes(x=functional_score)) +
+#   geom_histogram(bins=50) +
+#   geom_vline(xintercept=0.5, color="red", linetype="dashed")
+
+```
+
+## Aggregated Kinase Substrate dataset
+```{r eval=FALSE}
+ks_all_raw <- bind_rows(psp_pairs %>% mutate(Source = "PhosphoSitePlus"),
+  phosphoelm_pairs %>% mutate(Source = "PhosphoELM"),
+  phospho_networks_pairs %>% mutate(Source = "PhosphoNetworks")) %>%
+  distinct() %>%
+  filter(!is.na(Kinase) & !is.na(Substrate))  # drop unknowns
+
+# 2) Unique gene-level pairs (no UniProt columns yet)
+pairs_gene <- ks_all_raw %>%
+  select(Kinase, Kinase_entrez, Substrate, Substrate_entrez, Source) %>%
+  distinct()
+
+# 3) Choose ONE UniProt per Kinase (most frequent non-NA; tie -> smallest ID)
+kinase_choice <- ks_all_raw %>%
+  filter(!is.na(Kinase_Uniprot_ID), Kinase_Uniprot_ID != "") %>%
+  count(Kinase, Kinase_entrez, Kinase_Uniprot_ID, name = "n") %>%
+  arrange(Kinase, Kinase_entrez, desc(n), Kinase_Uniprot_ID) %>%
+  group_by(Kinase, Kinase_entrez) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(Kinase, Kinase_entrez, Kinase_Uniprot_ID)
+
+# 4) Choose ONE UniProt per Substrate (same rule)
+substrate_choice <- ks_all_raw %>%
+  filter(!is.na(Substrate_Uniprot_ID), Substrate_Uniprot_ID != "") %>%
+  count(Substrate, Substrate_entrez, Substrate_Uniprot_ID, name = "n") %>%
+  arrange(Substrate, Substrate_entrez, desc(n), Substrate_Uniprot_ID) %>%
+  group_by(Substrate, Substrate_entrez) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(Substrate, Substrate_entrez, Substrate_Uniprot_ID)
+
+# 5) Reconstruct the final table with one UniProt per gene
+ks_all <- pairs_gene %>%
+  left_join(kinase_choice,   by = c("Kinase",   "Kinase_entrez")) %>%
+  left_join(substrate_choice, by = c("Substrate","Substrate_entrez"))
+
+
+ks_sites_all = psp_sites %>%
+  mutate(Source = "PhosphoSitePlus") %>%
+  bind_rows(phospho_elm_sites %>% mutate(Source = "PhosphoELM")) %>%
+  bind_rows(phospho_networks_sites %>% mutate(Source = "PhosphoNetworks")) %>%
+  distinct() %>%
+  group_by(Source, Substrate, Substrate_entrez, Site, residue, position) %>%
+  summarise(Substrate_Uniprot_ID = first(na.omit(Substrate_Uniprot_ID)), .groups="drop") %>%
+  ungroup()
+
+```
+
+
+
+```{r}
+
+# --- 0) Helper: make a site key like "P12345:S:241"
+
+# =========================
+# STEP 1: Global 90th percentile filter
+# =========================
+
+# #qucikly visualize promosicuity distribution
+# cantley_feats %>%
+#   filter(Percentile > 90) %>%
+#   filter(!is.na(promiscuity_index)) %>%
+#   ggplot(aes(x=promiscuity_index)) +
+#   geom_histogram(bins=50) +
+#   #add lines at quantiles and label
+#   geom_vline(xintercept=quantile(cantley_feats$promiscuity_index, 0.25, na.rm=TRUE), color="green", linetype="dashed") +
+#   geom_vline(xintercept=quantile(cantley_feats$promiscuity_index, 0.5, na.rm=TRUE), color="blue", linetype="dashed") +
+#   geom_vline(xintercept=quantile(cantley_feats$promiscuity_index, 0.75, na.rm=TRUE), color="purple", linetype="dashed") +
+#   geom_vline(xintercept=quantile(cantley_feats$promiscuity_index, 0.9, na.rm=TRUE), color="red", linetype="dashed") +
+#   theme_pubr()
+
+promiscuity_index_cutoff = quantile(cantley_feats$promiscuity_index, 0.5, na.rm=TRUE)
+
+cantley_top <- cantley_feats %>%
+  filter(!is.na(Percentile), Percentile > 95) %>%
+  filter(promiscuity_index < promiscuity_index_cutoff) %>%
+  # standardize a site key for filtering
+  mutate(site_key = make_site_key(Substrate_entrez, Site)) %>%
+  distinct()
+
+# =========================
+# STEP 2: HPA co-localization filter
+# (re-using your HPA parsing approach; assumes subcellular_localization and symmaps exist)
+# =========================
+
+hpa_entrez = bitr(unique(subcellular_localization$`Gene name`), fromType="SYMBOL", toType="ENTREZID", OrgDb=org.Hs.eg.db)
+
+hpa_long <- subcellular_localization %>%
+  select(-Gene) %>%
+  rename(Gene = `Gene name`) %>%
+  pivot_longer(
+    cols = c(contains("Approved"), contains("Supported"), contains("Enhanced")),
+    names_to = "tier", values_to = "locs"
+  ) %>%
+  filter(!is.na(locs)) %>%
+  separate_rows(locs, sep = ";") %>%
+  mutate(locs = str_trim(locs)) %>%
+  filter(locs != "") %>%
+  left_join(
+    hpa_entrez,
+    by = c("Gene" = "SYMBOL")
+  ) %>%
+  transmute(Gene_entrez = ENTREZID, locs) %>%
+  distinct()
+
+# long forms limited to needed genes
+genes_needed <- unique(c(cantley_top$Kinase_entrez, cantley_top$Substrate_entrez))
+hpa_long_small <- hpa_long %>% filter(Gene_entrez %in% genes_needed)
+
+kin_long <- hpa_long_small %>% transmute(loc = locs, Kinase_entrez = Gene_entrez) %>% distinct()
+sub_long <- hpa_long_small %>% transmute(loc = locs, Substrate_entrez = Gene_entrez) %>% distinct()
+
+# KS keys in cantley_top
+ks_eval_keys <- unique(paste(cantley_top$Kinase_entrez, cantley_top$Substrate_entrez, sep="|"))
+ks_eval_dt   <- data.table(ks_key = ks_eval_keys)
+
+# cross by location -> candidate co-loc pairs
+kin_dt <- as.data.table(kin_long); setkey(kin_dt, loc)
+sub_dt <- as.data.table(sub_long); setkey(sub_dt, loc)
+
+coloc_pairs <- kin_dt[sub_dt, allow.cartesian = TRUE][
+  , .(ks_key = paste(Kinase_entrez, Substrate_entrez, sep="|"))] %>%
+  unique()
+
+# reduce to only pairs present in cantley_top
+setkey(coloc_pairs, ks_key); setkey(ks_eval_dt, ks_key)
+coloc_keys <- coloc_pairs[ks_eval_dt, nomatch = 0L][, unique(ks_key)]
+
+# flag co-loc in cantley_top
+cantley_top_dt <- as.data.table(cantley_top)
+cantley_top_dt[, ks_key := paste(Kinase_entrez, Substrate_entrez, sep="|")]
+cantley_top_dt[, coloc_ok := !is.na(fmatch(ks_key, coloc_keys))]
+
+# =========================
+# STEP 3: Annotate curated + Ochoa, then filter with coloc_ok
+# =========================
+
+# (A) Curated-site membership (KiNet)
+ks_sites_norm <- kinet_processed %>%
+  mutate(
+    Site = if ("Site" %in% names(.)) Site else paste0(residue, position),
+    site_key = make_site_key(Substrate_entrez, Site)
+  ) %>%
+  mutate(residue = str_sub(Site, 1, 1),
+         position = suppressWarnings(as.integer(str_sub(Site, 2)))) %>%
+  transmute(Substrate_entrez, residue, position, site_key) %>%
+  distinct()
+
+curated_keys <- unique(ks_sites_norm$site_key)
+cantley_top_dt[, curated_site := !is.na(fmatch(site_key, curated_keys))]
+
+# #quick look at functional score distribution
+# ochoa_fs_processed %>%
+#   ggplot(aes(x=functional_score)) +
+#   geom_histogram(bins=50) +
+#   #add a line for quartiles and label
+#   geom_vline(xintercept=quantile(ochoa_fs_processed$functional_score, 0.25, na.rm=TRUE), color="green", linetype="dashed") +
+#   geom_vline(xintercept=quantile(ochoa_fs_processed$functional_score, 0.5, na.rm=TRUE), color="blue", linetype="dashed") +
+#   geom_vline(xintercept=quantile(ochoa_fs_processed$functional_score, 0.75, na.rm=TRUE), color="purple", linetype="dashed") +
+#   geom_vline(xintercept=0.5, color="red", linetype="dashed")
+
+cutoff = quantile(ochoa_fs_processed$functional_score, 0.75, na.rm=TRUE)
+
+# (B) Ochoa functional score (> 0.5) -- join by UniProt + position only
+# Make sure both sides use normalized UniProt and integer position
+ochoa_fs_norm <- ochoa_fs %>%
+  transmute(
+    Substrate_Uniprot_ID = norm_uniprot(uniprot),
+    position = as.integer(position),
+    functional_score
+  ) %>%
+  distinct()
+
+cantley_top_annot <- as_tibble(cantley_top_dt) %>%
+  mutate(position = as.integer(position)) %>%
+  left_join(
+    ochoa_fs_norm,
+    by = c("Substrate_Uniprot_ID", "position")
+  ) %>%
+  mutate(ochoa_high = !is.na(functional_score) & functional_score > cutoff)
+
+# (C) Final filter: co-localized AND (curated OR Ochoa-high)
+cantley_filtered_dt <- as.data.table(cantley_top_annot)[
+  coloc_ok == TRUE & (curated_site == TRUE | ochoa_high == TRUE)
+]
+
+cantley_filtered <- as_tibble(cantley_filtered_dt) %>%
+  filter(!is.na(Kinase), !is.na(Substrate))
+
+# =========================
+# STEP 4: Combine with curated data
+#  - Pair-level combined set
+#  - Site-level combined set
+# =========================
+
+# Pair-level from filtered Cantley
+cantley_pairs <- cantley_filtered %>%
+  transmute(Kinase, Kinase_entrez, Substrate, Substrate_entrez, Site, Curated_site = curated_site,
+            Likely_functional = ochoa_high,
+            Evidence = "Cantley Atlas (high-confidence, co-localized, functional)",
+            Reference_PMID = NA_character_) %>%
+  distinct()
+
+# Pair-level from curated (ks_all may have Substrate column named differently; harmonize)
+curated_pairs <- kinet_processed %>%
+    mutate(residue = str_sub(Site, 1, 1),
+         position = suppressWarnings(as.integer(str_sub(Site, 2)))) %>%
+  left_join(ochoa_fs_norm, by = c("Substrate_Uniprot_ID", "position")) %>%
+  mutate(Likely_functional = !is.na(functional_score) & functional_score > cutoff) %>%
+  mutate(Curated_site = TRUE) %>%
+  transmute(Kinase, Kinase_entrez, Substrate, Substrate_entrez, Site, Curated_site, Likely_functional, Source, Evidence, Reference_PMID) %>%
+  distinct()
+
+combined_pairs <- bind_rows(
+  cantley_pairs %>% mutate(Source = "Cantley"),
+  curated_pairs
+) %>%
+  distinct()
+
+write_csv(combined_pairs, here("results/combined_kinase_substrate_pairs_2025.csv"))
+
+# combined_sites = cantley_filtered %>%
+#   mutate(Source = "Cantley") %>%
+#   select(Substrate, Substrate_entrez, Site, residue, position, Source) %>%
+#   bind_rows(ks_sites_all) %>%
+#   distinct()
+
+# write_csv(combined_sites, here("results/combined_kinase_substrate_sites_2025.csv"))
+
+```
+
+# Paper figures
+
+```{r}
+
+combined_pairs = read_csv(here("results/combined_kinase_substrate_pairs_2025.csv"))
+
+```
+
+## Sankey plot
+
+```{r}
+
+curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet","PhosphoELM","PhosphoNetworks")
+
+## 1) Curated substrate universe (for "Novel substrate?" at substrate-level)
+curated_sub_universe <- combined_pairs %>%
+  filter(Source %in% curated_sources) %>%
+  distinct(Substrate) %>%
+  pull(Substrate)
+
+## 2) Curated site keys (for "Known site?" at substrate-level)
+curated_site_keys <- kinet_processed %>%
+  mutate(Site = if ("Site" %in% names(.)) Site else paste0(residue, position)) %>%
+  transmute(site_key = make_site_key(Substrate_entrez, Site)) %>%
+  distinct() %>% pull(site_key)
+
+## 3) Ochoa functional scores (normalize join keys)
+ochoa_fs_norm <- ochoa_fs %>%
+  transmute(
+    Substrate_Uniprot_ID = norm_uniprot(uniprot),
+    position = as.integer(position),
+    functional_score
+  ) %>%
+  distinct()
+
+## 4) Make sure Cantley universe has clean Site + position + site_key
+cantley_uni <- cantley_top %>%
+  mutate(
+    Site = if ("Site" %in% names(.)) Site else stringr::str_extract(Phosphosite, "^[STY]\\d+$"),
+    position = if ("position" %in% names(.)) as.integer(position)
+               else suppressWarnings(as.integer(stringr::str_remove(Site, "^[STY]"))),
+    site_key = make_site_key(Substrate_entrez, Site)
+  ) %>%
+  filter(!is.na(Substrate), !is.na(Site), !is.na(position))
+
+## 5) Pair-wise coloc flag, then summarize to substrate-level "any coloc?"
+#   (restrict HPA to genes present to speed up)
+genes_needed <- unique(c(cantley_uni$Substrate_entrez, cantley_uni$Kinase_entrez))
+hpa_entrez = bitr(unique(subcellular_localization$`Gene name`), fromType="SYMBOL", toType="ENTREZID", OrgDb=org.Hs.eg.db)
+hpa_long <- subcellular_localization %>%
+  select(-Gene) %>%
+  rename(Gene = `Gene name`) %>%
+  pivot_longer(
+    cols = c(contains("Approved"), contains("Supported"), contains("Enhanced")),
+    names_to = "tier", values_to = "locs"
+  ) %>%
+  filter(!is.na(locs)) %>%
+  separate_rows(locs, sep = ";") %>%
+  mutate(locs = str_trim(locs)) %>%
+  filter(locs != "") %>%
+  left_join(
+    hpa_entrez,
+    by = c("Gene" = "SYMBOL")
+  ) %>%
+  transmute(Gene_entrez = ENTREZID, locs) %>%
+  distinct()
+
+hpa_small <- hpa_long %>%
+  filter(Gene_entrez %in% genes_needed) %>%
+  distinct(Gene_entrez, locs)
+
+kin_loc <- cantley_uni %>%
+  distinct(Kinase, Kinase_entrez) %>%
+  mutate(Kinase_entrez = as.character(Kinase_entrez)) %>%
+  inner_join(hpa_small, by = c("Kinase_entrez" = "Gene_entrez")) %>%
+  transmute(Kinase_entrez, loc = locs) %>%
+  filter(!is.na(Kinase_entrez))
+
+sub_loc <- cantley_uni %>%
+  distinct(Substrate_entrez) %>%
+  mutate(Substrate_entrez = as.character(Substrate_entrez)) %>%
+  inner_join(hpa_small, by = c("Substrate_entrez" = "Gene_entrez")) %>%
+  transmute(Substrate_entrez, loc = locs) %>%
+  filter(!is.na(Substrate_entrez))
+
+coloc_key <- inner_join(kin_loc, sub_loc, by = "loc") %>%
+  transmute(Kinase_entrez, Substrate_entrez) %>%
+  mutate(
+    Kinase_entrez = as.integer(Kinase_entrez),
+    Substrate_entrez = as.integer(Substrate_entrez),
+    KS_key = paste(Kinase_entrez, Substrate_entrez)
+  ) %>%
+  distinct()
+
+# mark coloc per pair, then summarize to substrate
+cantley_pairs_with_coloc <- cantley_uni %>%
+  mutate(Kinase_entrez = as.integer(Kinase_entrez),
+         Substrate_entrez = as.integer(Substrate_entrez),
+         KS_key = paste(Kinase_entrez, Substrate_entrez)) %>%
+  filter(!is.na(Kinase_entrez), !is.na(Substrate_entrez)) %>%
+  mutate(coloc = !is.na(fmatch(KS_key, coloc_key$KS_key)))
+
+substrate_coloc <- cantley_pairs_with_coloc %>%
+  group_by(Substrate, Substrate_entrez) %>%
+  summarise(any_coloc = any(coloc, na.rm = TRUE), .groups = "drop")
+
+## 6) Site-level annotations on the Cantley universe (curated site? Ochoa-high?)
+cutoff = quantile(ochoa_fs_processed$functional_score, 0.75, na.rm=TRUE)
+
+cantley_sites_annot <- cantley_uni %>%
+  # curated site?
+  mutate(curated_site = site_key %in% curated_site_keys) %>%
+  # join Ochoa FS by UniProt + position
+  left_join(
+    ochoa_fs_norm,
+    by = c("Substrate_Uniprot_ID", "position")
+  ) %>%
+  mutate(ochoa_high = !is.na(functional_score) & functional_score > cutoff)
+
+## 7) Collapse to SUBSTRATE-level flags
+substrate_flags <- cantley_sites_annot %>%
+  group_by(Substrate, Substrate_entrez) %>%
+  summarise(
+    # Novel substrate? (substrate seen anywhere in curated)
+    `Novel Substrate?` = if_else(any(Substrate %in% curated_sub_universe),
+                       "Known substrate", "Novel substrate"),
+    # Known site present? (at least one Cantley site is curated)
+    `Novel Site?` = if_else(any(curated_site, na.rm = TRUE),
+                        "Known site", "Novel site"),
+    # Likely functional? (any Cantley site has Ochoa FS > cutoff)
+    `Functional Site?` = if_else(any(ochoa_high, na.rm = TRUE),
+                               "Likely functional", "Other/unknown"),
+    .groups = "drop"
+  ) %>%
+  # add coloc summarised per substrate
+  left_join(substrate_coloc %>% mutate(Substrate_entrez = as.character(Substrate_entrez)), by = c("Substrate","Substrate_entrez")) %>%
+  mutate(`Co-localized?` = if_else(any_coloc, "Co-localized", "Non co-localized")) %>%
+  drop_na()
+
+## 8) Build the alluvial (one row per *substrate* path)
+stage_vars <- c("Novel Substrate?","Novel Site?","Functional Site?","Co-localized?")
+
+alluv_df <- substrate_flags %>%
+  select(all_of(stage_vars)) %>%
+  mutate(across(everything(), as.character)) %>%
+  group_by(across(everything())) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  arrange(desc(n))
+
+alluv_long <- alluv_df %>%
+  mutate(id = row_number()) %>%
+  tidyr::pivot_longer(cols = all_of(stage_vars), names_to = "stage", values_to = "label") %>%
+  mutate(stage = factor(stage, levels = stage_vars))
+
+## 9) Plot (substrate-level Sankey)
+pal_stage <- c(
+  "Novel substrate"   = "#B279A2",
+  "Known substrate"   = "#4C78A8",
+  "Novel site"        = "#B279A2",
+  "Known site"        = "#4C78A8",
+  "Likely functional" = "#54A24B",
+  "Other/unknown"     = "#9E9E9E",
+  "Co-localized"      = "#72B7B2",
+  "Non co-localized"  = "#E45756"
+)
+lab_levels <- unique(alluv_long$label)
+pal_use <- setNames(pal_stage[names(pal_stage) %in% lab_levels], lab_levels)
+pal_use[setdiff(lab_levels, names(pal_use))] <- "#B0B0B0"
+
+p_sankey_substrates <- ggplot(
+  alluv_long,
+  aes(x = stage, stratum = label, alluvium = id, y = n,
+      fill = label, label = label)
+) +
+  geom_flow() +
+  geom_stratum() +
+  geom_text(stat = "stratum", size = 5, color = "black", vjust = -0.2) +
+  scale_fill_manual(values = pal_use, guide = guide_legend(nrow = 2)) +
+  scale_y_continuous(expand = expansion(mult = c(0.02, 0.08)), labels = scales::comma) +
+  labs(
+    x = NULL, y = "Substrate count", fill = NULL) +
+  theme_pubr()
+
+p_sankey_substrates
+
+```
+
+```{r}
+
+curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet","PhosphoELM","PhosphoNetworks")
+
+## 1) Curated substrate universe (for "Novel substrate?" at substrate-level)
+curated_sub_universe <- combined_pairs %>%
+  filter(Source %in% curated_sources) %>%
+  distinct(Substrate) %>%
+  pull(Substrate)
+
+## 2) Curated site keys (for "Known site?" at substrate-level)
+curated_site_keys <- kinet_processed %>%
+  mutate(Site = if ("Site" %in% names(.)) Site else paste0(residue, position)) %>%
+  transmute(site_key = make_site_key(Substrate_entrez, Site)) %>%
+  distinct() %>% pull(site_key)
+
+## 3) Ochoa functional scores (normalize join keys)
+ochoa_fs_norm <- ochoa_fs %>%
+  transmute(
+    Substrate_Uniprot_ID = norm_uniprot(uniprot),
+    position = as.integer(position),
+    functional_score
+  ) %>%
+  distinct()
+
+## 4) Make sure Cantley universe has clean Site + position + site_key
+cantley_uni <- cantley_top %>%
+  mutate(
+    Site = if ("Site" %in% names(.)) Site else stringr::str_extract(Phosphosite, "^[STY]\\d+$"),
+    position = if ("position" %in% names(.)) as.integer(position)
+               else suppressWarnings(as.integer(stringr::str_remove(Site, "^[STY]"))),
+    site_key = make_site_key(Substrate_entrez, Site)
+  ) %>%
+  filter(!is.na(Substrate), !is.na(Site), !is.na(position))
+
+## 5) Pair-wise coloc flag, then summarize to substrate-level "any coloc?"
+#   (restrict HPA to genes present to speed up)
+genes_needed <- unique(c(cantley_uni$Substrate_entrez, cantley_uni$Kinase_entrez))
+hpa_entrez = bitr(unique(subcellular_localization$`Gene name`), fromType="SYMBOL", toType="ENTREZID", OrgDb=org.Hs.eg.db)
+hpa_long <- subcellular_localization %>%
+  select(-Gene) %>%
+  rename(Gene = `Gene name`) %>%
+  pivot_longer(
+    cols = c(contains("Approved"), contains("Supported"), contains("Enhanced")),
+    names_to = "tier", values_to = "locs"
+  ) %>%
+  filter(!is.na(locs)) %>%
+  separate_rows(locs, sep = ";") %>%
+  mutate(locs = str_trim(locs)) %>%
+  filter(locs != "") %>%
+  left_join(
+    hpa_entrez,
+    by = c("Gene" = "SYMBOL")
+  ) %>%
+  transmute(Gene_entrez = ENTREZID, locs) %>%
+  distinct()
+
+hpa_small <- hpa_long %>%
+  filter(Gene_entrez %in% genes_needed) %>%
+  distinct(Gene_entrez, locs)
+
+kin_loc <- cantley_uni %>%
+  distinct(Kinase, Kinase_entrez) %>%
+  mutate(Kinase_entrez = as.character(Kinase_entrez)) %>%
+  inner_join(hpa_small, by = c("Kinase_entrez" = "Gene_entrez")) %>%
+  transmute(Kinase_entrez, loc = locs) %>%
+  filter(!is.na(Kinase_entrez))
+
+sub_loc <- cantley_uni %>%
+  distinct(Substrate_entrez) %>%
+  mutate(Substrate_entrez = as.character(Substrate_entrez)) %>%
+  inner_join(hpa_small, by = c("Substrate_entrez" = "Gene_entrez")) %>%
+  transmute(Substrate_entrez, loc = locs) %>%
+  filter(!is.na(Substrate_entrez))
+
+coloc_key <- inner_join(kin_loc, sub_loc, by = "loc") %>%
+  transmute(Kinase_entrez, Substrate_entrez) %>%
+  mutate(
+    Kinase_entrez = as.integer(Kinase_entrez),
+    Substrate_entrez = as.integer(Substrate_entrez),
+    KS_key = paste(Kinase_entrez, Substrate_entrez)
+  ) %>%
+  distinct()
+
+# mark coloc per pair, then summarize to substrate
+cantley_pairs_with_coloc <- cantley_uni %>%
+  mutate(Kinase_entrez = as.integer(Kinase_entrez),
+         Substrate_entrez = as.integer(Substrate_entrez),
+         KS_key = paste(Kinase_entrez, Substrate_entrez)) %>%
+  filter(!is.na(Kinase_entrez), !is.na(Substrate_entrez)) %>%
+  mutate(coloc = !is.na(fmatch(KS_key, coloc_key$KS_key)))
+
+substrate_coloc <- cantley_pairs_with_coloc %>%
+  group_by(Substrate, Substrate_entrez) %>%
+  summarise(any_coloc = any(coloc, na.rm = TRUE), .groups = "drop")
+
+## 6) Site-level annotations on the Cantley universe (curated site? Ochoa-high?)
+cutoff = quantile(ochoa_fs_processed$functional_score, 0.75, na.rm=TRUE)
+
+cantley_sites_annot <- cantley_uni %>%
+  # curated site?
+  mutate(curated_site = site_key %in% curated_site_keys) %>%
+  # join Ochoa FS by UniProt + position
+  left_join(
+    ochoa_fs_norm,
+    by = c("Substrate_Uniprot_ID", "position")
+  ) %>%
+  mutate(ochoa_high = !is.na(functional_score) & functional_score > cutoff)
+
+## 7) Collapse to SUBSTRATE-level flags
+substrate_summary <- cantley_sites_annot %>%
+  group_by(Substrate, Substrate_entrez) %>%
+  summarise(
+    passes_support = any(curated_site, na.rm = TRUE) | any(ochoa_high, na.rm = TRUE),
+    novel_label = if_else(
+      any(Substrate %in% curated_sub_universe, na.rm = TRUE),
+      "Known substrate",
+      "Novel substrate"
+    ),
+    .groups = "drop"
+  ) %>%
+  left_join(
+    substrate_coloc %>% mutate(Substrate_entrez = as.character(Substrate_entrez)),
+    by = c("Substrate", "Substrate_entrez")
+  ) %>%
+  mutate(
+    passes_support = replace_na(passes_support, FALSE),
+    any_coloc = replace_na(any_coloc, FALSE),
+    keep = passes_support & any_coloc
+  )
+
+substrate_paths <- cantley_sites_annot %>%
+  distinct(Substrate, Substrate_entrez) %>%
+  left_join(substrate_summary, by = c("Substrate", "Substrate_entrez")) %>%
+  mutate(
+    `Cantley Atlas` = novel_label,
+    `Functional Site?` = if_else(passes_support, "Functional Site", "Non-Functional Site"),
+    `Co-localized?` = case_when(
+      !passes_support ~ NA_character_,
+      any_coloc ~ "Co-localized",
+      TRUE ~ "No co-localization"
+    ),
+    `Filtered Result` = if_else(keep, novel_label, NA_character_)
+  )
+
+stage_vars <- c("Cantley Atlas", "Functional Site?", "Co-localized?", "Filtered Result")
+
+alluv_df <- substrate_paths %>%
+  select(all_of(stage_vars)) %>%
+  group_by(across(everything())) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  arrange(desc(n))
+
+alluv_long <- alluv_df %>%
+  mutate(id = row_number()) %>%
+  tidyr::pivot_longer(cols = all_of(stage_vars), names_to = "stage", values_to = "label") %>%
+  mutate(stage = factor(stage, levels = stage_vars)) %>%
+  filter(!is.na(label))
+
+## 9) Plot (substrate-level Sankey)
+pal_stage <- c(
+  "Cantley substrates"            = "#2C7BB6",
+  "Functional Site"               = "#00A6D6",
+  "Non-Functional Site"           = "#BFC0C0",
+  "Co-localized"                  = "#7BC950",
+  "No co-localization"            = "#F25F5C",
+  "Known substrate"               = "#4355B9",
+  "Novel substrate"               = "#F9A03F"
+)
+lab_levels <- unique(alluv_long$label)
+pal_use <- setNames(pal_stage[names(pal_stage) %in% lab_levels], lab_levels)
+pal_use[setdiff(lab_levels, names(pal_use))] <- "#B0B0B0"
+
+p_sankey_substrates <- ggplot(
+  alluv_long,
+  aes(x = stage, stratum = label, alluvium = id, y = n,
+      fill = label, label = label)
+) +
+  geom_flow() +
+  geom_stratum() +
+  geom_text(stat = "stratum", size = 5, color = "black", vjust = -0.2) +
+  scale_fill_manual(values = pal_use, guide = "none") +
+  scale_y_continuous(expand = expansion(mult = c(0.02, 0.08)), labels = scales::comma) +
+  labs(
+    x = NULL, y = "Substrate count", fill = NULL) +
+  theme_pubr()
+
+p_sankey_substrates
+
+```
+
+## Figure 1
+```{r}
+
+p1A <- p_sankey_substrates +
+  theme(legend.position = "none")+
+  labs(tag="B")
+
+fig1B_df <- combined_pairs %>%
+  group_by(Source) %>%
+  summarise(
+    Kinases    = n_distinct(Kinase),
+    Substrates = n_distinct(Substrate)
+  ) %>%
+  ungroup() %>%
+  #Add in total numbers
+  bind_rows(tibble(
+    Source = "Total",
+    Kinases = n_distinct(combined_pairs$Kinase),
+    Substrates = n_distinct(combined_pairs$Substrate)
+  )) %>%
+   tidyr::pivot_longer(-Source, names_to="Entity", values_to="Count")
+
+p1B <- ggplot(fig1B_df, aes(Source, Count, fill=Source))+
+  geom_col(width=0.65, color="grey20", show.legend = FALSE)+
+  scale_fill_manual(values=c(
+    "PhosphoSitePlus"="#4C78A8",
+    "EPSD"="#F58518",
+    "iPTMNet"="#E45756",
+    "Cantley"="#72B7B2",
+    "Total"="#54A24B"
+  ))+
+  scale_y_continuous(labels=scales::comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
+  geom_text(aes(label=Count), vjust=-0.3, size=3.2)+
+  facet_wrap(~Entity, scales="free_y")+
+  theme_pubr(x.text.angle = 45)+
+  theme(strip.background = element_rect(fill="grey90", color="black"),
+        strip.text = element_text(face="bold"))+
+  labs(x=NULL, y="Count", tag="C")
+
+deg_kin <- combined_pairs %>%
+  filter(Source %in% c("Cantley","PhosphoSitePlus","EPSD","iPTMNet")) %>%
+  count(Kinase, name="n_substrates")
+
+p1C <- ggplot(deg_kin, aes(n_substrates))+
+  geom_histogram(bins=60, fill="#4C78A8", color="grey20")+
+  geom_vline(aes(xintercept = median(n_substrates, na.rm=TRUE)),
+             linetype="dashed", color="black")+
+  annotate("text", x=median(deg_kin$n_substrates), y=Inf,
+           label=paste0("Median = ", median(deg_kin$n_substrates)), vjust=1.5, hjust=-0.1, size=3.2)+
+  scale_x_continuous(trans="log1p")+
+  scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
+  theme_pubr() +
+  labs(title="Substrates per kinase (final resource)", x="Substrates per kinase (log1p)", y="Count", tag="D")
+
+# Build per-pair set membership as list-column for ggupset
+pairs_src_long <- combined_pairs %>%
+  distinct() %>%
+  select(Kinase, Substrate, Source) %>%
+  distinct()
+
+pairs_set <- pairs_src_long %>%
+  group_by(Substrate) %>%
+  summarise(Sets = list(sort(unique(Source))), .groups="drop")
+
+p1D <- ggplot(pairs_set, aes(x = Sets))+
+  geom_bar(fill="#4C78A8", color="grey20")+
+  scale_x_upset(order_by = "freq", n_intersections = 20, sets = c("PhosphoSitePlus","EPSD","iPTMNet","Cantley"))+
+  geom_text(stat='count', aes(label=after_stat(count)), vjust=-0.3, size=3.2)+
+  scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
+  labs(y="# of Substrates", x=NULL, tag ="E")+
+  theme_pubr()
+
+#Number kinases and substrates per family in the final set
+p1E_df <- combined_pairs %>%
+  left_join(kinase_list, by="Kinase") %>%
+  group_by(Family) %>%
+  summarise(
+    Kinases    = n_distinct(Kinase),
+    Substrates = n_distinct(Substrate)
+  ) %>%
+  ungroup() %>%
+  tidyr::pivot_longer(-Family, names_to="Entity", values_to="Count")
+
+p1E <- p1E_df %>%
+  filter(!is.na(Family)) %>%
+  ggplot(aes(reorder_within(Family, desc(Count), Entity), Count, fill=Entity))+
+  scale_fill_manual(values=c("Kinases"="#4C78A8", "Substrates"="#F58518"))+
+  facet_wrap(~Entity, scales="free")+
+  geom_col(width=0.65, color="grey20", show.legend=FALSE)+
+  #geom_text(aes(label=Count), vjust=-0.3, size=3.2)+
+  scale_x_reordered()+
+  #scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
+    theme_pubr(x.text.angle = 45)+
+  theme(strip.background = element_rect(fill="grey90", color="black"),
+        strip.text = element_text(face="bold"))+
+  labs(x=NULL, y="Count", tag="D")
+
+# First row: make p1A taller
+row1 <- p1A
+
+# Second row: p1B and p1E, with p1E slightly wider
+row2 <- p1B + p1E + plot_layout(widths = c(1, 1.5))
+
+# Third row: p1D
+row3 <- p1D
+
+# Combine with relative heights
+fig1 <- (row1 / row2 / row3) +
+  plot_layout(heights = c(1.7, 1, 1)) &
+  theme(plot.tag = element_text(face = "bold"))
+fig1
+ggsave(here("figures/paper_figures/fig1.png"), fig1, width=11, height=11, dpi=400)
+```
+
+## Figure S1
+```{r}
+
+figS1A_df <- combined_pairs %>%
+  group_by(Source) %>%
+  summarise(
+    Substrates = n_distinct(Substrate),
+    Sites      = n_distinct(paste(Substrate, Site))
+  ) %>% 
+  ungroup() %>%
+  #Add in total numbers
+  bind_rows(tibble(
+    Source = "Total",
+    Substrates = n_distinct(combined_pairs$Substrate),
+    Sites = n_distinct(paste(combined_pairs$Substrate, combined_pairs$Site))
+  )) %>%
+  tidyr::pivot_longer(-Source, names_to="Entity", values_to="Count")
+
+pS1A <- ggplot(figS1A_df %>% filter(Entity == "Sites"), aes(Source, Count, fill=Source))+
+  geom_col(width=0.65, color="grey20", show.legend=FALSE)+
+  scale_fill_manual(values=c(
+    "PhosphoSitePlus"="#4C78A8",
+    "EPSD" ="#F58518",
+    "iPTMNet"="#E45756",
+    "Cantley"="#72B7B2",
+    "Total"="#54A24B"
+  ))+
+  geom_text(aes(label=Count), vjust=-0.3, size=3.2)+
+  facet_wrap(~Entity, scales="free_y")+
+  theme_pubr(x.text.angle = 45)+
+  theme(strip.background = element_rect(fill="grey90", color="black"),
+        strip.text = element_text(face="bold"))+
+  scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
+  labs(x=NULL, y="Count")
+
+# Build per-pair set membership as list-column for ggupset
+sites_src_long <- combined_pairs %>%
+  distinct() %>%
+  select(Substrate, Site, Source) %>%
+  distinct()
+
+sites_set <- sites_src_long %>%
+  group_by(Substrate, Site) %>%
+  summarise(Sets = list(sort(unique(Source))), .groups="drop")
+
+pS1B <- ggplot(sites_set, aes(x = Sets))+
+  geom_bar(fill="#4C78A8", color="grey20")+
+  scale_x_upset(order_by = "freq", n_intersections = 20, sets = c("PhosphoSitePlus","EPSD","iPTMNet","Cantley"))+
+  scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
+  geom_text(stat='count', aes(label=after_stat(count)), vjust=-0.3, size=3.2)+
+  labs(y="Site count", x=NULL)+
+  theme_pubr()
+
+curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet")
+
+# 1) Start from site-by-source table; add UniProt if missing by joining ks_sites_all
+sites_src_long2 <- combined_pairs %>%
+  distinct(Substrate, Site, Source) %>%
+  # try to bring UniProt & Entrez from your site union table if not present
+  left_join(
+    kinet_processed %>%
+      distinct(Substrate, Site, Substrate_Uniprot_ID, Substrate_entrez),
+    by = c("Substrate","Site")
+  ) %>%
+  mutate(
+    Substrate_Uniprot_ID = norm_uniprot(Substrate_Uniprot_ID),
+    position = suppressWarnings(as.integer(str_remove(Site, "^[STY]")))
+  )
+
+# 2) Label whether a *site (union across sources)* is curated (present in *any* curated source)
+site_curated_union <- sites_src_long2 %>%
+  mutate(is_cur_src = Source %in% curated_sources) %>%
+  group_by(Substrate, Site) %>%
+  summarise(curated_union = any(is_cur_src), .groups = "drop")
+
+sites_src_annot <- sites_src_long2 %>%
+  left_join(site_curated_union, by = c("Substrate","Site"))
+
+# 3) Join Ochoa functional scores (UniProt + position), mark functional threshold (>0.5)
+ochoa_fs_norm <- ochoa_fs %>%
+  transmute(Substrate_Uniprot_ID = norm_uniprot(uniprot),
+            position = as.integer(position),
+            functional_score)
+
+sites_src_annot <- sites_src_annot %>%
+  left_join(ochoa_fs_norm, by = c("Substrate_Uniprot_ID","position")) %>%
+  filter(!is.na(functional_score)) %>%
+  mutate(functional_high = functional_score > cutoff)
+
+s1c_pct <- sites_src_annot %>%
+  group_by(Source) %>%
+  summarise(
+    n_sites_src = n(),                                       # sites in this source
+    n_func_src  = sum(functional_high, na.rm = TRUE),        # functional within this source
+    pct_func    = n_func_src / n_sites_src                   # fraction
+  ) %>%
+  ungroup()
+
+# also add a "Total" bar across the union of sites (not double-counting across sources)
+total_union <- sites_src_annot %>%
+  distinct(Substrate, Site, functional_high) %>%
+  summarise(
+    Source      = "Total",
+    n_sites_src = n(),
+    n_func_src  = sum(functional_high, na.rm = TRUE),
+    pct_func    = n_func_src / n_sites_src
+  )
+
+s1c_pct <- bind_rows(
+  s1c_pct,
+  total_union
+) %>%
+  arrange(Source)
+
+# ---- 5) Plot: single bar = % functional sites --------------------------------
+pS1C <- ggplot(s1c_pct, aes(Source, pct_func, fill = Source)) +
+  geom_col(width = 0.65, color = "grey20", show.legend = FALSE) +
+  geom_text(aes(label = scales::percent(pct_func, accuracy = 0.1)),
+            vjust = -0.3, size = 3.2) +
+  scale_fill_manual(values = c(
+    "PhosphoSitePlus" = "#4C78A8",
+    "EPSD"            = "#F58518",
+    "iPTMNet"         = "#E45756",
+    "Cantley"         = "#72B7B2",
+    "Total"           = "#54A24B"
+  )) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     expand  = expansion(mult = c(0, 0.1))) +  # 10% headroom
+  labs(x = NULL, y = "% Sites Functional") +
+  theme_pubr(x.text.angle = 45) +
+  theme(strip.background = element_rect(fill = "grey90", color = "black"),
+        strip.text       = element_text(face = "bold"))
+
+
+figS1 <- (pS1A | pS1C) / pS1B  +
+  plot_annotation(tag_levels = 'A') &
+  theme(plot.tag = element_text(face = "bold"))
+figS1
+ggsave(here("figures/paper_figures/figS1.png"), figS1, width=7, height=7, dpi=600)
+
+```
+
+## Figure 2
+```{r}
+
+# ── A1. Cantley ≥90% at the site level (no coloc yet) ─────────────────────────
+cantley_sites90 <- cantley_top
+
+# ── A2. Curated-site flag (PSP/ELM/PN union) ──────────────────────────────────
+curated_keys <- kinet_processed %>%
+  mutate(Site = if ("Site" %in% names(.)) Site else paste0(residue, position)) %>%
+  transmute(key = paste(Substrate_entrez, Site, sep=":")) %>%
+  distinct()
+
+cantley_sites90 <- cantley_sites90 %>%
+  mutate(key = paste(Substrate_entrez, Site, sep=":")) %>%
+  mutate(curated_site = key %in% curated_keys$key)
+
+# ── A3. Ochoa functional score mapping & flag (>0.5) ──────────────────────────
+ochoa_fs_norm <- ochoa_fs %>%
+  transmute(Substrate_Uniprot_ID = norm_uniprot(uniprot),
+            position = as.integer(position),
+            functional_score)
+
+cantley_sites90 <- cantley_sites90 %>%
+  left_join(ochoa_fs_norm, by = c("Substrate_Uniprot_ID","position")) %>%
+  mutate(ochoa_high = !is.na(functional_score) & functional_score > cutoff)
+
+# ── A4. NEW site filter: keep if curated OR Ochoa-high ────────────────────────
+cantley_sites90_keep <- cantley_sites90 %>%
+  filter(curated_site | ochoa_high)
+
+# ── A5. Derive KS pairs from the kept sites (gene-level) ──────────────────────
+cantley_pairs90_keep <- cantley_sites90_keep %>%
+  distinct(Kinase, Kinase_entrez, Substrate, Substrate_entrez)
+
+# ── B1. HPA subset to relevant genes (kept set only) ──────────────────────────
+genes_needed <- unique(c(cantley_pairs90_keep$Kinase_entrez,
+                         cantley_pairs90_keep$Substrate_entrez))
+
+hpa_small <- hpa_long %>%
+  filter(Gene_entrez %in% genes_needed) %>%
+  distinct(Gene_entrez, locs)
+
+kin_loc <- hpa_small %>% rename(Kinase_entrez = Gene_entrez, loc = locs)
+sub_loc <- hpa_small %>% rename(Substrate_entrez = Gene_entrez, loc = locs)
+
+# ── B2. Per-kinase denominators (all kept vs HPA-annotatable kept) ────────────
+annot_subs <- unique(sub_loc$Substrate_entrez)
+
+denoms <- cantley_pairs90_keep %>%
+  group_by(Kinase, Kinase_entrez) %>%
+  summarise(
+    n_all_subs   = n_distinct(Substrate_entrez),
+    n_annot_subs = n_distinct(if_else(Substrate_entrez %in% annot_subs,
+                                      Substrate_entrez, NA_character_)),
+    .groups = "drop"
+  )
+
+kin_with_hpa <- unique(kin_loc$Kinase_entrez)
+
+denoms <- denoms %>%
+  mutate(kin_has_hpa = Kinase_entrez %in% kin_with_hpa) %>%
+  mutate(n_annot_subs = ifelse(kin_has_hpa, n_annot_subs, 0L))
+
+# ── B3. Count co-localized substrates per kinase (≥1 shared compartment) ──────
+ks_coloc_rows <- cantley_pairs90_keep %>%
+  inner_join(kin_loc, by = "Kinase_entrez") %>%
+  inner_join(sub_loc, by = c("Substrate_entrez","loc")) %>%
+  distinct(Kinase_entrez, Substrate_entrez)
+
+coloc_counts <- ks_coloc_rows %>%
+  group_by(Kinase_entrez) %>%
+  summarise(n_coloc_subs = n_distinct(Substrate_entrez), .groups="drop")
+
+# ── B4. Merge & compute fractions; build plots ────────────────────────────────
+per_kinase_coloc <- denoms %>%
+  left_join(coloc_counts, by = "Kinase_entrez") %>%
+  mutate(
+    n_coloc_subs   = replace_na(n_coloc_subs, 0L),
+    pct_coloc_all  = ifelse(n_all_subs   > 0, 100 * n_coloc_subs / n_all_subs, NA_real_),
+    pct_coloc_annot= ifelse(kin_has_hpa & n_annot_subs > 0, 100 * n_coloc_subs / n_annot_subs, NA_real_)
+  ) %>%
+  arrange(desc(pct_coloc_annot))
+
+# Histogram + density + median (same look)
+p2B_dist <- ggplot(per_kinase_coloc, aes(pct_coloc_annot)) +
+  geom_histogram(bins = 40, fill = "#4C78A8", color = "grey20", alpha = 0.9) +
+  geom_density(aes(y = after_stat(..count..)), linewidth = 0.8, color = "#2F4B7C", alpha = 0.6) +
+  geom_vline(xintercept = median(per_kinase_coloc$pct_coloc_annot, na.rm = TRUE),
+             linetype = "dashed", color = "black") +
+  annotate("text",
+           x = median(per_kinase_coloc$pct_coloc_all, na.rm = TRUE),
+           y = Inf,
+           label = paste0("Median = ", round(median(per_kinase_coloc$pct_coloc_annot, na.rm=TRUE), 1), "%"),
+           vjust = 2.5, hjust = -0.05, size = 3.1) +
+  scale_x_continuous(labels = function(x) paste0(x, "%"), expand = expansion(mult = c(0, 0.02))) +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0, 0.1))) +  # 10% headroom
+  labs(x = "% Predicted Substrates\nCo-localized per Kinase",
+       y = "Count") +
+  theme_pubr()
+
+# k_top <- per_kinase_coloc %>% slice_max(pct_coloc_annot, n = 15, with_ties = FALSE)
+# k_bot <- per_kinase_coloc %>% filter(!is.na(pct_coloc_annot)) %>% slice_min(pct_coloc_annot, n = 15, with_ties = FALSE)
+
+# p_top <- ggplot(k_top, aes(x = pct_coloc_annot, y = fct_reorder(Kinase, pct_coloc_annot))) +
+#   geom_col(fill = "#54A24B", color = "grey20") +
+#   geom_text(aes(label = sprintf("%.1f%%", round(pct_coloc_annot, 1))), hjust = -0.1, size = 3.0) +
+#   scale_x_continuous(labels = function(x) paste0(x, "%"), expand = expansion(mult = c(0, 0.4))) +
+#   labs(x = "% substrates co-localized (annotatable)", y = NULL) +
+#   theme_pubr() +
+#   theme(legend.position = "none") +
+#   coord_cartesian(clip = "off")
+
+# p_bot <- ggplot(k_bot, aes(x = pct_coloc_annot, y = fct_reorder(Kinase, pct_coloc_annot))) +
+#   geom_col(fill = "#E45756", color = "grey20") +
+#   geom_text(aes(label = sprintf("%.1f%%", round(pct_coloc_annot, 1))), hjust = -0.1, size = 3.0) +
+#   scale_x_continuous(labels = function(x) paste0(x, "%"), expand = expansion(mult = c(0, 0.08))) +
+#   labs(title = "Bottom kinases by co-localized substrates",
+#        x = "% co-localized (annotatable)", y = NULL) +
+#   theme_pubr() +
+#   coord_cartesian(clip = "off")
+
+p2C <- cantley_sites90 %>%
+  mutate(pass = curated_site | ochoa_high,
+         class = case_when(substr(Site,1,1) == "S" ~ "Serine (S)",
+                           substr(Site,1,1) == "T" ~ "Threonine (T)",
+                           substr(Site,1,1) == "Y" ~ "Tyrosine (Y)",
+                           TRUE ~ "Other")) %>%
+  filter(class != "Other") %>%
+  group_by(class) %>%
+  summarise(frac = mean(pass, na.rm = TRUE), .groups = "drop") %>%
+  mutate(class = factor(class, levels = c("Serine (S)","Threonine (T)","Tyrosine (Y)"))) %>%
+  ggplot(aes(class, frac, fill = class)) +
+  geom_col(width = 0.7, color = "grey20") +
+  geom_text(aes(label = sprintf("%.1f%%", frac*100)), vjust = -0.3, size = 3.2) +
+  scale_fill_manual(values = c("Serine (S)"="#B279A2", "Threonine (T)"="#B279A2", "Tyrosine (Y)"="#4C78A8")) +
+  scale_y_continuous(labels = percent, expand = expansion(mult = c(0, 0.1))) +
+  labs(x = "Residue class", y = "% Sites Passing") +
+  theme_pubr(x.text.angle = 45) +
+  theme(legend.position = "none")
+
+# row1 <- p2B_dist + p_top + plot_layout(widths = c(2, 1))
+# row2 <- p2C + p2D + plot_layout(widths = c(1, 2))
+
+fig2 <- p2B_dist + (p2C + pS1C) +
+  plot_annotation(tag_levels = 'A') &
+  theme(plot.tag = element_text(face = "bold"))
+
+fig2
+ggsave(here("figures/paper_figures/fig2.png"), fig2, width=10, height=5, dpi=400)
+```
+
+## Figure 3
+
+```{r}
+pal <- list(
+  curated = "#4C78A8",
+  cantley = "#72B7B2",
+  novel   = "#54A24B",
+  line    = "grey20"
+)
+# 0) Identify overlapping kinases
+kinase_by_src <- combined_pairs %>%
+  distinct(Kinase, Source)
+
+kins_cantley <- kinase_by_src %>% filter(Source == "Cantley") %>% pull(Kinase) %>% unique()
+kins_curated <- kinase_by_src %>% filter(Source %in% curated_sources) %>% pull(Kinase) %>% unique()
+
+overlap_kins <- intersect(kins_cantley, kins_curated)
+
+# 1) Build pair-level flags within the overlap
+pairs_flags_overlap <- combined_pairs %>%
+  #filter(Kinase %in% overlap_kins) %>%
+  distinct(Kinase, Substrate, Source) %>%
+  group_by(Kinase, Substrate) %>%
+  summarise(
+    is_curated = any(Source %in% curated_sources),
+    in_cantley = any(Source == "Cantley"),
+    .groups = "drop"
+  )
+
+# ── 3A. New pairs added by Cantley (restricted to overlap kinases) ────────────
+# pair-level flags already built in `pairs_flags_overlap`
+cov_tbl <- pairs_flags_overlap %>%
+  summarise(
+    curated_pairs   = sum(is_curated),                 # existing curated pairs
+    new_pairs_added = sum(in_cantley & !is_curated)    # Cantley-only pairs
+  ) %>%
+  tidyr::pivot_longer(everything(), names_to = "metric", values_to = "count") %>%
+  mutate(metric = factor(metric,
+                         levels = c("curated_pairs","new_pairs_added"),
+                         labels = c("Curated pairs","Novel pairs")))
+
+p3A_coverage <- ggplot(cov_tbl, aes(x = metric, y = count, fill = metric)) +
+  geom_col(width = 0.65, color = pal$line, show.legend = FALSE) +
+  geom_text(aes(label = scales::comma(count)), vjust = -0.3, size = 3.2) +
+  scale_fill_manual(values = c("Curated pairs" = pal$curated,
+                               "Novel pairs" = pal$novel)) +
+  scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0, 0.12))) +
+  annotate(
+    "text", x = 1.5, y = max(cov_tbl$count) * 1.2,
+    label = {
+      df <- tidyr::pivot_wider(cov_tbl, names_from = metric, values_from = count)
+      inc <- df$`Novel pairs` / df$`Curated pairs`
+      paste0("Increase = +", scales::percent(inc, accuracy = 0.1))
+    },
+    size = 3.3, fontface = 2
+  ) +
+  labs(x = NULL, y = "Pair count") +
+  theme_pubr()
+
+# ── 3B. Distribution of novel substrates per kinase (overlap kinases only) ────
+curated_vs_novel_edges_overlap <- combined_pairs %>%
+  filter(Kinase %in% overlap_kins) %>%
+  distinct(Kinase, Substrate, Source) %>%
+  mutate(is_curated = Source %in% curated_sources,
+         is_cantley = Source == "Cantley") %>%
+  group_by(Kinase, Substrate) %>%
+  summarise(
+    known = any(is_curated),
+    novel = any(is_cantley & !is_curated),
+    .groups = "drop"
+  ) %>%
+  group_by(Kinase) %>%
+  summarise(
+    n_known = sum(known),
+    n_novel = sum(novel),
+    n_total = n_known + n_novel,
+    frac_known = ifelse(n_total > 0, n_known / n_total, NA_real_),
+    .groups = "drop"
+  )
+
+p3B <- ggplot(curated_vs_novel_edges_overlap, aes(x = n_novel)) +
+  geom_histogram(fill = pal$novel, color = pal$line, bins = 40) +
+  #add line for median
+  geom_vline(aes(xintercept = median(n_novel, na.rm=TRUE)),
+             linetype = "dashed", color = "black") +
+  annotate("text",
+           x = median(curated_vs_novel_edges_overlap$n_novel, na.rm=TRUE),
+           y = Inf,
+           label = paste0("Median = ", median(curated_vs_novel_edges_overlap$n_novel, na.rm=TRUE)),
+           vjust = 1.5, hjust = -0.1, size = 3.2) +
+  theme_pubr() +
+  labs(x = "# Novel substrates per kinase", y = "Kinase count")
+
+# ── 3C. Kinase-wise expansion (gain) in overlap kinases ───────────────────────
+kin_expansion_overlap <- combined_pairs %>%
+  filter(Kinase %in% overlap_kins) %>%
+  distinct(Kinase, Substrate, Source) %>%
+  group_by(Kinase) %>%
+  summarise(
+    n_known = n_distinct(Substrate[Source %in% curated_sources]),
+    n_novel = n_distinct(Substrate[Source == "Cantley" &
+                                     !(Substrate %in% Substrate[Source %in% curated_sources])]),
+    n_total = n_known + n_novel,
+    gain    = ifelse(n_known > 0, n_total / n_known, Inf),
+    .groups = "drop"
+  )
+
+top_gain <- kin_expansion_overlap %>%
+  arrange(desc(gain)) %>%
+  slice_head(n = 20)
+
+p3C <- ggplot(top_gain, aes(x = gain, y = fct_reorder(Kinase, gain))) +
+  geom_col(fill = pal$cantley, color = pal$line) +
+  geom_text(aes(label = paste0("+", n_novel)), hjust = -0.1, size = 3) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.2))) +
+  labs(x = "Expansion factor (total / curated substrates)", y = NULL,
+       title = "Kinase-wise expansion from Cantley (same kinases)") +
+  theme_pubr()
+
+# ── 3D. Family-wise novelty; show only families with >15 dark kinases ─────────
+understudied_fams <- all_kinases %>%
+  filter(class == "Dark") %>%
+  left_join(kinase_list, by = c("symbol" = "Kinase")) %>%
+  filter(!is.na(Family)) %>%
+  count(Family, name = "n_dark") %>%
+  filter(n_dark > 15) %>%                    # <- keep only >15
+  arrange(desc(n_dark))
+
+kin_fam_novelty_overlap <- combined_pairs %>%
+  #filter(Kinase %in% overlap_kins) %>%
+  distinct(Kinase, Substrate, Source) %>%
+  left_join(kinase_list, by = "Kinase") %>%
+  filter(!is.na(Family)) %>%
+  group_by(Family) %>%
+  summarise(
+    n_known = n_distinct(Substrate[Source %in% curated_sources]),
+    n_novel = n_distinct(Substrate[Source == "Cantley" &
+                         !(Substrate %in% Substrate[Source %in% curated_sources])]),
+    frac_novel = ifelse(n_known + n_novel > 0, n_novel / (n_known + n_novel), NA_real_),
+    .groups = "drop"
+  ) %>%
+  inner_join(understudied_fams, by = "Family") %>%   # <- restrict to >15 dark families
+  arrange(desc(frac_novel))
+
+p3D <- ggplot(kin_fam_novelty_overlap,
+              aes(x = frac_novel, y = fct_reorder(Family, frac_novel))) +
+  geom_col(aes(fill = n_dark), color = pal$line) +
+  scale_fill_gradient(low = "#4C78A8", high = "#B279A2", name = "# Understudied Kinases") +
+  geom_text(aes(label = scales::percent(frac_novel, accuracy = 0.1)), hjust = -0.1, size = 3) +
+  scale_x_continuous(labels = scales::percent, expand = expansion(mult = c(0, 0.15))) +
+  labs(x = "% Novel Substrates", y = "Kinase Family") +
+  theme_pubr()
+
+# curated sources
+curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet","PhosphoELM","PhosphoNetworks")
+
+# ── 3E. % of pairs involving Understudied (Dark) kinases: Curated vs Curated+Cantley ──
+kin_class <- all_kinases %>%
+  transmute(Kinase_entrez = as.character(entrez_id),
+            Kinase_class  = if_else(class_2019 == "Dark", "Understudied (Dark)", "Well-studied (Light)"))
+
+curated_only_pairs <- combined_pairs %>%
+  filter(Source %in% curated_sources) %>%
+  distinct(Kinase, Kinase_entrez, Substrate, Substrate_entrez) %>%
+  mutate(Set = "Curated")
+
+proposed_pairs <- combined_pairs %>%
+  filter(Source %in% c(curated_sources, "Cantley")) %>%
+  distinct(Kinase, Kinase_entrez, Substrate, Substrate_entrez) %>%
+  mutate(Set = "Curated + Cantley")
+
+pairs_for_compare <- bind_rows(curated_only_pairs, proposed_pairs) %>%
+  mutate(Kinase_entrez = as.character(Kinase_entrez)) %>%
+  left_join(kin_class, by = "Kinase_entrez") %>%
+  filter(!is.na(Kinase_class)) %>%
+  mutate(Set = factor(Set, levels = c("Curated","Curated + Cantley")))
+
+dark_fracs <- pairs_for_compare %>%
+  mutate(is_dark = Kinase_class == "Understudied (Dark)") %>%
+  group_by(Set) %>%
+  summarise(frac_dark = mean(is_dark), n = n(), .groups = "drop")
+
+p3E_pairs <- ggplot(dark_fracs, aes(x = Set, y = frac_dark)) +
+  geom_col(color = "grey20", fill = "#B279A2", width = 0.7, show.legend = FALSE) +
+  geom_text(aes(label = scales::percent(frac_dark, accuracy = 0.1)),
+            vjust = -0.3, size = 3.1) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, NA),
+                     expand = expansion(mult = c(0, 0.1))) +
+  labs(x = NULL, y = "% of KS pairs with\nDark Kinases") +
+  theme_pubr()
+
+fig3 <- (p3A_coverage | p3B) / (p3D | p3E_pairs) +
+  plot_annotation(tag_levels = 'A') &
+  theme(plot.tag = element_text(face = "bold"))
+fig3
+ggsave(here("figures/paper_figures/fig3.png"), fig3, width=9, height=7, dpi=600)
+
+```
+
+## Add in substrate-substrate interactions from HIPPIE
+
+```{r}
+## Adding in HIPPIE data for inter-substrate PPIs
+# Read in Hippie data for PPIs
+hippie <- read_tsv(here("data/HIPPIE-current.mitab.txt"))
+
+hippie  %>% 
+  names()
+
+hippie  %>% 
+  head()  %>% 
+  view()  
+
+#Values in INteraction type and INteraction Identifer columns 
+types = hippie$`Interaction Detection Methods`  %>% unique()
+
+
+# Filter to only physical interactions between substrates
+
+substrate_IDs <- unique(combined_pairs$Substrate_entrez)
+kinase_IDs    <- unique(combined_pairs$Kinase_entrez)
+
+substrate_IDs <- setdiff(substrate_IDs, kinase_IDs)
+combined_IDs  <- union(substrate_IDs, kinase_IDs)
+
+# --- HIPPIE → substrate-substrate + kinase autophosphorylation only ---
+hippie_processed <- hippie %>% 
+  select(
+    Protein1_entrez = `ID Interactor A`,
+    Protein2_entrez = `ID Interactor B`,
+    confidence_score = `Confidence Value`,
+    Interaction_detection_method = `Interaction Detection Methods`
+  ) %>%
+  mutate(
+    Protein1_entrez = str_replace(Protein1_entrez, "^entrez gene:", ""),
+    Protein2_entrez = str_replace(Protein2_entrez, "^entrez gene:", "")
+  ) %>%
+  # Node filter 
+  filter(Protein1_entrez %in% combined_IDs,
+         Protein2_entrez %in% combined_IDs) %>%
+  distinct() %>%
+  # classify edge type
+  mutate(
+    is_sub1 = Protein1_entrez %in% substrate_IDs,
+    is_sub2 = Protein2_entrez %in% substrate_IDs,
+    EdgeType = if_else(
+      is_sub1 & is_sub2, "substrate-substrate", "exclude"
+    )
+  ) %>%
+  # drop everything else:
+  #  - kinase–substrate (is_kinX & is_subY)
+  #  - kinase–kinase (kinases)
+  #  - self-loops (if present in HIPPIE; rare but possible)
+  #  - substrate autoloops (if present in HIPPIE; usually rare/artefactual)
+  filter(EdgeType != "exclude") %>%
+  select(Protein1_entrez, Protein2_entrez, confidence_score,
+         Interaction_detection_method, EdgeType) %>%
+  distinct()
+
+hippie_processed  %>% head()  %>% view()
+
+# #quick look at confidence score distribution
+# ggplot(hippie_processed, aes(confidence_score)) +
+#   geom_histogram(bins=100, fill="grey70", color="black") +
+#   #lines for quantiles
+#   geom_vline(xintercept = quantile(hippie_processed$confidence_score, probs=c(0.75, 0.9)), linetype="dashed", color="red") +
+#   labs(x="Confidence score", y="Count") +
+#   scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1))) +  # 10% headroom
+#   theme_pubr()
+
+confidence_cutoff = quantile(hippie_processed$confidence_score, probs=0.75)
+
+# #quick look at MI codes in Interaction Detection Methods column (need to split by "|")
+# #also show Ns in the dataset
+# hippie %>%
+#   filter(`Confidence Value` > confidence_cutoff) %>%
+#   select(`Interaction Detection Methods`) %>%
+#   separate_rows(`Interaction Detection Methods`, sep="\\|") %>%
+#   group_by(`Interaction Detection Methods`)  %>%
+#   summarise(N = n())  %>%
+#   arrange(desc(N))  %>%
+#   ungroup()  %>%
+#   mutate(`Interaction Detection Methods` = str_replace_all(`Interaction Detection Methods`, "MI:", ""))  %>%
+#   arrange(desc(N))  %>%
+#   view()
+# ## Assays to filter out: 
+# 0428(imaging technique)
+# 0493(in vivo)
+# 0492(in vitro)
+
+hippie_symbol_to_entrez_1 = bitr(hippie_processed$Protein1_entrez, fromType="ENTREZID", toType=c("SYMBOL"), OrgDb="org.Hs.eg.db")  %>%
+  rename(Protein1_entrez = ENTREZID, Protein1 = SYMBOL)  %>%
+  distinct()
+
+hippie_symbol_to_entrez_2 = bitr(hippie_processed$Protein2_entrez, fromType="ENTREZID", toType=c("SYMBOL"), OrgDb="org.Hs.eg.db")  %>%
+  rename(Protein2_entrez = ENTREZID, Protein2 = SYMBOL)  %>%
+  distinct()
+
+hippie_entrez = hippie_processed  %>%
+  left_join(hippie_symbol_to_entrez_1, by="Protein1_entrez")  %>%
+  left_join(hippie_symbol_to_entrez_2, by="Protein2_entrez")  %>%
+  drop_na(Protein1, Protein2)  %>%
+  distinct() %>%
+  # Consulted with proteomics colleagues, decided to filter out certain methods
+  filter(Interaction_detection_method != "MI:0428")  %>% #remove imaging technique (too vague)
+  filter(Interaction_detection_method != "MI:0493")  %>% #remove in vivo (too vague)
+  filter(Interaction_detection_method != "MI:0492")  %>% #remove in vitro (too vague)
+  filter(Protein1_entrez != Protein2_entrez)  %>% #remove self-loops
+  filter(confidence_score > confidence_cutoff)  %>%
+  select(Protein1, Protein2, Protein1_entrez, Protein2_entrez, Evidence = Interaction_detection_method)  %>%
+  mutate(Source = "HIPPIE")  %>%
+  distinct()
+
+
+# Combine with integrated data
+full_interaction_data = combined_pairs  %>%
+  select(
+    Protein1 = Kinase,
+    Protein2 = Substrate,
+    Protein1_entrez = Kinase_entrez,
+    Protein2_entrez = Substrate_entrez,
+    Evidence,
+    Source
+  )  %>%
+  mutate(Protein1_entrez = as.character(Protein1_entrez),
+         Protein2_entrez = as.character(Protein2_entrez))  %>% 
+  bind_rows(hippie_entrez)  %>%
+  distinct() %>%
+  write_csv(here("results/extended_kinome_network.csv"))
+
+#summarise across sources
+full_interaction_summary = full_interaction_data  %>%
+  group_by(Protein1, Protein2, Protein1_entrez, Protein2_entrez)  %>%
+  summarise(
+    n_sources = n_distinct(Source),
+    Sources   = paste(sort(unique(Source)), collapse="; "),
+    Evidence  = paste(sort(unique(Evidence)), collapse="; "),
+    .groups = "drop"
+  ) %>%
+  write_csv(here("results/extended_kinome_network_summary.csv"))
+```
