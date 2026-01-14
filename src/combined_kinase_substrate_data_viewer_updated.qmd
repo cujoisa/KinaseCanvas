@@ -66,6 +66,8 @@ edge_tbl <- combined_pairs %>%
     evidence      = if_else(any(evidence == "Known (curated)"), "Known (curated)", "Novel (Cantley)"),
     Likely_functional = any(Likely_functional),
     SiteCount     = n_distinct(Site),
+    Sites         = paste(sort(unique(na.omit(Site))), collapse = "; "),
+    Reference_PMID = paste(sort(unique(Reference_PMID[!is.na(Reference_PMID) & Reference_PMID != ""])), collapse = "; "),
     Sources       = paste(sort(unique(Source)), collapse = "; "),
     .groups = "drop"
   ) %>%
@@ -75,6 +77,8 @@ edge_tbl <- combined_pairs %>%
     evidence,
     Likely_functional,                # logical -> will be serialized to true/false
     SiteCount,
+    Sites,
+    Reference_PMID,
     edgeLabel = paste0(evidence, ifelse(Likely_functional, " · functional", "")),
     SourceList = Sources
   ) %>%
@@ -116,13 +120,15 @@ nodes_json <- node_tbl %>%
   tidyr::unnest_wider(data)
 
 edges_json <- edge_tbl %>%
-  transmute(data = pmap(list(source, target, evidence, Likely_functional, SiteCount, edgeLabel, SourceList),
+  transmute(data = pmap(list(source, target, evidence, Likely_functional, SiteCount, Sites, Reference_PMID, edgeLabel, SourceList),
                         ~ list(source = ..1, target = ..2,
                                evidence = ..3,
                                Likely_functional = ..4, 
                                SiteCount = ..5,
+                               Sites = ..6,
+                               Reference_PMID = ..7,
                                edgeLabel = ..6,
-                               SourceList = ..7))) %>%
+                               SourceList = ..9))) %>%
   tidyr::unnest_wider(data)
 
 payload <- list(nodes = nodes_json, edges = edges_json)
@@ -353,10 +359,12 @@ viewer_tags <- tags$div(
         e.data('evidence'),
         e.data('Likely_functional'),
         e.data('SiteCount'),
+        e.data('Sites'),
+        e.data('Reference_PMID'),
         e.data('SourceList') ?? ''
       ]);
       renderFilterableTable('edgesFilters','edgesTable',
-        ['From','To','Evidence','Functional','#Sites','Sources'], rows);
+        ['From','To','Evidence','Functional','#Sites','Sites','Reference_PMID','Sources'], rows);
     }
 
     function renderFilterableTable(filtersId, tableBoxId, headers, rows){
@@ -447,10 +455,12 @@ viewer_tags <- tags$div(
         e.data('evidence'),
         e.data('Likely_functional'),
         e.data('SiteCount'),
+        e.data('Sites'),
+        e.data('Reference_PMID'),
         e.data('SourceList') ?? ''
       ]);
       renderFilterableTable('edgesFilters','edgesTable',
-        ['From','To','Evidence','Functional','#Sites','Sources'], rows);
+        ['From','To','Evidence','Functional','#Sites','Sites','Reference_PMID','Sources'], rows);
       const onlyFn = document.getElementById('onlyFunctionalChk').checked;
       applyFunctionalFilter(onlyFn);
       refreshEdgesTable();
@@ -508,9 +518,11 @@ viewer_tags <- tags$div(
         e.data('evidence'),
         e.data('Likely_functional'),
         e.data('SiteCount'),
+        e.data('Sites'),
+        e.data('Reference_PMID'),
         e.data('SourceList') ?? ''
       ]);
-      const blob = csvBlob(rows, ['From','To','Evidence','Functional','#Sites','Sources']);
+      const blob = csvBlob(rows, ['From','To','Evidence','Functional','#Sites','Sites','Reference_PMID','Sources']);
       download('kinome_edges.csv', blob);
     });
     document.getElementById('btnCsvEdges').addEventListener('click', () => {
@@ -520,9 +532,11 @@ viewer_tags <- tags$div(
         e.data('evidence'),
         e.data('Likely_functional'),
         e.data('SiteCount'),
+        e.data('Sites'),
+        e.data('Reference_PMID'),
         e.data('SourceList') ?? ''
       ]);
-      const blob = csvBlob(rows, ['From','To','Evidence','Functional','#Sites','Sources']);
+      const blob = csvBlob(rows, ['From','To','Evidence','Functional','#Sites','Sites','Reference_PMID','Sources']);
       download('kinome_edges.csv', blob);
     });
 

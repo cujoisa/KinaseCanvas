@@ -1,5 +1,5 @@
 ---
-title: "Analysis and INtegration of Cantley Atlas, PhosphoSitePlus, and HIPPIE Data"
+title: "Analysis and Integration of The Cantley Atlases and Curated Kinase-Substrate Data"
 editor: visual
 author: "Chinmaya Joisa"
 date: "08/15/2025"
@@ -312,7 +312,7 @@ cantley_tyr_long <- cantley_tyrosine %>%
 
 cantley_feats <- bind_rows(cantley_serthr_long, cantley_tyr_long) %>%
   pivot_wider(names_from = Metric, values_from = Value) %>%
-  # harmonize symbols (using your symmap_kinase / symmap_subs)
+  # harmonize symbols (using symmap_kinase / symmap_subs)
   left_join(symmap_kinase, by = c("Kinase" = "input_symbol")) %>%
   rename(Kinase_input = Kinase, Kinase = SYMBOL, Kinase_entrez = ENTREZID) %>%
   left_join(symmap_subs,   by = c("Gene"   = "input_symbol")) %>%
