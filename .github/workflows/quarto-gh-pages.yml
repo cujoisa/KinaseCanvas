@@ -31,7 +31,9 @@ jobs:
         uses: quarto-dev/quarto-actions/setup@v2
 
       - name: Render site (docs folder)
-        run: quarto render docs/kinasecanvas_final.qmd --output-dir docs
+        run: |
+          mkdir -p docs
+          quarto render kinasecanvas_final.qmd --output-dir docs
 
       - name: Ensure index.html present
         run: |
