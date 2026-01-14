@@ -20,28 +20,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up R
-        uses: r-lib/actions/setup-r@v2
-
-      - name: Install R packages (CRAN)
-        run: |
-          Rscript -e "install.packages(c('tidyverse','tidygraph','igraph','ggraph','scales','readxl','ggpubr','jsonlite','htmltools','ggupset','patchwork','here','knitr','rmarkdown'), repos='https://cloud.r-project.org')"
-
-      - name: Set up Quarto
-        uses: quarto-dev/quarto-actions/setup@v2
-
-      - name: Render site (docs folder)
-        run: |
-          mkdir -p docs
-          quarto render docs/kinasecanvas_final.qmd --output-dir docs
-
       - name: Ensure index.html present
         run: |
           ls -l docs
-          if [ -f docs/kinasecanvas_final.html ]; then
-            cp docs/kinasecanvas_final.html docs/index.html
-          else
-            echo "kinasecanvas_final.html missing after render" && exit 1
+          if [ ! -f docs/index.html ]; then
+            echo "docs/index.html missing. Please commit the pre-rendered HTML (quarto render ... --output-dir docs && cp docs/kinasecanvas_final.html docs/index.html)." && exit 1
           fi
           ls -l docs
 
