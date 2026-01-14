@@ -37,12 +37,11 @@ jobs:
 
       - name: Ensure index.html present
         run: |
-          ls -l docs || true
+          ls -l docs
           if [ -f docs/kinasecanvas_final.html ]; then
             cp docs/kinasecanvas_final.html docs/index.html
-          fi
-          if [ ! -f docs/index.html ]; then
-            echo "index.html missing after render" && exit 1
+          else
+            echo "kinasecanvas_final.html missing after render" && exit 1
           fi
           ls -l docs
 
