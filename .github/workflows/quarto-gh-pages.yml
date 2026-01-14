@@ -31,19 +31,7 @@ jobs:
         uses: quarto-dev/quarto-actions/setup@v2
 
       - name: Render site (docs folder)
-        run: quarto render src/kinasecanvas_final.qmd --output-dir docs
-
-      - name: Ensure docs exists and set index
-        run: |
-          mkdir -p docs
-          if [ -f docs/kinasecanvas_final.html ]; then
-            cp docs/kinasecanvas_final.html docs/index.html
-          elif [ -f src/kinasecanvas_final.html ]; then
-            cp src/kinasecanvas_final.html docs/index.html
-          else
-            echo "Rendered HTML not found" && exit 1
-          fi
-          ls -l docs
+        run: quarto render docs/kinasecanvas_final.qmd --output-dir docs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
