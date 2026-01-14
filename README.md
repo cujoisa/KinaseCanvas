@@ -11,6 +11,17 @@ figures and JSON payloads.
 - `results/` – CSV exports powering the interactive network viewers.
 - `src/` – Quarto and R Markdown sources for the data integration and viewers.
 
+## Live interactive viewer
+
+- GitHub Pages: https://cujoisa.github.io/KinaseCanvas/
+
+### How to use the viewer
+- Pick a kinase (and optionally a substrate) in the top controls to seed the network.
+- Toggle layouts, functional-only edges, node/edge labels, and arrows to declutter dense regions.
+- Filter the table by typing in column filters; the table always reflects what is visible in the graph.
+- Export: PNG/PDF for figures, and CSV for the currently visible edges (includes Sites and Reference_PMID).
+
+
 ## Reproducing the analysis
 
 1. Install packages recorded in `renv.lock` using `renv::restore()`.
