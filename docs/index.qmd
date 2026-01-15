@@ -385,7 +385,7 @@ viewer_tags <- tags$div(
         name: 'cose',
         animate: false,
         padding: 30,
-        nodeRepulsion: 18000,
+        nodeRepulsion: 100,
         idealEdgeLength: 130,
         nodeOverlap: 2,
         componentSpacing: 100,
