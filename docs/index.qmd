@@ -1,0 +1,619 @@
+---
+title: "Explorer for curated kinase-substrate data"
+editor: visual
+author: "Chinmaya Joisa"
+date: "09/08/2025"
+toc: true
+toc-depth: 5
+toc-title: Table of Contents
+highlight-style: pygments
+format: 
+  html:
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+execute:
+  echo: false
+  cache: true
+  message: false
+  warning: false
+  out-width: "100%"
+  fig-align: center
+  fig-dpi: 300
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+require("knitr")
+knitr::opts_knit$set(root.dir = here::here())
+set.seed(123)
+```
+
+```{r load_libraries, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidygraph)
+library(here)
+library(igraph)
+library(ggraph)
+library(scales)
+library(readxl)
+library(ggpubr)
+library(jsonlite)
+library(htmltools)
+
+library(ggupset)
+library(patchwork)
+combined_pairs = read_csv(here("results/combined_kinase_substrate_pairs_2025.csv"))
+```
+
+```{r, echo=FALSE, results='asis'}
+curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet","PhosphoELM","PhosphoNetworks")
+
+edge_tbl <- combined_pairs %>%
+  mutate(evidence = if_else(Source %in% curated_sources, "Known (curated)", "Novel (Cantley)")) %>%
+  group_by(Kinase, Substrate) %>%
+  summarise(
+    evidence      = if_else(any(evidence == "Known (curated)"), "Known (curated)", "Novel (Cantley)"),
+    Likely_functional = any(Likely_functional),
+    SiteCount     = n_distinct(Site),
+    Sites         = paste(sort(unique(na.omit(Site))), collapse = "; "),
+    Reference_PMID = paste(sort(unique(Reference_PMID[!is.na(Reference_PMID) & Reference_PMID != ""])), collapse = "; "),
+    Sources       = paste(sort(unique(Source)), collapse = "; "),
+    .groups = "drop"
+  ) %>%
+  transmute(
+    source = Kinase,
+    target = Substrate,
+    evidence,
+    Likely_functional,
+    SiteCount,
+    Sites,
+    Reference_PMID,
+    edgeLabel = paste0(evidence, ifelse(Likely_functional, " · functional", "")),
+    SourceList = Sources
+  ) %>%
+  mutate(Likely_functional = if_else(Likely_functional, "Likely functional", "Other/Unknown"))
+
+node_tbl <- bind_rows(
+  combined_pairs %>% transmute(Gene = Kinase,    Entrez = Kinase_entrez, role = "Kinase"),
+  combined_pairs %>% transmute(Gene = Substrate, Entrez = Substrate_entrez, role = "Substrate")
+) %>%
+  mutate(Entrez = if_else(is.na(Entrez) | Entrez == "", NA_integer_, Entrez)) %>%
+  group_by(Gene) %>%
+  summarise(
+    Entrez = dplyr::first(na.omit(Entrez)),
+    role   = paste(sort(unique(role)), collapse = ","),
+    .groups = "drop"
+  ) %>%
+  arrange(Gene)
+
+deg_tbl <- edge_tbl %>%
+  count(source, name = "outdeg") %>%
+  full_join(edge_tbl %>% count(target, name = "indeg"), by = c("source" = "target")) %>%
+  mutate(outdeg = coalesce(outdeg, 0L), indeg  = coalesce(indeg, 0L)) %>%
+  transmute(Gene = source, outdeg, indeg) %>%
+  distinct()
+
+node_tbl <- node_tbl %>%
+  left_join(deg_tbl, by = "Gene") %>%
+  mutate(outdeg = coalesce(outdeg, 0L), indeg = coalesce(indeg, 0L))
+
+nodes_json <- node_tbl %>%
+  transmute(data = pmap(list(id = Gene, label = Gene, Entrez = Entrez, role = role,
+                             indeg = indeg, outdeg = outdeg, deg = indeg + outdeg),
+                        ~ list(id = ..1, label = ..2, Entrez = ..3, role = ..4,
+                               indeg = ..5, outdeg = ..6, deg = ..7))) %>%
+  tidyr::unnest_wider(data)
+
+edges_json <- edge_tbl %>%
+  transmute(data = pmap(list(source, target, evidence, Likely_functional, SiteCount, Sites, Reference_PMID, edgeLabel, SourceList),
+                        ~ list(source = ..1, target = ..2,
+                               evidence = ..3,
+                               Likely_functional = ..4, 
+                               SiteCount = ..5,
+                               Sites = ..6,
+                               Reference_PMID = ..7,
+                               edgeLabel = ..8,
+                               SourceList = ..9))) %>%
+  tidyr::unnest_wider(data)
+
+payload <- list(nodes = nodes_json, edges = edges_json)
+
+json_payload <- jsonlite::toJSON(payload, auto_unbox = TRUE)
+json_kinases <- jsonlite::toJSON(sort(node_tbl$Gene[grepl("Kinase", node_tbl$role, fixed = TRUE)]), auto_unbox = TRUE)
+json_subs    <- jsonlite::toJSON(sort(node_tbl$Gene[grepl("Substrate", node_tbl$role, fixed = TRUE)]), auto_unbox = TRUE)
+```
+
+```{r}
+data_tags <- tagList(
+  tags$script(id = "ks-data",  type = "application/json", HTML(json_payload)),
+  tags$script(id = "kin-data", type = "application/json", HTML(json_kinases)),
+  tags$script(id = "sub-data", type = "application/json", HTML(json_subs))
+)
+
+viewer_tags <- tags$div(
+  `data-quarto-disable-processing` = "true",
+
+  tags$style(HTML("
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Manrope:wght@400;600&display=swap');
+    :root {
+      --bg: #0c111c;
+      --panel: #0f1728;
+      --panel-2: #111a2d;
+      --ink: #e6ecff;
+      --muted: #8fa2c3;
+      --accent: #6dd3ff;
+      --accent-2: #8df29c;
+      --stroke: rgba(255,255,255,0.07);
+      --card-shadow: 0 18px 60px rgba(0,0,0,0.35);
+    }
+    body {font-family:'Manrope', 'Space Grotesk', sans-serif; background: radial-gradient(140% 120% at 10% 10%, rgba(109,211,255,0.12), transparent), radial-gradient(140% 120% at 90% 20%, rgba(141,242,156,0.10), transparent), #070a12; color: var(--ink);}
+    .page-shell{max-width:1200px;margin:0 auto;padding:24px 18px 42px;}
+    header#topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;margin-bottom:14px;border:1px solid var(--stroke);background:linear-gradient(120deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));border-radius:14px;box-shadow:var(--card-shadow);backdrop-filter: blur(6px);position:sticky;top:0;z-index:10}
+    #brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink)}
+    #brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 12px var(--accent-2)}
+    nav a{color:var(--muted);text-decoration:none;margin-left:16px;font-weight:600;font-size:13px;padding:6px 10px;border-radius:10px;border:1px solid transparent}
+    nav a:hover{color:var(--ink);border-color:var(--stroke);background:rgba(255,255,255,0.04)}
+    #hero{padding:22px 20px 18px;border:1px solid var(--stroke);border-radius:18px;background:linear-gradient(160deg, rgba(109,211,255,0.14), rgba(17,26,45,0.9));box-shadow:var(--card-shadow);margin-bottom:20px}
+    #hero h1{margin:0 0 10px;font-size:26px;letter-spacing:0.2px}
+    #hero p{margin:0;color:var(--muted)}
+    .stat-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px}
+    .stat{flex:1 1 160px;border:1px solid var(--stroke);background:rgba(255,255,255,0.05);border-radius:14px;padding:10px 12px}
+    .stat .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
+    .stat .value{font-size:20px;font-weight:700;color:var(--ink)}
+    .section-head{display:flex;align-items:center;justify-content:space-between;margin:18px 2px 10px}
+    .section-head h3{margin:0;font-size:18px}
+    .section-head .pill{font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid var(--stroke);color:var(--muted)}
+    .panel{border:1px solid var(--stroke);background:var(--panel);border-radius:16px;padding:14px 14px 10px;box-shadow:var(--card-shadow)}
+    #controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    #exportbar{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 10px 0}
+    #legend{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:4px 0 8px 0;font-size:13px;color:var(--muted)}
+    #legend .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 6px;border-radius:10px;border:1px solid var(--stroke);background:var(--panel-2)}
+    #legend .line{width:32px;height:0;border-top:3px solid #999}
+    #legend .line.known{border-color:#6dd3ff}
+    #legend .line.novel{border-color:#c090e8}
+    #legend .dot{width:14px;height:14px;border-radius:50%;display:inline-block;border:1px solid #333}
+    #legend .kin{background:#e6f0ff}
+    #legend .sub{background:#fbeadd}
+    .legend-note{color:var(--muted)}
+    #cywrap{margin-top:10px}
+    #cy {width:100%;height:720px;border:1px solid var(--stroke);border-radius:12px;background:#0a0f1b}
+    .label {font-weight:600;color:var(--muted)}
+    .badge {display:inline-block;padding:2px 8px;border-radius:999px;margin-left:6px;border:1px solid var(--stroke);color:var(--muted);background:var(--panel-2)}
+    .kbadge{background:#12233a;border-color:#6dd3ff;color:#d3edff}
+    .sbadge{background:#2d1c12;border-color:#ffb27a;color:#ffd7b2}
+    .tablewrap{margin-top:12px}
+    .filters {display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+    .filters input {padding:8px 10px;border:1px solid var(--stroke);border-radius:10px;font-size:13px;background:var(--panel);color:var(--ink)}
+    .filters input:focus{outline:1px solid var(--accent)}
+    .tablebox {max-height:400px; overflow:auto; border:1px solid var(--stroke); border-radius:12px;background:var(--panel-2)}
+    .tbl {border-collapse:collapse;width:100%}
+    .tbl th, .tbl td{border-bottom:1px solid var(--stroke);padding:8px 10px;font-size:13px;text-align:left;white-space:nowrap;color:var(--ink)}
+    .tbl th{background:rgba(255,255,255,0.04); position: sticky; top: 0; z-index: 1; color:var(--muted)}
+    .btn{padding:8px 12px;border:1px solid var(--stroke);border-radius:10px;background:linear-gradient(120deg, rgba(109,211,255,0.12), rgba(255,255,255,0.02));cursor:pointer;color:var(--ink);font-weight:600}
+    .btn:hover{background:linear-gradient(120deg, rgba(109,211,255,0.18), rgba(255,255,255,0.06))}
+    .btn.primary{border-color:var(--accent);box-shadow:0 0 12px rgba(109,211,255,0.35)}
+    .tip{margin:10px 0 4px;border:1px dashed var(--stroke);border-radius:10px;padding:8px 10px;font-size:13px;color:var(--muted);background:rgba(255,255,255,0.03)}
+    select, input[type='checkbox'], input[list]{background:var(--panel-2);color:var(--ink);border:1px solid var(--stroke);border-radius:8px;padding:6px 8px}
+    select{padding:8px 10px}
+    input[list]{min-width:220px}
+    @media (max-width: 768px){#controls{flex-direction:column;align-items:flex-start} #cy{height:520px}}
+  ")),
+
+  tags$div(
+    class="page-shell",
+    tags$header(id="topbar",
+      tags$div(id="brand", tags$span(class="dot"), "KinaseCanvas Explorer"),
+      tags$nav(
+        tags$a(href="#network", "Network"),
+        tags$a(href="#table", "Edges"),
+        tags$a(href="https://kinet.kinametrix.com/#section-proteins", target="_blank", "Reference")
+      )
+    ),
+
+    tags$section(id="hero",
+      tags$h1("Curated kinase–substrate network, ready to explore"),
+      tags$p("Seed the graph with a kinase and/or substrate, filter on functional evidence, and export images or tables for publication."),
+      tags$div(class="stat-row",
+        tags$div(class="stat", tags$div(class="label", "Kinases"), tags$div(id="statKinases", class="value", "—")),
+        tags$div(class="stat", tags$div(class="label", "Substrates"), tags$div(id="statSubstrates", class="value", "—")),
+        tags$div(class="stat", tags$div(class="label", "Interactions"), tags$div(id="statEdges", class="value", "—")),
+        tags$div(class="stat", tags$div(class="label", "Curated share"), tags$div(id="statCurated", class="value", "—"))
+      )
+    ),
+
+    tags$section(id="network",
+      class="section",
+      tags$div(class="section-head", tags$h3("Network"), tags$span(class="pill", "Choose seeds, then explore")),
+      tags$div(class="panel",
+        tags$div(
+          id = "controls",
+          tags$label(class="label", "Kinase:", `for`="kinSel"),
+          tags$input(id="kinSel", list="kinList", placeholder="Type a kinase…", style="min-width:240px"),
+          tags$datalist(id="kinList"),
+          tags$span(class="badge kbadge", "Kinase seed"),
+
+          tags$label(class="label", "Substrate:", `for`="subSel", style="margin-left:12px"),
+          tags$input(id="subSel", list="subList", placeholder="Type a substrate…", style="min-width:240px"),
+          tags$datalist(id="subList"),
+          tags$span(class="badge sbadge", "Substrate seed"),
+
+          tags$label(class="label", "Layout:", `for`="layoutSel", style="margin-left:12px"),
+          tags$select(
+            id="layoutSel",
+            tags$option(value="cose","COSE"),
+            tags$option(value="fcose","fCoSE"),
+            tags$option(value="concentric","Concentric"),
+            tags$option(value="breadthfirst","Breadthfirst")
+          ),
+
+          tags$label(tags$input(type="checkbox", id="labelsChk", checked=NA), " Node labels"),
+          tags$label(tags$input(type="checkbox", id="edgeLabelsChk"), " Edge labels"),
+          tags$label(tags$input(type="checkbox", id="arrowsChk", checked=NA), " Arrows"),
+          tags$label(tags$input(type="checkbox", id="onlyFunctionalChk"), " Only functional"),
+
+          tags$label(class="label", "Label size:", `for`="labelScale", style="margin-left:12px"),
+          tags$input(type="range", id="labelScale", min="60", max="180", value="100", step="10", style="width:140px"),
+          tags$span(id="labelScaleVal", class="badge", "100%"),
+          tags$label(tags$input(type="checkbox", id="degScaleChk", checked=NA, style="margin-left:10px"), " Boost dense nodes")
+        ),
+
+        tags$div(id="legend",
+          tags$span(class="chip", tags$span(class="dot kin"), "Kinase"),
+          tags$span(class="chip", tags$span(class="dot sub"), "Substrate"),
+          tags$span(class="chip", tags$span(class="line known"), "Known (curated)"),
+          tags$span(class="chip", tags$span(class="line novel"), "Novel (Cantley)"),
+          tags$span(class="legend-note", "Dotted = not flagged functional; Solid = likely functional")
+        ),
+
+        tags$div(class="tip", "Tip: start with a single kinase or substrate to see its neighborhood; toggle layouts to untangle dense regions."),
+
+        tags$div(id="exportbar",
+          tags$button(id="btnPng", class="btn primary", "Export PNG"),
+          tags$button(id="btnPdf", class="btn", "Export PDF"),
+          tags$button(id="btnCsvEdges", class="btn", "Download Edges CSV")
+        ),
+
+        tags$div(id="cywrap", tags$div(id="cy"))
+      )
+    ),
+
+    tags$section(id="table", class="section",
+      tags$div(class="section-head", tags$h3("Edges in View"), tags$span(class="pill", "Filter columns or download")),
+      tags$div(class="panel",
+        tags$div(id="edgesFilters", class="filters"),
+        tags$div(id="edgesTable", class="tablebox")
+      )
+    )
+  ),
+
+  tags$script(src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"),
+  tags$script(src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"),
+
+  tags$script(HTML("
+  (function(){
+    const data       = JSON.parse(document.getElementById('ks-data').textContent);
+    const kinases    = JSON.parse(document.getElementById('kin-data').textContent);
+    const substrates = JSON.parse(document.getElementById('sub-data').textContent);
+    const maxDeg     = data.nodes.reduce((m,n) => Math.max(m, (n.indeg || 0) + (n.outdeg || 0)), 0);
+
+    const stats = {
+      kinases: kinases.length,
+      substrates: substrates.length,
+      edges: data.edges.length,
+      curated: data.edges.filter(e => e.evidence === 'Known (curated)').length
+    };
+    const setStat = (id, text) => { const el = document.getElementById(id); if(el) el.textContent = text; };
+    setStat('statKinases', stats.kinases.toLocaleString());
+    setStat('statSubstrates', stats.substrates.toLocaleString());
+    setStat('statEdges', stats.edges.toLocaleString());
+    setStat('statCurated', stats.edges ? Math.round((stats.curated / stats.edges) * 100).toString() + '% curated' : '—');
+
+    const kinDL = document.getElementById('kinList');
+    kinases.forEach(g => { const opt = document.createElement('option'); opt.value = g; kinDL.appendChild(opt); });
+    const subDL = document.getElementById('subList');
+    substrates.forEach(g => { const opt = document.createElement('option'); opt.value = g; subDL.appendChild(opt); });
+    // default seeds so something renders immediately
+    const kinInput = document.getElementById('kinSel');
+    const subInput = document.getElementById('subSel');
+    if(kinases.length){ kinInput.value = kinases[0]; }
+    if(substrates.length){ subInput.placeholder = 'Type a substrate… (optional)'; }
+
+    const labelScale   = document.getElementById('labelScale');
+    const labelScaleEl = document.getElementById('labelScaleVal');
+    const degScaleChk  = document.getElementById('degScaleChk');
+    const baseFont     = 11;
+    const basePad      = 6;
+
+    const cy = cytoscape({
+      container: document.getElementById('cy'),
+      elements: [],
+      style: [
+        { selector: 'node',
+          style: {
+            'shape': 'round-rectangle',
+            'background-color': '#4c78a8',
+            'label': 'data(label)',
+            'font-size': 11,
+            'color': '#222',
+            'text-opacity': 1,
+            'text-wrap': 'wrap',
+            'text-max-width': '130px',
+            'min-zoomed-font-size': 6,
+            'text-margin-y': -2,
+            'text-halign': 'center',
+            'text-valign': 'center',
+            'border-color': '#1f2a44',
+            'border-width': 0.8,
+            'width': 'label',
+            'height': 'label',
+            'padding': '6px'
+          }
+        },
+        { selector: 'node[role *= \"Substrate\"]:not([role *= \"Kinase\"])',
+          style: { 'background-color': '#fbeadd', 'border-color': '#b27f52' } },
+        { selector: 'node[role *= \"Kinase\"]',
+          style: { 'background-color': '#e6f0ff', 'border-color': '#7aa8ff' } },
+        { selector: 'node.qk', style: { 'border-width': 2.5 } },
+        { selector: 'node.qs', style: { 'border-width': 2.5 } },
+        { selector: 'edge',
+          style: {
+            'width': 1.6,
+            'curve-style': 'bezier',
+            'line-color': '#999',
+            'target-arrow-color': '#999',
+            'target-arrow-shape': 'triangle',
+            'label': 'data(edgeLabel)',
+            'font-size': 9,
+            'text-rotation': 'autorotate',
+            'text-background-color': '#ffffff',
+            'text-background-opacity': 0.85,
+            'text-background-padding': 2,
+            'text-margin-y': -2
+          }
+        },
+        { selector: 'edge[evidence = \"Known (curated)\"]',
+          style: { 'line-color': '#4c78a8', 'target-arrow-color': '#4c78a8' } },
+        { selector: 'edge[evidence = \"Novel (Cantley)\"]',
+          style: { 'line-color': '#b279a2', 'target-arrow-color': '#b279a2' } },
+        { selector: 'edge[Likely_functional = \"Likely functional\"]',
+          style: { 'line-style': 'solid' } },
+        { selector: 'edge[Likely_functional = \"Other/Unknown\"]',
+          style: { 'line-style': 'dotted' } }
+      ],
+      layout: { name: 'cose' }
+    });
+
+    function setNodeLabels(show){
+      cy.style().selector('node').style('label', show ? 'data(label)' : '').update();
+    }
+    function setEdgeLabels(show){
+      cy.style().selector('edge').style('label', show ? 'data(edgeLabel)' : '').update();
+    }
+    function setArrows(show){
+      cy.style().selector('edge').style('target-arrow-shape', show ? 'triangle' : 'none').update();
+    }
+    function applyNodeSizing(){
+      const scale = Number(labelScale.value || 100) / 100;
+      const boost = degScaleChk.checked;
+      if(labelScaleEl){ labelScaleEl.textContent = Math.round(scale * 100) + '%'; }
+      cy.batch(() => {
+        cy.nodes().forEach(n => {
+          const deg = n.data('deg') ?? ((n.data('indeg') || 0) + (n.data('outdeg') || 0));
+          const degFactor = (boost && maxDeg) ? (0.65 + 0.6 * (deg / maxDeg)) : 1;
+          const fontSize = Math.max(7, baseFont * scale * degFactor);
+          const pad      = Math.max(4, basePad * scale * degFactor);
+          n.style({ 'font-size': fontSize, 'padding': pad });
+        });
+      });
+    }
+    function isFunctionalEdge(e){
+      const v = (e.data('Likely_functional') ?? '').trim();
+      return v === 'Likely functional';
+    }
+    function applyFunctionalFilter(onlyFunctional){
+      if(!onlyFunctional){
+        cy.edges().style('display', 'element');
+        cy.nodes().style('display', 'element');
+      } else {
+        cy.edges().forEach(e => {
+          e.style('display', isFunctionalEdge(e) ? 'element' : 'none');
+        });
+        cy.nodes().forEach(n => {
+          const hasVisibleEdge = n.connectedEdges(':visible').length > 0;
+          n.style('display', hasVisibleEdge ? 'element' : 'none');
+        });
+      }
+      cy.layout({ name: 'cose', animate: false }).run();
+    }
+
+    function refreshEdgesTable(){
+      const rows = cy.edges(':visible').map(e => [
+        e.data('source'),
+        e.data('target'),
+        e.data('evidence'),
+        e.data('Likely_functional'),
+        e.data('SiteCount'),
+        e.data('Sites'),
+        e.data('SourceList') ?? '',
+        e.data('Reference_PMID')
+      ]);
+      renderFilterableTable('edgesFilters','edgesTable',
+        ['From','To','Evidence','Functional','#Sites','Sites','Sources','Reference_PMID'], rows);
+    }
+
+    function renderFilterableTable(filtersId, tableBoxId, headers, rows){
+      const fwrap = document.getElementById(filtersId);
+      const box   = document.getElementById(tableBoxId);
+      fwrap.innerHTML = '';
+      box.innerHTML   = '';
+
+      const filters = headers.map(h => {
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.placeholder = 'Filter ' + h;
+        fwrap.appendChild(inp);
+        return inp;
+      });
+
+      const table = document.createElement('table');
+      table.className = 'tbl';
+      const thead = document.createElement('thead');
+      const trh   = document.createElement('tr');
+      headers.forEach(h => { const th = document.createElement('th'); th.textContent = h; trh.appendChild(th); });
+      thead.appendChild(trh); table.appendChild(thead);
+
+      const tbody = document.createElement('tbody'); table.appendChild(tbody); box.appendChild(table);
+
+      function passes(row, query){
+        for(let i=0;i<query.length;i++){
+          const q = query[i];
+          if(q && !String(row[i] ?? '').toLowerCase().includes(q)) return false;
+        }
+        return true;
+      }
+      function draw(){
+        const q = filters.map(x => x.value.trim().toLowerCase());
+        tbody.innerHTML = '';
+        rows.forEach(r => {
+          if(!passes(r, q)) return;
+          const tr = document.createElement('tr');
+          r.forEach(v => { const td = document.createElement('td'); td.textContent = (v ?? '').toString(); tr.appendChild(td); });
+          tbody.appendChild(tr);
+        });
+      }
+      filters.forEach(inp => inp.addEventListener('input', draw));
+      draw();
+    }
+
+    function incidentSubgraph(seeds){
+      const nodeIndex = new Map(data.nodes.map(n => [n.id, n]));
+      const validSeeds = seeds.filter(s => nodeIndex.has(s));
+      if(!validSeeds.length){ return {nodes:[], edges:[]}; }
+
+      const edges = data.edges.filter(e => validSeeds.includes(e.source) || validSeeds.includes(e.target));
+      if(!edges.length){ return {nodes:[], edges:[]}; }
+
+      const nset = new Set(); edges.forEach(e => { nset.add(e.source); nset.add(e.target); });
+      const nodes = Array.from(nset).map(id => ({
+        data: nodeIndex.get(id),
+        classes: (validSeeds.includes(id) ? (seeds[0]===id ? 'qk' : (seeds[1]===id ? 'qs' : '')) : '')
+      }));
+
+      return {nodes: nodes.map(n => ({ data: n.data, classes: n.classes })), edges: edges.map(e => ({ data: e }))};
+    }
+
+    function relayout(name){
+      const opts = (name==='concentric') ? { name, minNodeSpacing: 20 } :
+                   (name==='breadthfirst') ? { name, directed: true, padding: 10 } :
+                   (name==='fcose') ? { name, quality: 'proof', randomize: true } :
+                   { name: 'cose', animate: false };
+      cy.layout(opts).run();
+    }
+
+    function render(){
+      const kin   = document.getElementById('kinSel').value.trim();
+      const sub   = document.getElementById('subSel').value.trim();
+      const seeds = [kin, sub].filter(s => s && s.length);
+      if(!seeds.length) return;
+
+      const elems = incidentSubgraph(seeds);
+      cy.elements().remove();
+      cy.add(elems.nodes);
+      cy.add(elems.edges);
+      relayout(document.getElementById('layoutSel').value);
+      applyNodeSizing();
+
+      const rows = cy.edges().map(e => [
+        e.data('source'),
+        e.data('target'),
+        e.data('evidence'),
+        e.data('Likely_functional'),
+        e.data('SiteCount'),
+        e.data('Sites'),
+        e.data('SourceList') ?? '',
+        e.data('Reference_PMID')
+      ]);
+      renderFilterableTable('edgesFilters','edgesTable',
+        ['From','To','Evidence','Functional','#Sites','Sites','Sources','Reference_PMID'], rows);
+      const onlyFn = document.getElementById('onlyFunctionalChk').checked;
+      applyFunctionalFilter(onlyFn);
+      refreshEdgesTable();
+    }
+
+    const triggerRender = () => render();
+    const triggerOnEnter = el => el.addEventListener('keyup', e => { if(e.key === 'Enter') render(); });
+    kinInput.addEventListener('change', triggerRender);
+    subInput.addEventListener('change', triggerRender);
+    triggerOnEnter(kinInput);
+    triggerOnEnter(subInput);
+    document.getElementById('layoutSel').addEventListener('change', () => relayout(document.getElementById('layoutSel').value));
+    document.getElementById('labelsChk').addEventListener('change', e => setNodeLabels(e.target.checked));
+    document.getElementById('edgeLabelsChk').addEventListener('change', e => setEdgeLabels(e.target.checked));
+    document.getElementById('arrowsChk').addEventListener('change', e => setArrows(e.target.checked));
+    document.getElementById('onlyFunctionalChk').addEventListener('change', () => {
+      applyFunctionalFilter(document.getElementById('onlyFunctionalChk').checked);
+      refreshEdgesTable();
+    });
+    labelScale.addEventListener('input', applyNodeSizing);
+    degScaleChk.addEventListener('change', applyNodeSizing);
+
+    function download(filename, blob){
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+    function csvBlob(rows, header){
+      const esc = v => '\"' + String(v ?? '').replaceAll('\"','\"\"') + '\"';
+      const lines = [header.map(esc).join(',')].concat(rows.map(r => r.map(esc).join(',')));
+      const newline = String.fromCharCode(10);
+      const csv = lines.join(newline);
+      return new Blob([csv], {type:'text/csv'});
+    }
+    document.getElementById('btnPng').addEventListener('click', () => {
+      const uri = cy.png({full:true, scale:2});
+      fetch(uri).then(r => r.blob()).then(b => download('kinome_network.png', b));
+    });
+    document.getElementById('btnPdf').addEventListener('click', () => {
+      const uri = cy.png({full:true, scale:2});
+      fetch(uri).then(r => r.blob()).then(b => {
+        const reader = new FileReader();
+        reader.onload = function(){
+          const { jsPDF } = window.jspdf;
+          const pdf  = new jsPDF({orientation:'landscape', unit:'pt', format:'a4'});
+          const img  = reader.result;
+          const pageW = pdf.internal.pageSize.getWidth();
+          const pageH = pdf.internal.pageSize.getHeight();
+          pdf.addImage(img, 'PNG', 20, 20, pageW-40, pageH-40);
+          pdf.save('kinome_network.pdf');
+        };
+        reader.readAsDataURL(b);
+      });
+    });
+    document.getElementById('btnCsvEdges').addEventListener('click', () => {
+      const rows = cy.edges(':visible').map(e => [
+        e.data('source'),
+        e.data('target'),
+        e.data('evidence'),
+        e.data('Likely_functional'),
+        e.data('SiteCount'),
+        e.data('Sites'),
+        e.data('SourceList') ?? '',
+        e.data('Reference_PMID')
+      ]);
+      const blob = csvBlob(rows, ['From','To','Evidence','Functional','#Sites','Sites','Sources','Reference_PMID']);
+      download('kinome_edges.csv', blob);
+    });
+
+    setNodeLabels(true);
+    setEdgeLabels(false);
+    setArrows(true);
+    applyNodeSizing();
+    render();
+  })();
+  "))
+)
+
+browsable(tagList(data_tags, viewer_tags))
+```
