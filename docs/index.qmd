@@ -14,7 +14,7 @@ format:
     code-tools: true
 execute:
   echo: false
-  cache: true
+  cache: false
   message: false
   warning: false
   out-width: "100%"
@@ -381,7 +381,9 @@ viewer_tags <- tags$div(
         { selector: 'edge[Likely_functional = \"Other/Unknown\"]',
           style: { 'line-style': 'dotted' } }
       ],
-      layout: { name: 'cose' }
+      layout: { name: 'cose',
+        repulsion: 800
+      }
     });
 
     function setNodeLabels(show){
