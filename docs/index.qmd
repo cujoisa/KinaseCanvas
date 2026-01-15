@@ -381,18 +381,7 @@ viewer_tags <- tags$div(
         { selector: 'edge[Likely_functional = \"Other/Unknown\"]',
           style: { 'line-style': 'dotted' } }
       ],
-      layout: {
-        name: 'cose',
-        animate: false,
-        padding: 30,
-        nodeRepulsion: 100,
-        idealEdgeLength: 130,
-        nodeOverlap: 2,
-        componentSpacing: 100,
-        gravity: 0.7,
-        nestingFactor: 0.9,
-        numIter: 1500
-      }
+      layout: { name: 'cose' }
     });
 
     function setNodeLabels(show){
@@ -516,37 +505,13 @@ viewer_tags <- tags$div(
       return {nodes: nodes.map(n => ({ data: n.data, classes: n.classes })), edges: edges.map(e => ({ data: e }))};
     }
 
-     function relayout(name){
-      const commonPad = 30;
-      const opts = (name==='concentric') ? { name, minNodeSpacing: 30, padding: commonPad } :
-               (name==='breadthfirst') ? { name, directed: true, padding: commonPad, spacingFactor: 1.2 } :
-               (name==='fcose') ? {
-                 name,
-                 quality: 'draft',
-                 randomize: true,
-                 animate: false,
-                 nodeRepulsion: 24000,
-                 idealEdgeLength: 140,
-                 gravity: 0.25,
-                 nodeSeparation: 180,
-                 nestingFactor: 0.9,
-                 padding: commonPad
-               } :
-               {
-                 name: 'cose',
-                 animate: false,
-                 padding: commonPad,
-                 nodeRepulsion: 18000,
-                 idealEdgeLength: 130,
-                 nodeOverlap: 2,
-                 componentSpacing: 100,
-                 edgeElasticity: 0.25,
-                 gravity: 0.7,
-                 nestingFactor: 0.9,
-                 numIter: 1500
-               };
+    function relayout(name){
+      const opts = (name==='concentric') ? { name, minNodeSpacing: 20 } :
+                   (name==='breadthfirst') ? { name, directed: true, padding: 10 } :
+                   (name==='fcose') ? { name, quality: 'proof', randomize: true } :
+                   { name: 'cose', animate: false };
       cy.layout(opts).run();
-     }
+    }
 
     function render(){
       const kin   = document.getElementById('kinSel').value.trim();
