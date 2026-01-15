@@ -1,5 +1,5 @@
 ---
-title: "Explorer for curated kinase-substrate data"
+title: "Explorer for Integrated Cantley Atlas + Curated Kinase-Substrate Interactions"
 editor: visual
 author: "Chinmaya Joisa"
 date: "09/08/2025"
@@ -322,8 +322,8 @@ viewer_tags <- tags$div(
     const labelScale   = document.getElementById('labelScale');
     const labelScaleEl = document.getElementById('labelScaleVal');
     const degScaleChk  = document.getElementById('degScaleChk');
-    const baseFont     = 11;
-    const basePad      = 6;
+    const baseFont     = 9;
+    const basePad      = 5;
 
     const cy = cytoscape({
       container: document.getElementById('cy'),
@@ -334,11 +334,11 @@ viewer_tags <- tags$div(
             'shape': 'round-rectangle',
             'background-color': '#4c78a8',
             'label': 'data(label)',
-            'font-size': 11,
+            'font-size': 10,
             'color': '#222',
             'text-opacity': 1,
             'text-wrap': 'wrap',
-            'text-max-width': '110px',
+            'text-max-width': '100px',
             'min-zoomed-font-size': 6,
             'text-margin-y': -2,
             'text-halign': 'center',
@@ -347,7 +347,7 @@ viewer_tags <- tags$div(
             'border-width': 0.8,
             'width': 'label',
             'height': 'label',
-            'padding': '6px'
+            'padding': '4px'
           }
         },
         { selector: 'node[role *= \"Substrate\"]:not([role *= \"Kinase\"])',
@@ -385,11 +385,11 @@ viewer_tags <- tags$div(
         name: 'cose',
         animate: false,
         padding: 30,
-        nodeRepulsion: 12000,
-        idealEdgeLength: 120,
-        nodeOverlap: 5,
-        componentSpacing: 80,
-        gravity: 0.8,
+        nodeRepulsion: 18000,
+        idealEdgeLength: 130,
+        nodeOverlap: 2,
+        componentSpacing: 100,
+        gravity: 0.7,
         nestingFactor: 0.9,
         numIter: 1500
       }
@@ -522,13 +522,13 @@ viewer_tags <- tags$div(
                (name==='breadthfirst') ? { name, directed: true, padding: commonPad, spacingFactor: 1.2 } :
                (name==='fcose') ? {
                  name,
-                 quality: 'proof',
+                 quality: 'draft',
                  randomize: true,
                  animate: false,
-                 nodeRepulsion: 14000,
-                 idealEdgeLength: 120,
-                 gravity: 0.35,
-                 nodeSeparation: 140,
+                 nodeRepulsion: 24000,
+                 idealEdgeLength: 140,
+                 gravity: 0.25,
+                 nodeSeparation: 180,
                  nestingFactor: 0.9,
                  padding: commonPad
                } :
@@ -536,12 +536,12 @@ viewer_tags <- tags$div(
                  name: 'cose',
                  animate: false,
                  padding: commonPad,
-                 nodeRepulsion: 12000,
-                 idealEdgeLength: 120,
-                 nodeOverlap: 5,
-                 componentSpacing: 80,
+                 nodeRepulsion: 18000,
+                 idealEdgeLength: 130,
+                 nodeOverlap: 2,
+                 componentSpacing: 100,
                  edgeElasticity: 0.25,
-                 gravity: 0.8,
+                 gravity: 0.7,
                  nestingFactor: 0.9,
                  numIter: 1500
                };
