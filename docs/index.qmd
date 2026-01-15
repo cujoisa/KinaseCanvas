@@ -337,7 +337,7 @@ viewer_tags <- tags$div(
             'color': '#222',
             'text-opacity': 1,
             'text-wrap': 'wrap',
-            'text-max-width': '130px',
+            'text-max-width': '110px',
             'min-zoomed-font-size': 6,
             'text-margin-y': -2,
             'text-halign': 'center',
@@ -380,7 +380,18 @@ viewer_tags <- tags$div(
         { selector: 'edge[Likely_functional = \"Other/Unknown\"]',
           style: { 'line-style': 'dotted' } }
       ],
-      layout: { name: 'cose', padding: 30, nodeRepulsion: 9000, idealEdgeLength: 110, animate: false }
+      layout: {
+        name: 'cose',
+        animate: false,
+        padding: 30,
+        nodeRepulsion: function(){ return 12000; },
+        idealEdgeLength: function(){ return 120; },
+        nodeOverlap: 5,
+        componentSpacing: 80,
+        gravity: 0.8,
+        nestingFactor: 0.9,
+        numIter: 1500
+      }
     });
 
     function setNodeLabels(show){
@@ -399,9 +410,11 @@ viewer_tags <- tags$div(
       cy.batch(() => {
         cy.nodes().forEach(n => {
           const deg = n.data('deg') ?? ((n.data('indeg') || 0) + (n.data('outdeg') || 0));
-          const degFactor = (boost && maxDeg) ? (0.65 + 0.6 * (deg / maxDeg)) : 1;
-          const fontSize = Math.max(7, baseFont * scale * degFactor);
-          const pad      = Math.max(4, basePad * scale * degFactor);
+          const degFrac = maxDeg ? (deg / maxDeg) : 0;
+          let degFactor = boost ? (0.8 + 0.4 * degFrac) : 1;
+          degFactor = Math.min(degFactor, 1.2);
+          const fontSize = Math.max(7, Math.min(14, baseFont * scale * degFactor));
+          const pad      = Math.max(3, Math.min(12, basePad * scale * degFactor));
           n.style({ 'font-size': fontSize, 'padding': pad });
         });
       });
@@ -502,34 +515,37 @@ viewer_tags <- tags$div(
       return {nodes: nodes.map(n => ({ data: n.data, classes: n.classes })), edges: edges.map(e => ({ data: e }))};
     }
 
-    function relayout(name){
+     function relayout(name){
       const commonPad = 30;
       const opts = (name==='concentric') ? { name, minNodeSpacing: 30, padding: commonPad } :
-                   (name==='breadthfirst') ? { name, directed: true, padding: commonPad, spacingFactor: 1.2 } :
-                   (name==='fcose') ? {
-                      name,
-                      quality: 'proof',
-                      randomize: true,
-                      animate: false,
-                      nodeRepulsion: () => 12000,
-                      idealEdgeLength: () => 110,
-                      gravity: 0.5,
-                      nodeSeparation: 120,
-                      nestingFactor: 0.9,
-                      padding: commonPad
-                   } :
-                   {
-                      name: 'cose',
-                      animate: false,
-                      padding: commonPad,
-                      nodeRepulsion: 9000,
-                      idealEdgeLength: 110,
-                      edgeElasticity: 0.25,
-                      gravity: 0.9,
-                      numIter: 1000
-                   };
+               (name==='breadthfirst') ? { name, directed: true, padding: commonPad, spacingFactor: 1.2 } :
+               (name==='fcose') ? {
+                 name,
+                 quality: 'proof',
+                 randomize: true,
+                 animate: false,
+                 nodeRepulsion: () => 14000,
+                 idealEdgeLength: () => 120,
+                 gravity: 0.35,
+                 nodeSeparation: 140,
+                 nestingFactor: 0.9,
+                 padding: commonPad
+               } :
+               {
+                 name: 'cose',
+                 animate: false,
+                 padding: commonPad,
+                 nodeRepulsion: function(){ return 12000; },
+                 idealEdgeLength: function(){ return 120; },
+                 nodeOverlap: 5,
+                 componentSpacing: 80,
+                 edgeElasticity: 0.25,
+                 gravity: 0.8,
+                 nestingFactor: 0.9,
+                 numIter: 1500
+               };
       cy.layout(opts).run();
-    }
+     }
 
     function render(){
       const kin   = document.getElementById('kinSel').value.trim();
