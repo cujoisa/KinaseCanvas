@@ -383,9 +383,7 @@ viewer_tags <- tags$div(
         { selector: 'edge[Likely_functional = \"Other/Unknown\"]',
           style: { 'line-style': 'dotted' } }
       ],
-      layout: { name: 'cose',
-        nodeOverlap: 20
-      }
+      layout: { name: 'cose' }
     });
 
     function setNodeLabels(show){
@@ -514,20 +512,23 @@ viewer_tags <- tags$div(
                    (name==='breadthfirst') ? { name, directed: true, padding: 10 } :
                    (name==='fcose') ? {
                      name,
-                     quality: 'draft',
+                     quality: 'proof',
                      randomize: true,
                      animate: false,
-                     nodeRepulsion: 80000,
-                     idealEdgeLength: 170,
-                     nodeSeparation: 220,
-                     gravity: 0.15,
-                     gravityRangeCompound: 1.2,
-                     gravityCompound: 0.9,
-                     nestingFactor: 0.8,
+                     fit: true,
+                     padding: 30,
+                     nodeDimensionsIncludeLabels: true,
                      packComponents: true,
                      tile: true,
-                     nodeDimensionsIncludeLabels: true,
-                     padding: 40
+                     nodeRepulsion: node => 4500,
+                     idealEdgeLength: edge => 140,
+                     edgeElasticity: edge => 0.25,
+                     nestingFactor: 0.8,
+                     gravity: 0.25,
+                     gravityRangeCompound: 1.5,
+                     gravityCompound: 1.0,
+                     gravityRange: 1.8,
+                     initialEnergyOnIncremental: 0.6
                    } :
                    (name==='cose-bilkent') ? {
                      name,
