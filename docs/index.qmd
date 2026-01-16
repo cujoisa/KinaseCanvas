@@ -241,40 +241,41 @@ viewer_tags <- tags$div(
       class="section",
       tags$div(class="section-head", tags$h3("Network"), tags$span(class="pill", "Choose seeds, then explore")),
       tags$div(class="panel",
-        tags$div(
-          id = "controls",
-          tags$div(class="control-row",
-            tags$label(class="label", "Kinase:", `for`="kinSel"),
-            tags$input(id="kinSel", list="kinList", placeholder="Type a kinase…", style="min-width:220px"),
-            tags$datalist(id="kinList"),
-            tags$span(class="badge kbadge", "Kinase seed"),
-
-            tags$label(class="label", "Substrate:", `for`="subSel", style="margin-left:12px"),
-            tags$input(id="subSel", list="subList", placeholder="Type a substrate…", style="min-width:220px"),
-            tags$datalist(id="subList"),
-            tags$span(class="badge sbadge", "Substrate seed"),
-
-            tags$label(class="label", "Layout:", `for`="layoutSel", style="margin-left:12px"),
-            tags$select(
-              id="layoutSel",
-              tags$option(value="fcose","fCoSE"),
-              tags$option(value="cose","COSE"),
-              tags$option(value="cose-bilkent","CoSE-Bilkent"),
-              tags$option(value="concentric","Concentric"),
-              tags$option(value="breadthfirst","Breadthfirst")
+          tags$div(
+            id = "controls",
+            tags$div(class="control-row",
+              tags$label(class="label", "Kinase:", `for`="kinSel"),
+              tags$input(id="kinSel", list="kinList", placeholder="Type a kinase…", style="min-width:240px"),
+              tags$datalist(id="kinList"),
+              tags$span(class="badge kbadge", "Kinase seed")
             ),
-
-            tags$label(class="label", "Label size:", `for`="labelScale", style="margin-left:12px"),
-            tags$input(type="range", id="labelScale", min="50", max="180", value="100", step="10", style="width:140px"),
-            tags$span(id="labelScaleVal", class="badge", "100%")
+            tags$div(class="control-row",
+              tags$label(class="label", "Substrate:", `for`="subSel"),
+              tags$input(id="subSel", list="subList", placeholder="Type a substrate… (optional)", style="min-width:240px"),
+              tags$datalist(id="subList"),
+              tags$span(class="badge sbadge", "Substrate seed")
+            ),
+            tags$div(class="control-row",
+              tags$label(class="label", "Layout:", `for`="layoutSel"),
+              tags$select(
+                id="layoutSel",
+                tags$option(value="fcose","fCoSE"),
+                tags$option(value="cose","COSE"),
+                tags$option(value="cose-bilkent","CoSE-Bilkent"),
+                tags$option(value="concentric","Concentric"),
+                tags$option(value="breadthfirst","Breadthfirst")
+              ),
+              tags$label(class="label", "Label size:", `for`="labelScale", style="margin-left:12px"),
+              tags$input(type="range", id="labelScale", min="50", max="180", value="100", step="10", style="width:140px"),
+              tags$span(id="labelScaleVal", class="badge", "100%")
+            ),
+            tags$div(class="control-row",
+              tags$label(tags$input(type="checkbox", id="edgeLabelsChk"), " Edge labels"),
+              tags$label(tags$input(type="checkbox", id="arrowsChk", checked=NA), " Arrows"),
+              tags$label(tags$input(type="checkbox", id="onlyFunctionalChk"), " Functional sites only"),
+              tags$label(tags$input(type="checkbox", id="curatedOnlyChk"), " Curated pairs only")
+            )
           ),
-          tags$div(class="control-row",
-            tags$label(tags$input(type="checkbox", id="edgeLabelsChk"), " Edge labels"),
-            tags$label(tags$input(type="checkbox", id="arrowsChk", checked=NA), " Arrows"),
-            tags$label(tags$input(type="checkbox", id="onlyFunctionalChk"), " Functional sites only"),
-            tags$label(tags$input(type="checkbox", id="curatedOnlyChk"), " Curated pairs only")
-          )
-        ),
 
         tags$div(id="legend",
           tags$span(class="chip", tags$span(class="dot kin"), "Kinase"),
@@ -317,6 +318,7 @@ viewer_tags <- tags$div(
     const data       = JSON.parse(document.getElementById('ks-data').textContent);
     const kinases    = JSON.parse(document.getElementById('kin-data').textContent);
     const substrates = JSON.parse(document.getElementById('sub-data').textContent);
+    let currentSeeds = [];
     const maxDeg     = data.nodes.reduce((m,n) => Math.max(m, (n.indeg || 0) + (n.outdeg || 0)), 0);
 
     const stats = {
@@ -441,6 +443,7 @@ viewer_tags <- tags$div(
       const onlyFunctional = document.getElementById('onlyFunctionalChk').checked;
       const curatedOnly    = document.getElementById('curatedOnlyChk')?.checked;
 
+      const seedSet = new Set(currentSeeds || []);
       cy.batch(() => {
         cy.edges().forEach(e => {
           const keep = (!curatedOnly || isCuratedEdge(e)) && (!onlyFunctional || isFunctionalEdge(e));
@@ -448,7 +451,8 @@ viewer_tags <- tags$div(
         });
         cy.nodes().forEach(n => {
           const hasVisibleEdge = n.connectedEdges(':visible').length > 0;
-          n.style('display', hasVisibleEdge ? 'element' : 'none');
+          const isSeed = seedSet.has(n.id());
+          n.style('display', (hasVisibleEdge || isSeed) ? 'element' : 'none');
         });
       });
       if(doLayout){ relayout(document.getElementById('layoutSel').value); }
@@ -579,6 +583,8 @@ viewer_tags <- tags$div(
       const sub   = document.getElementById('subSel').value.trim();
       const seeds = [kin, sub].filter(s => s && s.length);
       if(!seeds.length) return;
+
+      currentSeeds = seeds;
 
       const elems = incidentSubgraph(seeds);
       cy.elements().remove();
