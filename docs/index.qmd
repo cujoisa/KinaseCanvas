@@ -325,7 +325,7 @@ viewer_tags <- tags$div(
       kinases: kinases.length,
       substrates: substrates.length,
       edges: data.edges.length,
-      curated: data.edges.filter(e => e.evidence === 'Known (curated)').length
+      curated: data.edges.filter(e => e.evidence === 'Curated').length
     };
     const setStat = (id, text) => { const el = document.getElementById(id); if(el) el.textContent = text; };
     setStat('statKinases', stats.kinases.toLocaleString());
@@ -437,7 +437,7 @@ viewer_tags <- tags$div(
     }
     function isCuratedEdge(e){
       const v = (e.data('evidence') ?? '').trim();
-      return v === 'Known (curated)';
+      return v === 'Curated';
     }
     function applyFilters(doLayout = true){
       const onlyFunctional = document.getElementById('onlyFunctionalChk').checked;
