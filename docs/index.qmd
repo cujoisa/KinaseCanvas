@@ -178,7 +178,9 @@ viewer_tags <- tags$div(
     .section-head h3{margin:0;font-size:18px}
     .section-head .pill{font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid var(--stroke);color:var(--muted)}
     .panel{border:1px solid var(--stroke);background:var(--panel);border-radius:16px;padding:14px 14px 10px;box-shadow:var(--card-shadow)}
-    #controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    #controls{display:flex;flex-direction:column;gap:10px}
+    .control-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .control-row .field-label{font-weight:600;color:var(--muted);margin-right:4px}
     #exportbar{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 10px 0}
     #legend{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:4px 0 8px 0;font-size:13px;color:var(--muted)}
     #legend .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 6px;border-radius:10px;border:1px solid var(--stroke);background:var(--panel-2)}
@@ -241,34 +243,37 @@ viewer_tags <- tags$div(
       tags$div(class="panel",
         tags$div(
           id = "controls",
-          tags$label(class="label", "Kinase:", `for`="kinSel"),
-          tags$input(id="kinSel", list="kinList", placeholder="Type a kinase…", style="min-width:240px"),
-          tags$datalist(id="kinList"),
-          tags$span(class="badge kbadge", "Kinase seed"),
+          tags$div(class="control-row",
+            tags$label(class="label", "Kinase:", `for`="kinSel"),
+            tags$input(id="kinSel", list="kinList", placeholder="Type a kinase…", style="min-width:220px"),
+            tags$datalist(id="kinList"),
+            tags$span(class="badge kbadge", "Kinase seed"),
 
-          tags$label(class="label", "Substrate:", `for`="subSel", style="margin-left:12px"),
-          tags$input(id="subSel", list="subList", placeholder="Type a substrate…", style="min-width:240px"),
-          tags$datalist(id="subList"),
-          tags$span(class="badge sbadge", "Substrate seed"),
+            tags$label(class="label", "Substrate:", `for`="subSel", style="margin-left:12px"),
+            tags$input(id="subSel", list="subList", placeholder="Type a substrate…", style="min-width:220px"),
+            tags$datalist(id="subList"),
+            tags$span(class="badge sbadge", "Substrate seed"),
 
-          tags$label(class="label", "Layout:", `for`="layoutSel", style="margin-left:12px"),
-          tags$select(
-            id="layoutSel",
-            tags$option(value="fcose","fCoSE"),
-            tags$option(value="cose","COSE"),
-            tags$option(value="cose-bilkent","CoSE-Bilkent"),
-            tags$option(value="concentric","Concentric"),
-            tags$option(value="breadthfirst","Breadthfirst")
+            tags$label(class="label", "Layout:", `for`="layoutSel", style="margin-left:12px"),
+            tags$select(
+              id="layoutSel",
+              tags$option(value="fcose","fCoSE"),
+              tags$option(value="cose","COSE"),
+              tags$option(value="cose-bilkent","CoSE-Bilkent"),
+              tags$option(value="concentric","Concentric"),
+              tags$option(value="breadthfirst","Breadthfirst")
+            ),
+
+            tags$label(class="label", "Label size:", `for`="labelScale", style="margin-left:12px"),
+            tags$input(type="range", id="labelScale", min="50", max="180", value="100", step="10", style="width:140px"),
+            tags$span(id="labelScaleVal", class="badge", "100%")
           ),
-
-          tags$label(tags$input(type="checkbox", id="labelsChk", checked=NA), " Node labels"),
-          tags$label(tags$input(type="checkbox", id="edgeLabelsChk"), " Edge labels"),
-          tags$label(tags$input(type="checkbox", id="arrowsChk", checked=NA), " Arrows"),
-          tags$label(tags$input(type="checkbox", id="onlyFunctionalChk"), " Only functional"),
-
-          tags$label(class="label", "Label size:", `for`="labelScale", style="margin-left:12px"),
-          tags$input(type="range", id="labelScale", min="50", max="180", value="100", step="10", style="width:140px"),
-          tags$span(id="labelScaleVal", class="badge", "100%")
+          tags$div(class="control-row",
+            tags$label(tags$input(type="checkbox", id="edgeLabelsChk"), " Edge labels"),
+            tags$label(tags$input(type="checkbox", id="arrowsChk", checked=NA), " Arrows"),
+            tags$label(tags$input(type="checkbox", id="onlyFunctionalChk"), " Functional sites only"),
+            tags$label(tags$input(type="checkbox", id="curatedOnlyChk"), " Curated pairs only")
+          )
         ),
 
         tags$div(id="legend",
@@ -276,7 +281,7 @@ viewer_tags <- tags$div(
           tags$span(class="chip", tags$span(class="dot sub"), "Substrate"),
           tags$span(class="chip", tags$span(class="line known"), "Curated"),
           tags$span(class="chip", tags$span(class="line novel"), "Predicted"),
-          tags$span(class="legend-note", "Dotted = not flagged functional; Solid = likely functional")
+          tags$span(class="legend-note", "Dotted = not flagged functional; Solid = likely functional; Size of edge does not indicate strength")
         ),
 
         tags$div(class="tip", "Click and hold to move around nodes. Scroll to zoom. Click nodes to open UniProt page."),
@@ -284,7 +289,7 @@ viewer_tags <- tags$div(
         tags$div(id="exportbar",
           tags$button(id="btnPng", class="btn primary", "Export PNG"),
           tags$button(id="btnPdf", class="btn", "Export PDF"),
-          tags$button(id="btnCsvEdges", class="btn", "Download Edges CSV")
+          tags$button(id="btnCsvEdges", class="btn", "Export Edge CSV")
         ),
 
         tags$div(id="cywrap", tags$div(id="cy"))
@@ -292,7 +297,7 @@ viewer_tags <- tags$div(
     ),
 
     tags$section(id="table", class="section",
-      tags$div(class="section-head", tags$h3("Edges in View"), tags$span(class="pill", "Filter columns or download")),
+      tags$div(class="section-head", tags$h3("Edges in View"), tags$span(class="pill", "Filter columns")),
       tags$div(class="panel",
         tags$div(id="edgesFilters", class="filters"),
         tags$div(id="edgesTable", class="tablebox")
@@ -318,7 +323,7 @@ viewer_tags <- tags$div(
       kinases: kinases.length,
       substrates: substrates.length,
       edges: data.edges.length,
-      curated: data.edges.filter(e => e.evidence === 'Curated').length
+      curated: data.edges.filter(e => e.evidence === 'Known (curated)').length
     };
     const setStat = (id, text) => { const el = document.getElementById(id); if(el) el.textContent = text; };
     setStat('statKinases', stats.kinases.toLocaleString());
@@ -407,9 +412,6 @@ viewer_tags <- tags$div(
       window.open(url, '_blank', 'noopener');
     });
 
-    function setNodeLabels(show){
-      cy.style().selector('node').style('label', show ? 'data(label)' : '').update();
-    }
     function setEdgeLabels(show){
       cy.style().selector('edge').style('label', show ? 'data(edgeLabel)' : '').update();
     }
@@ -431,20 +433,25 @@ viewer_tags <- tags$div(
       const v = (e.data('Likely_functional') ?? '').trim();
       return v === 'Likely functional';
     }
-    function applyFunctionalFilter(onlyFunctional){
-      if(!onlyFunctional){
-        cy.edges().style('display', 'element');
-        cy.nodes().style('display', 'element');
-      } else {
+    function isCuratedEdge(e){
+      const v = (e.data('evidence') ?? '').trim();
+      return v === 'Known (curated)';
+    }
+    function applyFilters(doLayout = true){
+      const onlyFunctional = document.getElementById('onlyFunctionalChk').checked;
+      const curatedOnly    = document.getElementById('curatedOnlyChk')?.checked;
+
+      cy.batch(() => {
         cy.edges().forEach(e => {
-          e.style('display', isFunctionalEdge(e) ? 'element' : 'none');
+          const keep = (!curatedOnly || isCuratedEdge(e)) && (!onlyFunctional || isFunctionalEdge(e));
+          e.style('display', keep ? 'element' : 'none');
         });
         cy.nodes().forEach(n => {
           const hasVisibleEdge = n.connectedEdges(':visible').length > 0;
           n.style('display', hasVisibleEdge ? 'element' : 'none');
         });
-      }
-      relayout(document.getElementById('layoutSel').value);
+      });
+      if(doLayout){ relayout(document.getElementById('layoutSel').value); }
     }
 
     function refreshEdgesTable(){
@@ -577,23 +584,8 @@ viewer_tags <- tags$div(
       cy.elements().remove();
       cy.add(elems.nodes);
       cy.add(elems.edges);
-      relayout(document.getElementById('layoutSel').value);
       applyNodeSizing();
-
-      const rows = cy.edges().map(e => [
-        e.data('source'),
-        e.data('target'),
-        e.data('evidence'),
-        e.data('Likely_functional'),
-        e.data('SiteCount'),
-        e.data('Sites'),
-        e.data('SourceList') ?? '',
-        e.data('Reference_PMID')
-      ]);
-      renderFilterableTable('edgesFilters','edgesTable',
-        ['From','To','Evidence','Functional Site?','#Sites','Sites','Sources','Reference_PMID'], rows);
-      const onlyFn = document.getElementById('onlyFunctionalChk').checked;
-      applyFunctionalFilter(onlyFn);
+      applyFilters(true);
       refreshEdgesTable();
     }
 
@@ -604,11 +596,14 @@ viewer_tags <- tags$div(
     triggerOnEnter(kinInput);
     triggerOnEnter(subInput);
     document.getElementById('layoutSel').addEventListener('change', () => render());
-    document.getElementById('labelsChk').addEventListener('change', e => setNodeLabels(e.target.checked));
     document.getElementById('edgeLabelsChk').addEventListener('change', e => setEdgeLabels(e.target.checked));
     document.getElementById('arrowsChk').addEventListener('change', e => setArrows(e.target.checked));
     document.getElementById('onlyFunctionalChk').addEventListener('change', () => {
-      applyFunctionalFilter(document.getElementById('onlyFunctionalChk').checked);
+      applyFilters(true);
+      refreshEdgesTable();
+    });
+    document.getElementById('curatedOnlyChk').addEventListener('change', () => {
+      applyFilters(true);
       refreshEdgesTable();
     });
     labelScale.addEventListener('input', applyNodeSizing);
@@ -662,7 +657,6 @@ viewer_tags <- tags$div(
       download('kinome_edges.csv', blob);
     });
 
-    setNodeLabels(true);
     setEdgeLabels(false);
     setArrows(true);
     applyNodeSizing();
