@@ -95,14 +95,21 @@ deg_tbl <- edge_tbl %>%
   transmute(Gene = source, outdeg, indeg) %>%
   distinct()
 
-#add uniprot ID to node_tbl (convert from entrezid)
-node_uniprot = bitr(node_tbl$Entrez, fromType="ENTREZID", toType="UNIPROT", OrgDb="org.Hs.eg.db")
+#add uniprot ID to node_tbl (convert from entrezid) and dedupe many-to-one mappings
+node_uniprot <- bitr(node_tbl$Entrez, fromType="ENTREZID", toType="UNIPROT", OrgDb="org.Hs.eg.db") %>%
+  distinct(ENTREZID, .keep_all = TRUE)
 
 node_tbl <- node_tbl %>%
   left_join(deg_tbl, by = "Gene") %>%
   mutate(Entrez = as.character(Entrez)) %>%
   left_join(node_uniprot, by = c("Entrez" = "ENTREZID")) %>%
-  mutate(outdeg = coalesce(outdeg, 0L), indeg = coalesce(indeg, 0L))
+  group_by(Gene, Entrez, role) %>%
+  summarise(
+    outdeg = max(coalesce(outdeg, 0L), na.rm = TRUE),
+    indeg  = max(coalesce(indeg, 0L), na.rm = TRUE),
+    UNIPROT = dplyr::first(na.omit(UNIPROT)),
+    .groups = "drop"
+  )
 
 nodes_json <- node_tbl %>%
   transmute(data = pmap(list(id = Gene, label = Gene, Entrez = Entrez, role = role,
