@@ -512,23 +512,27 @@ viewer_tags <- tags$div(
                    (name==='breadthfirst') ? { name, directed: true, padding: 10 } :
                    (name==='fcose') ? {
                      name,
-                     quality: 'proof',
+                     quality: 'default',
                      randomize: true,
                      animate: false,
                      fit: true,
-                     padding: 30,
-                     nodeDimensionsIncludeLabels: true,
+                     padding: 40,
+                     nodeDimensionsIncludeLabels: false,
+                     uniformNodeDimensions: false,
                      packComponents: true,
                      tile: true,
-                     nodeRepulsion: node => 4500,
+                     nodeSeparation: 120,
+                     sampleSize: 25,
+                     nodeRepulsion: node => 7000,
                      idealEdgeLength: edge => 140,
-                     edgeElasticity: edge => 0.25,
-                     nestingFactor: 0.8,
+                     edgeElasticity: edge => 0.45,
+                     nestingFactor: 0.1,
+                     numIter: 2500,
                      gravity: 0.25,
                      gravityRangeCompound: 1.5,
                      gravityCompound: 1.0,
-                     gravityRange: 1.8,
-                     initialEnergyOnIncremental: 0.6
+                     gravityRange: 3.0,
+                     initialEnergyOnIncremental: 0.3
                    } :
                    (name==='cose-bilkent') ? {
                      name,
