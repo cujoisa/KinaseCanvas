@@ -382,7 +382,7 @@ viewer_tags <- tags$div(
           style: { 'line-style': 'dotted' } }
       ],
       layout: { name: 'cose',
-        nodeRepulsion: 109200
+        nodeOverlap: 20
       }
     });
 
