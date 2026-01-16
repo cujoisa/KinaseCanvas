@@ -382,7 +382,7 @@ viewer_tags <- tags$div(
           style: { 'line-style': 'dotted' } }
       ],
       layout: { name: 'cose',
-        repulsion: 800
+        nodeRepulsion: 109200
       }
     });
 
