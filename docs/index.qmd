@@ -240,9 +240,9 @@ viewer_tags <- tags$div(
           tags$label(class="label", "Layout:", `for`="layoutSel", style="margin-left:12px"),
           tags$select(
             id="layoutSel",
+            tags$option(value="fcose","fCoSE"),
             tags$option(value="cose","COSE"),
             tags$option(value="cose-bilkent","CoSE-Bilkent"),
-            tags$option(value="fcose","fCoSE"),
             tags$option(value="concentric","Concentric"),
             tags$option(value="breadthfirst","Breadthfirst")
           ),
@@ -253,9 +253,8 @@ viewer_tags <- tags$div(
           tags$label(tags$input(type="checkbox", id="onlyFunctionalChk"), " Only functional"),
 
           tags$label(class="label", "Label size:", `for`="labelScale", style="margin-left:12px"),
-          tags$input(type="range", id="labelScale", min="60", max="180", value="100", step="10", style="width:140px"),
-          tags$span(id="labelScaleVal", class="badge", "100%"),
-          tags$label(tags$input(type="checkbox", id="degScaleChk", checked=NA, style="margin-left:10px"), " Boost dense nodes")
+          tags$input(type="range", id="labelScale", min="50", max="180", value="100", step="10", style="width:140px"),
+          tags$span(id="labelScaleVal", class="badge", "100%")
         ),
 
         tags$div(id="legend",
@@ -325,7 +324,6 @@ viewer_tags <- tags$div(
 
     const labelScale   = document.getElementById('labelScale');
     const labelScaleEl = document.getElementById('labelScaleVal');
-    const degScaleChk  = document.getElementById('degScaleChk');
     const baseFont     = 9;
     const basePad      = 5;
 
@@ -385,7 +383,7 @@ viewer_tags <- tags$div(
         { selector: 'edge[Likely_functional = \"Other/Unknown\"]',
           style: { 'line-style': 'dotted' } }
       ],
-      layout: { name: 'cose' }
+      layout: { name: 'fcose' }
     });
 
     function setNodeLabels(show){
@@ -399,16 +397,11 @@ viewer_tags <- tags$div(
     }
     function applyNodeSizing(){
       const scale = Number(labelScale.value || 100) / 100;
-      const boost = degScaleChk.checked;
       if(labelScaleEl){ labelScaleEl.textContent = Math.round(scale * 100) + '%'; }
       cy.batch(() => {
         cy.nodes().forEach(n => {
-          const deg = n.data('deg') ?? ((n.data('indeg') || 0) + (n.data('outdeg') || 0));
-          const degFrac = maxDeg ? (deg / maxDeg) : 0;
-          let degFactor = boost ? (0.8 + 0.4 * degFrac) : 1;
-          degFactor = Math.min(degFactor, 1.2);
-          const fontSize = Math.max(7, Math.min(14, baseFont * scale * degFactor));
-          const pad      = Math.max(3, Math.min(12, basePad * scale * degFactor));
+          const fontSize = Math.max(7, Math.min(14, baseFont * scale));
+          const pad      = Math.max(3, Math.min(12, basePad * scale));
           n.style({ 'font-size': fontSize, 'padding': pad });
         });
       });
@@ -598,7 +591,6 @@ viewer_tags <- tags$div(
       refreshEdgesTable();
     });
     labelScale.addEventListener('input', applyNodeSizing);
-    degScaleChk.addEventListener('change', applyNodeSizing);
 
     function download(filename, blob){
       const a = document.createElement('a');
