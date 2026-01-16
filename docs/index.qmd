@@ -32,6 +32,8 @@ set.seed(123)
 library(tidyverse)
 library(tidygraph)
 library(here)
+library(org.Hs.eg.db)
+library(clusterProfiler)
 library(igraph)
 library(ggraph)
 library(scales)
@@ -93,15 +95,20 @@ deg_tbl <- edge_tbl %>%
   transmute(Gene = source, outdeg, indeg) %>%
   distinct()
 
+#add uniprot ID to node_tbl (convert from entrezid)
+node_uniprot = bitr(node_tbl$Entrez, fromType="ENTREZID", toType="UNIPROT", OrgDb="org.Hs.eg.db")
+
 node_tbl <- node_tbl %>%
   left_join(deg_tbl, by = "Gene") %>%
+  mutate(Entrez = as.character(Entrez)) %>%
+  left_join(node_uniprot, by = c("Entrez" = "ENTREZID")) %>%
   mutate(outdeg = coalesce(outdeg, 0L), indeg = coalesce(indeg, 0L))
 
 nodes_json <- node_tbl %>%
   transmute(data = pmap(list(id = Gene, label = Gene, Entrez = Entrez, role = role,
-                             indeg = indeg, outdeg = outdeg, deg = indeg + outdeg),
+                             indeg = indeg, outdeg = outdeg, deg = indeg + outdeg, uniprot = UNIPROT),
                         ~ list(id = ..1, label = ..2, Entrez = ..3, role = ..4,
-                               indeg = ..5, outdeg = ..6, deg = ..7))) %>%
+                               indeg = ..5, outdeg = ..6, deg = ..7, uniprot = ..8))) %>%
   tidyr::unnest_wider(data)
 
 edges_json <- edge_tbl %>%
@@ -384,6 +391,13 @@ viewer_tags <- tags$div(
           style: { 'line-style': 'dotted' } }
       ],
       layout: { name: 'fcose' }
+    });
+
+    cy.on('tap', 'node', evt => {
+      const up = (evt.target && evt.target.data) ? evt.target.data('uniprot') : null;
+      if(!up) return;
+      const url = 'https://www.uniprot.org/uniprotkb/' + encodeURIComponent(up);
+      window.open(url, '_blank', 'noopener');
     });
 
     function setNodeLabels(show){
