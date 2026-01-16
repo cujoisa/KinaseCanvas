@@ -1,5 +1,5 @@
 ---
-title: "Explorer for Integrated Cantley Atlas + Curated Kinase-Substrate Interactions"
+title: "Explorer for Known and Predicted Kinase-Substrate Interactions"
 editor: visual
 author: "Chinmaya Joisa"
 date: "09/08/2025"
@@ -51,10 +51,10 @@ combined_pairs = read_csv(here("results/combined_kinase_substrate_pairs_2025.csv
 curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet","PhosphoELM","PhosphoNetworks")
 
 edge_tbl <- combined_pairs %>%
-  mutate(evidence = if_else(Source %in% curated_sources, "Known (curated)", "Novel (Cantley)")) %>%
+  mutate(evidence = if_else(Source %in% curated_sources, "Curated", "Predicted")) %>%
   group_by(Kinase, Substrate) %>%
   summarise(
-    evidence      = if_else(any(evidence == "Known (curated)"), "Known (curated)", "Novel (Cantley)"),
+    evidence      = if_else(any(evidence == "Curated"), "Curated", "Predicted"),
     Likely_functional = any(Likely_functional),
     SiteCount     = n_distinct(Site),
     Sites         = paste(sort(unique(na.omit(Site))), collapse = "; "),
@@ -267,12 +267,12 @@ viewer_tags <- tags$div(
         tags$div(id="legend",
           tags$span(class="chip", tags$span(class="dot kin"), "Kinase"),
           tags$span(class="chip", tags$span(class="dot sub"), "Substrate"),
-          tags$span(class="chip", tags$span(class="line known"), "Known (curated)"),
-          tags$span(class="chip", tags$span(class="line novel"), "Novel (Cantley)"),
+          tags$span(class="chip", tags$span(class="line known"), "Curated"),
+          tags$span(class="chip", tags$span(class="line novel"), "Predicted"),
           tags$span(class="legend-note", "Dotted = not flagged functional; Solid = likely functional")
         ),
 
-        tags$div(class="tip", "Tip: start with a single kinase or substrate to see its neighborhood; toggle layouts to untangle dense regions."),
+        tags$div(class="tip", "Click and hold to move around nodes. Scroll to zoom. Click nodes to open UniProt page."),
 
         tags$div(id="exportbar",
           tags$button(id="btnPng", class="btn primary", "Export PNG"),
@@ -311,7 +311,7 @@ viewer_tags <- tags$div(
       kinases: kinases.length,
       substrates: substrates.length,
       edges: data.edges.length,
-      curated: data.edges.filter(e => e.evidence === 'Known (curated)').length
+      curated: data.edges.filter(e => e.evidence === 'Curated').length
     };
     const setStat = (id, text) => { const el = document.getElementById(id); if(el) el.textContent = text; };
     setStat('statKinases', stats.kinases.toLocaleString());
@@ -381,9 +381,9 @@ viewer_tags <- tags$div(
             'text-margin-y': -2
           }
         },
-        { selector: 'edge[evidence = \"Known (curated)\"]',
+        { selector: 'edge[evidence = \"Curated\"]',
           style: { 'line-color': '#16110c', 'target-arrow-color': '#16110c' } },
-        { selector: 'edge[evidence = \"Novel (Cantley)\"]',
+        { selector: 'edge[evidence = \"Predicted\"]',
           style: { 'line-color': '#7b6d5d', 'target-arrow-color': '#7b6d5d' } },
         { selector: 'edge[Likely_functional = \"Likely functional\"]',
           style: { 'line-style': 'solid' } },
@@ -452,7 +452,7 @@ viewer_tags <- tags$div(
         e.data('Reference_PMID')
       ]);
       renderFilterableTable('edgesFilters','edgesTable',
-        ['From','To','Evidence','Functional','#Sites','Sites','Sources','Reference_PMID'], rows);
+        ['From','To','Evidence','Functional Site?','#Sites','Sites','Sources','Reference_PMID'], rows);
     }
 
     function renderFilterableTable(filtersId, tableBoxId, headers, rows){
@@ -584,7 +584,7 @@ viewer_tags <- tags$div(
         e.data('Reference_PMID')
       ]);
       renderFilterableTable('edgesFilters','edgesTable',
-        ['From','To','Evidence','Functional','#Sites','Sites','Sources','Reference_PMID'], rows);
+        ['From','To','Evidence','Functional Site?','#Sites','Sites','Sources','Reference_PMID'], rows);
       const onlyFn = document.getElementById('onlyFunctionalChk').checked;
       applyFunctionalFilter(onlyFn);
       refreshEdgesTable();
@@ -651,7 +651,7 @@ viewer_tags <- tags$div(
         e.data('SourceList') ?? '',
         e.data('Reference_PMID')
       ]);
-      const blob = csvBlob(rows, ['From','To','Evidence','Functional','#Sites','Sites','Sources','Reference_PMID']);
+      const blob = csvBlob(rows, ['From','To','Evidence','Functional Site?','#Sites','Sites','Sources','Reference_PMID']);
       download('kinome_edges.csv', blob);
     });
 
