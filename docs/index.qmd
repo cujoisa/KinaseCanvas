@@ -512,7 +512,23 @@ viewer_tags <- tags$div(
     function relayout(name){
       const opts = (name==='concentric') ? { name, minNodeSpacing: 20 } :
                    (name==='breadthfirst') ? { name, directed: true, padding: 10 } :
-                   (name==='fcose') ? { name, quality: 'proof', randomize: true } :
+                   (name==='fcose') ? {
+                     name,
+                     quality: 'draft',
+                     randomize: true,
+                     animate: false,
+                     nodeRepulsion: 80000,
+                     idealEdgeLength: 170,
+                     nodeSeparation: 220,
+                     gravity: 0.15,
+                     gravityRangeCompound: 1.2,
+                     gravityCompound: 0.9,
+                     nestingFactor: 0.8,
+                     packComponents: true,
+                     tile: true,
+                     nodeDimensionsIncludeLabels: true,
+                     padding: 40
+                   } :
                    (name==='cose-bilkent') ? {
                      name,
                      animate: false,
@@ -564,7 +580,7 @@ viewer_tags <- tags$div(
     subInput.addEventListener('change', triggerRender);
     triggerOnEnter(kinInput);
     triggerOnEnter(subInput);
-    document.getElementById('layoutSel').addEventListener('change', () => relayout(document.getElementById('layoutSel').value));
+    document.getElementById('layoutSel').addEventListener('change', () => render());
     document.getElementById('labelsChk').addEventListener('change', e => setNodeLabels(e.target.checked));
     document.getElementById('edgeLabelsChk').addEventListener('change', e => setEdgeLabels(e.target.checked));
     document.getElementById('arrowsChk').addEventListener('change', e => setArrows(e.target.checked));
