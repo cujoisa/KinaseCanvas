@@ -247,13 +247,13 @@ viewer_tags <- tags$div(
               tags$label(class="label", "Kinase:", `for`="kinSel"),
               tags$input(id="kinSel", list="kinList", placeholder="Type a kinase…", style="min-width:240px"),
               tags$datalist(id="kinList"),
-              tags$span(class="badge kbadge", "Kinase seed")
+              tags$span(class="badge kbadge", "Kinase colour")
             ),
             tags$div(class="control-row",
               tags$label(class="label", "Substrate:", `for`="subSel"),
               tags$input(id="subSel", list="subList", placeholder="Type a substrate… (optional)", style="min-width:240px"),
               tags$datalist(id="subList"),
-              tags$span(class="badge sbadge", "Substrate seed")
+              tags$span(class="badge sbadge", "Substrate colour")
             ),
             tags$div(class="control-row",
               tags$label(class="label", "Layout:", `for`="layoutSel"),
@@ -278,8 +278,6 @@ viewer_tags <- tags$div(
           ),
 
         tags$div(id="legend",
-          tags$span(class="chip", tags$span(class="dot kin"), "Kinase"),
-          tags$span(class="chip", tags$span(class="dot sub"), "Substrate"),
           tags$span(class="chip", tags$span(class="line known"), "Curated"),
           tags$span(class="chip", tags$span(class="line novel"), "Predicted"),
           tags$span(class="legend-note", "Dotted = not flagged functional; Solid = likely functional; Size of edge does not indicate strength")
@@ -452,7 +450,8 @@ viewer_tags <- tags$div(
         cy.nodes().forEach(n => {
           const hasVisibleEdge = n.connectedEdges(':visible').length > 0;
           const isSeed = seedSet.has(n.id());
-          n.style('display', (hasVisibleEdge || isSeed) ? 'element' : 'none');
+          const noEdgeFilters = !curatedOnly && !onlyFunctional;
+          n.style('display', (noEdgeFilters || hasVisibleEdge || isSeed) ? 'element' : 'none');
         });
       });
       if(doLayout){ relayout(document.getElementById('layoutSel').value); }
