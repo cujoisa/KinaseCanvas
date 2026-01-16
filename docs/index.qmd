@@ -241,6 +241,7 @@ viewer_tags <- tags$div(
           tags$select(
             id="layoutSel",
             tags$option(value="cose","COSE"),
+            tags$option(value="cose-bilkent","CoSE-Bilkent"),
             tags$option(value="fcose","fCoSE"),
             tags$option(value="concentric","Concentric"),
             tags$option(value="breadthfirst","Breadthfirst")
@@ -288,6 +289,7 @@ viewer_tags <- tags$div(
 
   tags$script(src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"),
   tags$script(src="https://unpkg.com/cytoscape-fcose@2.2.0/cytoscape-fcose.js"),
+  tags$script(src="https://unpkg.com/cytoscape-cose-bilkent@4.1.0/cytoscape-cose-bilkent.js"),
   tags$script(src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"),
 
   tags$script(HTML("
@@ -511,6 +513,17 @@ viewer_tags <- tags$div(
       const opts = (name==='concentric') ? { name, minNodeSpacing: 20 } :
                    (name==='breadthfirst') ? { name, directed: true, padding: 10 } :
                    (name==='fcose') ? { name, quality: 'proof', randomize: true } :
+                   (name==='cose-bilkent') ? {
+                     name,
+                     animate: false,
+                     quality: 'draft',
+                     nodeRepulsion: 30000,
+                     idealEdgeLength: 140,
+                     gravity: 0.8,
+                     tile: true,
+                     nodeDimensionsIncludeLabels: true,
+                     padding: 30
+                   } :
                    { name: 'cose', animate: false };
       cy.layout(opts).run();
     }
