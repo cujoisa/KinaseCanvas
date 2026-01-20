@@ -58,6 +58,7 @@ library(patchwork)
 library(cowplot)
 library(ggupset)
 library(ggalluvial)
+library(ggtext)
 
 all_kinases = all_kinases
 
@@ -93,7 +94,6 @@ conflicts_prefer(dplyr::slice)
 conflicts_prefer(dplyr::first)
 conflicts_prefer(base::as.factor)
 conflicts_prefer(base::intersect)
-conflicts_prefer(dplyr::desc)
 ```
     
 ```{r} 
@@ -1361,6 +1361,28 @@ p_sankey_substrates
 ## Figure 1
 ```{r}
 
+dataset_label_colors <- c(
+  "Cantley" = "#B279A2",
+  "PhosphoSitePlus" = "#4C78A8",
+  "EPSD" = "#4C78A8",
+  "iPTMNet" = "#4C78A8",
+  "Total" = "#000000"
+)
+
+color_dataset_labels <- function(labels) {
+  map_chr(labels, function(lbl) {
+    out <- lbl
+    for (nm in names(dataset_label_colors)) {
+      out <- str_replace_all(
+        out,
+        fixed(nm),
+        glue("<span style='color:{dataset_label_colors[[nm]]}'>{nm}</span>")
+      )
+    }
+    out
+  })
+}
+
 p1A <- p_sankey_substrates +
   theme(legend.position = "none")+
   labs(tag="B")
@@ -1389,12 +1411,14 @@ p1B <- ggplot(fig1B_df, aes(Source, Count, fill=Source))+
     "Cantley"="#72B7B2",
     "Total"="#54A24B"
   ))+
+  scale_x_discrete(labels = color_dataset_labels)+
   scale_y_continuous(labels=scales::comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
   geom_text(aes(label=Count), vjust=-0.3, size=3.2)+
   facet_wrap(~Entity, scales="free_y")+
-  theme_pubr(x.text.angle = 45)+
+  theme_pubr()+
   theme(strip.background = element_rect(fill="grey90", color="black"),
-        strip.text = element_text(face="bold"))+
+        strip.text = element_text(face="bold"),
+        axis.text.x = ggtext::element_markdown(angle = 45, hjust = 1))+
   labs(x=NULL, y="Count", tag="C")
 
 deg_kin <- combined_pairs %>%
@@ -1469,7 +1493,7 @@ fig1 <- (row1 / row2 / row3) +
   plot_layout(heights = c(1.7, 1, 1)) &
   theme(plot.tag = element_text(face = "bold"))
 fig1
-ggsave(here("figures/paper_figures/fig1.png"), fig1, width=11, height=11, dpi=400)
+ggsave(here("figures/paper_figures/fig1.png"), fig1, width=544.3656/72, height=567.9596/72, dpi=400)
 ```
 
 ## Figure S1
