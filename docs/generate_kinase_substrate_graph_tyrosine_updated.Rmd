@@ -1493,7 +1493,7 @@ fig1 <- (row1 / row2 / row3) +
   plot_layout(heights = c(1.7, 1, 1)) &
   theme(plot.tag = element_text(face = "bold"))
 fig1
-ggsave(here("figures/paper_figures/fig1.png"), fig1, width=544.3656/72*1.5, height=567.9596/72*1.5, dpi=500)
+ggsave(here("figures/paper_figures/fig1.png"), fig1, width=544.3656/72*1.2, height=567.9596/72*1.2, dpi=500)
 ```
 
 ## Figure S1
