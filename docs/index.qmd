@@ -664,8 +664,19 @@ viewer_tags <- tags$div(
     });
 
     document.getElementById('btnFullNetwork').addEventListener('click', () => {
-      const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
-      download('kinome_full_network.json', blob);
+      // Export all edges in the network as CSV (not just visible)
+      const rows = data.edges.map(e => [
+        e.source,
+        e.target,
+        e.evidence,
+        e.Likely_functional,
+        e.SiteCount,
+        e.Sites,
+        e.SourceList ?? '',
+        e.Reference_PMID
+      ]);
+      const blob = csvBlob(rows, ['From','To','Evidence','Functional Site?','#Sites','Sites','Sources','Reference_PMID']);
+      download('kinome_full_network.csv', blob);
     });
 
     setEdgeLabels(false);
