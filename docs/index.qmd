@@ -288,7 +288,8 @@ viewer_tags <- tags$div(
         tags$div(id="exportbar",
           tags$button(id="btnPng", class="btn primary", "Export PNG"),
           tags$button(id="btnPdf", class="btn", "Export PDF"),
-          tags$button(id="btnCsvEdges", class="btn", "Export Edge CSV")
+          tags$button(id="btnCsvEdges", class="btn", "Export Edge CSV"),
+          tags$button(id="btnFullNetwork", class="btn", "Download Full Network")
         ),
 
         tags$div(id="cywrap", tags$div(id="cy"))
@@ -660,6 +661,11 @@ viewer_tags <- tags$div(
       ]);
       const blob = csvBlob(rows, ['From','To','Evidence','Functional Site?','#Sites','Sites','Sources','Reference_PMID']);
       download('kinome_edges.csv', blob);
+    });
+
+    document.getElementById('btnFullNetwork').addEventListener('click', () => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+      download('kinome_full_network.json', blob);
     });
 
     setEdgeLabels(false);
