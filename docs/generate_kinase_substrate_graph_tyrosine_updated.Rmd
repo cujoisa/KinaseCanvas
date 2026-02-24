@@ -94,6 +94,8 @@ conflicts_prefer(dplyr::slice)
 conflicts_prefer(dplyr::first)
 conflicts_prefer(base::as.factor)
 conflicts_prefer(base::intersect)
+conflicts_prefer(stringr::fixed)
+conflicts_prefer(dplyr::desc)
 ```
     
 ```{r} 
@@ -1101,183 +1103,6 @@ cantley_sites_annot <- cantley_uni %>%
   mutate(ochoa_high = !is.na(functional_score) & functional_score > cutoff)
 
 ## 7) Collapse to SUBSTRATE-level flags
-substrate_flags <- cantley_sites_annot %>%
-  group_by(Substrate, Substrate_entrez) %>%
-  summarise(
-    # Novel substrate? (substrate seen anywhere in curated)
-    `Novel Substrate?` = if_else(any(Substrate %in% curated_sub_universe),
-                       "Known substrate", "Novel substrate"),
-    # Known site present? (at least one Cantley site is curated)
-    `Novel Site?` = if_else(any(curated_site, na.rm = TRUE),
-                        "Known site", "Novel site"),
-    # Likely functional? (any Cantley site has Ochoa FS > cutoff)
-    `Functional Site?` = if_else(any(ochoa_high, na.rm = TRUE),
-                               "Likely functional", "Other/unknown"),
-    .groups = "drop"
-  ) %>%
-  # add coloc summarised per substrate
-  left_join(substrate_coloc %>% mutate(Substrate_entrez = as.character(Substrate_entrez)), by = c("Substrate","Substrate_entrez")) %>%
-  mutate(`Co-localized?` = if_else(any_coloc, "Co-localized", "Non co-localized")) %>%
-  drop_na()
-
-## 8) Build the alluvial (one row per *substrate* path)
-stage_vars <- c("Novel Substrate?","Novel Site?","Functional Site?","Co-localized?")
-
-alluv_df <- substrate_flags %>%
-  select(all_of(stage_vars)) %>%
-  mutate(across(everything(), as.character)) %>%
-  group_by(across(everything())) %>%
-  summarise(n = n(), .groups = "drop") %>%
-  arrange(desc(n))
-
-alluv_long <- alluv_df %>%
-  mutate(id = row_number()) %>%
-  tidyr::pivot_longer(cols = all_of(stage_vars), names_to = "stage", values_to = "label") %>%
-  mutate(stage = factor(stage, levels = stage_vars))
-
-## 9) Plot (substrate-level Sankey)
-pal_stage <- c(
-  "Novel substrate"   = "#B279A2",
-  "Known substrate"   = "#4C78A8",
-  "Novel site"        = "#B279A2",
-  "Known site"        = "#4C78A8",
-  "Likely functional" = "#54A24B",
-  "Other/unknown"     = "#9E9E9E",
-  "Co-localized"      = "#72B7B2",
-  "Non co-localized"  = "#E45756"
-)
-lab_levels <- unique(alluv_long$label)
-pal_use <- setNames(pal_stage[names(pal_stage) %in% lab_levels], lab_levels)
-pal_use[setdiff(lab_levels, names(pal_use))] <- "#B0B0B0"
-
-p_sankey_substrates <- ggplot(
-  alluv_long,
-  aes(x = stage, stratum = label, alluvium = id, y = n,
-      fill = label, label = label)
-) +
-  geom_flow() +
-  geom_stratum() +
-  geom_text(stat = "stratum", size = 5, color = "black", vjust = -0.2) +
-  scale_fill_manual(values = pal_use, guide = guide_legend(nrow = 2)) +
-  scale_y_continuous(expand = expansion(mult = c(0.02, 0.08)), labels = scales::comma) +
-  labs(
-    x = NULL, y = "Substrate count", fill = NULL) +
-  theme_pubr()
-
-p_sankey_substrates
-
-```
-
-```{r}
-
-curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet","PhosphoELM","PhosphoNetworks")
-
-## 1) Curated substrate universe (for "Novel substrate?" at substrate-level)
-curated_sub_universe <- combined_pairs %>%
-  filter(Source %in% curated_sources) %>%
-  distinct(Substrate) %>%
-  pull(Substrate)
-
-## 2) Curated site keys (for "Known site?" at substrate-level)
-curated_site_keys <- kinet_processed %>%
-  mutate(Site = if ("Site" %in% names(.)) Site else paste0(residue, position)) %>%
-  transmute(site_key = make_site_key(Substrate_entrez, Site)) %>%
-  distinct() %>% pull(site_key)
-
-## 3) Ochoa functional scores (normalize join keys)
-ochoa_fs_norm <- ochoa_fs %>%
-  transmute(
-    Substrate_Uniprot_ID = norm_uniprot(uniprot),
-    position = as.integer(position),
-    functional_score
-  ) %>%
-  distinct()
-
-## 4) Make sure Specificity Atlas universe has clean Site + position + site_key
-cantley_uni <- cantley_top %>%
-  mutate(
-    Site = if ("Site" %in% names(.)) Site else stringr::str_extract(Phosphosite, "^[STY]\\d+$"),
-    position = if ("position" %in% names(.)) as.integer(position)
-               else suppressWarnings(as.integer(stringr::str_remove(Site, "^[STY]"))),
-    site_key = make_site_key(Substrate_entrez, Site)
-  ) %>%
-  filter(!is.na(Substrate), !is.na(Site), !is.na(position))
-
-## 5) Pair-wise coloc flag, then summarize to substrate-level "any coloc?"
-#   (restrict HPA to genes present to speed up)
-genes_needed <- unique(c(cantley_uni$Substrate_entrez, cantley_uni$Kinase_entrez))
-hpa_entrez = bitr(unique(subcellular_localization$`Gene name`), fromType="SYMBOL", toType="ENTREZID", OrgDb=org.Hs.eg.db)
-hpa_long <- subcellular_localization %>%
-  select(-Gene) %>%
-  rename(Gene = `Gene name`) %>%
-  pivot_longer(
-    cols = c(contains("Approved"), contains("Supported"), contains("Enhanced")),
-    names_to = "tier", values_to = "locs"
-  ) %>%
-  filter(!is.na(locs)) %>%
-  separate_rows(locs, sep = ";") %>%
-  mutate(locs = str_trim(locs)) %>%
-  filter(locs != "") %>%
-  left_join(
-    hpa_entrez,
-    by = c("Gene" = "SYMBOL")
-  ) %>%
-  transmute(Gene_entrez = ENTREZID, locs) %>%
-  distinct()
-
-hpa_small <- hpa_long %>%
-  filter(Gene_entrez %in% genes_needed) %>%
-  distinct(Gene_entrez, locs)
-
-kin_loc <- cantley_uni %>%
-  distinct(Kinase, Kinase_entrez) %>%
-  mutate(Kinase_entrez = as.character(Kinase_entrez)) %>%
-  inner_join(hpa_small, by = c("Kinase_entrez" = "Gene_entrez")) %>%
-  transmute(Kinase_entrez, loc = locs) %>%
-  filter(!is.na(Kinase_entrez))
-
-sub_loc <- cantley_uni %>%
-  distinct(Substrate_entrez) %>%
-  mutate(Substrate_entrez = as.character(Substrate_entrez)) %>%
-  inner_join(hpa_small, by = c("Substrate_entrez" = "Gene_entrez")) %>%
-  transmute(Substrate_entrez, loc = locs) %>%
-  filter(!is.na(Substrate_entrez))
-
-coloc_key <- inner_join(kin_loc, sub_loc, by = "loc") %>%
-  transmute(Kinase_entrez, Substrate_entrez) %>%
-  mutate(
-    Kinase_entrez = as.integer(Kinase_entrez),
-    Substrate_entrez = as.integer(Substrate_entrez),
-    KS_key = paste(Kinase_entrez, Substrate_entrez)
-  ) %>%
-  distinct()
-
-# mark coloc per pair, then summarize to substrate
-cantley_pairs_with_coloc <- cantley_uni %>%
-  mutate(Kinase_entrez = as.integer(Kinase_entrez),
-         Substrate_entrez = as.integer(Substrate_entrez),
-         KS_key = paste(Kinase_entrez, Substrate_entrez)) %>%
-  filter(!is.na(Kinase_entrez), !is.na(Substrate_entrez)) %>%
-  mutate(coloc = !is.na(fmatch(KS_key, coloc_key$KS_key)))
-
-substrate_coloc <- cantley_pairs_with_coloc %>%
-  group_by(Substrate, Substrate_entrez) %>%
-  summarise(any_coloc = any(coloc, na.rm = TRUE), .groups = "drop")
-
-## 6) Site-level annotations on the Specificity Atlas universe (curated site? Ochoa-high?)
-cutoff = quantile(ochoa_fs_processed$functional_score, 0.75, na.rm=TRUE)
-
-cantley_sites_annot <- cantley_uni %>%
-  # curated site?
-  mutate(curated_site = site_key %in% curated_site_keys) %>%
-  # join Ochoa FS by UniProt + position
-  left_join(
-    ochoa_fs_norm,
-    by = c("Substrate_Uniprot_ID", "position")
-  ) %>%
-  mutate(ochoa_high = !is.na(functional_score) & functional_score > cutoff)
-
-## 7) Collapse to SUBSTRATE-level flags
 substrate_summary <- cantley_sites_annot %>%
   group_by(Substrate, Substrate_entrez) %>%
   summarise(
@@ -1365,8 +1190,8 @@ p_sankey_substrates
 dataset_label_colors <- c(
   "Specificity Atlas" = "#B279A2",
   "PhosphoSitePlus" = "#4C78A8",
-  "EPSD" = "#4C78A8",
-  "iPTMNet" = "#4C78A8",
+  "EPSD" = "#F58518",
+  "iPTMNet" = "#E45756",
   "Total" = "#000000"
 )
 
@@ -1970,7 +1795,7 @@ pairs_for_compare <- bind_rows(curated_only_pairs, proposed_pairs) %>%
   mutate(Kinase_entrez = as.character(Kinase_entrez)) %>%
   left_join(kin_class, by = "Kinase_entrez") %>%
   filter(!is.na(Kinase_class)) %>%
-  mutate(Set = factor(Set, levels = c("Curated","Curated + Specificity Atlas")))
+  mutate(Set = factor(Set, levels = c("Curated","Curated + Specificity")))
 
 dark_fracs <- pairs_for_compare %>%
   mutate(is_dark = Kinase_class == "Understudied (Dark)") %>%
