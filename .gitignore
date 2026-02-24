@@ -9,3 +9,5 @@ renv/staging/
 .DS_Store
 *.rds
 *.fst
+
+/.quarto/

@@ -68,7 +68,7 @@ edge_tbl <- full_interaction_data %>%
   mutate(
     edgeType = case_when(
       Sources == "HIPPIE" ~ "Inter-substrate PPI",
-      Sources == "Cantley" ~ "Novel",
+      Sources == "Specificity Atlas" ~ "Novel",
       TRUE ~ "Curated"  # fallback: treat unknown curated-like rows as curated
     ),
     directed = if_else(edgeType == "Inter-substrate PPI", "false", "true")

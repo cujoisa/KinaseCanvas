@@ -59,11 +59,11 @@ curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet","PhosphoELM","PhosphoNet
 # Assumes combined_pairs has columns: Kinase, Substrate, Source, Site, (optional) functional_high
 edge_tbl <- combined_pairs %>%
   mutate(
-    evidence = if_else(Source %in% curated_sources, "Known (curated)", "Novel (Cantley)")
+    evidence = if_else(Source %in% curated_sources, "Known (curated)", "Novel (Specificity Atlas)")
   ) %>%
   group_by(Kinase, Substrate) %>%
   summarise(
-    evidence      = if_else(any(evidence == "Known (curated)"), "Known (curated)", "Novel (Cantley)"),
+    evidence      = if_else(any(evidence == "Known (curated)"), "Known (curated)", "Novel (Specificity Atlas)"),
     Likely_functional = any(Likely_functional),
     SiteCount     = n_distinct(Site),
     Sites         = paste(sort(unique(na.omit(Site))), collapse = "; "),
@@ -214,7 +214,7 @@ viewer_tags <- tags$div(
     tags$span(class="chip", tags$span(class="dot kin"), "Kinase"),
     tags$span(class="chip", tags$span(class="dot sub"), "Substrate"),
     tags$span(class="chip", tags$span(class="line known"), "Known (curated)"),
-    tags$span(class="chip", tags$span(class="line novel"), "Novel (Cantley)"),
+    tags$span(class="chip", tags$span(class="line novel"), "Novel (Specificity Atlas)"),
     tags$span(class="legend-note", "Dotted = not flagged functional; Solid = likely functional")
   ),
 
@@ -306,7 +306,7 @@ viewer_tags <- tags$div(
         // Evidence → color
         { selector: 'edge[evidence = \"Known (curated)\"]',
           style: { 'line-color': '#4c78a8', 'target-arrow-color': '#4c78a8' } },
-        { selector: 'edge[evidence = \"Novel (Cantley)\"]',
+        { selector: 'edge[evidence = \"Novel (Specificity Atlas)\"]',
           style: { 'line-color': '#b279a2', 'target-arrow-color': '#b279a2' } },
 
         // Functional flag → line style

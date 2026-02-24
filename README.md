@@ -1,12 +1,12 @@
 # KinaseCanvas
 
-KinaseCanvas integrates the Cantley Atlases (Ser/Thr + Tyr) and curated kinase–substrate interactions. It includes the supporting data inputs, derived
+KinaseCanvas integrates the Kinase Specificity Atlas (Ser/Thr + Tyr, formerly the Cantley Atlas) and curated kinase–substrate interactions. It includes the supporting data inputs, derived
 network summaries, Quarto viewers, and analysis R Markdown used to generate the
 figures and JSON payloads.
 
 ## Contents
 
-- `data/` – Cantley Atlas CSVs, kinetic reference tables, and supporting XLSX files.
+- `data/` – Specificity Atlas CSVs, kinetic reference tables, and supporting XLSX files.
 - `figures/paper_figures/` – Exported manuscript-ready figures (PNG/PDF).
 - `results/` – CSV exports powering the interactive network viewers.
 - `src/` – Quarto and R Markdown sources for the data integration and viewers.

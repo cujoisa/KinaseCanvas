@@ -1,5 +1,5 @@
 ---
-title: "Analysis and Integration of The Cantley Atlases and Curated Kinase-Substrate Data"
+title: "Analysis and Integration of The Specificity Atlases and Curated Kinase-Substrate Data"
 editor: visual
 author: "Chinmaya Joisa"
 date: "08/15/2025"
@@ -66,8 +66,8 @@ pal_src <- c(
   "PhosphoSitePlus" = "#4C78A8",
   "PhosphoELM"      = "#F58518",
   "PhosphoNetworks" = "#54A24B",
-  "Cantley"         = "#B279A2",
-  "Cantley≥99%"     = "#B279A2"
+  "Specificity Atlas"= "#B279A2",
+  "Specificity Atlas≥99%" = "#B279A2"
 )
 
 pal_role <- c(Kinase="#2F4B7C", Substrate="#F95D6A", `Kinase,Substrate`="#2CA02C")
@@ -948,7 +948,7 @@ cantley_filtered <- as_tibble(cantley_filtered_dt) %>%
 cantley_pairs <- cantley_filtered %>%
   transmute(Kinase, Kinase_entrez, Substrate, Substrate_entrez, Site, Curated_site = curated_site,
             Likely_functional = ochoa_high,
-            Evidence = "Cantley Atlas (high-confidence, co-localized, functional)",
+            Evidence = "Specificity Atlas (high-confidence, co-localized, functional)",
             Reference_PMID = NA_character_) %>%
   distinct()
 
@@ -984,7 +984,8 @@ write_csv(combined_pairs, here("results/combined_kinase_substrate_pairs_2025.csv
 
 ```{r}
 
-combined_pairs = read_csv(here("results/combined_kinase_substrate_pairs_2025.csv"))
+combined_pairs = read_csv(here("results/combined_kinase_substrate_pairs_2025.csv")) %>%
+  mutate(Source = if_else(Source == "Cantley", "Specificity Atlas", Source))
 
 ```
 
@@ -1015,7 +1016,7 @@ ochoa_fs_norm <- ochoa_fs %>%
   ) %>%
   distinct()
 
-## 4) Make sure Cantley universe has clean Site + position + site_key
+## 4) Make sure Specificity Atlas universe has clean Site + position + site_key
 cantley_uni <- cantley_top %>%
   mutate(
     Site = if ("Site" %in% names(.)) Site else stringr::str_extract(Phosphosite, "^[STY]\\d+$"),
@@ -1086,7 +1087,7 @@ substrate_coloc <- cantley_pairs_with_coloc %>%
   group_by(Substrate, Substrate_entrez) %>%
   summarise(any_coloc = any(coloc, na.rm = TRUE), .groups = "drop")
 
-## 6) Site-level annotations on the Cantley universe (curated site? Ochoa-high?)
+## 6) Site-level annotations on the Specificity Atlas universe (curated site? Ochoa-high?)
 cutoff = quantile(ochoa_fs_processed$functional_score, 0.75, na.rm=TRUE)
 
 cantley_sites_annot <- cantley_uni %>%
@@ -1192,7 +1193,7 @@ ochoa_fs_norm <- ochoa_fs %>%
   ) %>%
   distinct()
 
-## 4) Make sure Cantley universe has clean Site + position + site_key
+## 4) Make sure Specificity Atlas universe has clean Site + position + site_key
 cantley_uni <- cantley_top %>%
   mutate(
     Site = if ("Site" %in% names(.)) Site else stringr::str_extract(Phosphosite, "^[STY]\\d+$"),
@@ -1263,7 +1264,7 @@ substrate_coloc <- cantley_pairs_with_coloc %>%
   group_by(Substrate, Substrate_entrez) %>%
   summarise(any_coloc = any(coloc, na.rm = TRUE), .groups = "drop")
 
-## 6) Site-level annotations on the Cantley universe (curated site? Ochoa-high?)
+## 6) Site-level annotations on the Specificity Atlas universe (curated site? Ochoa-high?)
 cutoff = quantile(ochoa_fs_processed$functional_score, 0.75, na.rm=TRUE)
 
 cantley_sites_annot <- cantley_uni %>%
@@ -1302,7 +1303,7 @@ substrate_paths <- cantley_sites_annot %>%
   distinct(Substrate, Substrate_entrez) %>%
   left_join(substrate_summary, by = c("Substrate", "Substrate_entrez")) %>%
   mutate(
-    `Cantley Atlas` = novel_label,
+    `Specificity Atlas` = novel_label,
     `Functional Site?` = if_else(passes_support, "Functional Site", "Non-Functional Site"),
     `Co-localized?` = case_when(
       !passes_support ~ NA_character_,
@@ -1312,7 +1313,7 @@ substrate_paths <- cantley_sites_annot %>%
     `Filtered Result` = if_else(keep, novel_label, NA_character_)
   )
 
-stage_vars <- c("Cantley Atlas", "Functional Site?", "Co-localized?", "Filtered Result")
+stage_vars <- c("Specificity Atlas", "Functional Site?", "Co-localized?", "Filtered Result")
 
 alluv_df <- substrate_paths %>%
   select(all_of(stage_vars)) %>%
@@ -1328,7 +1329,7 @@ alluv_long <- alluv_df %>%
 
 ## 9) Plot (substrate-level Sankey)
 pal_stage <- c(
-  "Cantley substrates"            = "#2C7BB6",
+  "Specificity Atlas substrates"   = "#2C7BB6",
   "Functional Site"               = "#00A6D6",
   "Non-Functional Site"           = "#BFC0C0",
   "Co-localized"                  = "#7BC950",
@@ -1362,7 +1363,7 @@ p_sankey_substrates
 ```{r}
 
 dataset_label_colors <- c(
-  "Cantley" = "#B279A2",
+  "Specificity Atlas" = "#B279A2",
   "PhosphoSitePlus" = "#4C78A8",
   "EPSD" = "#4C78A8",
   "iPTMNet" = "#4C78A8",
@@ -1408,7 +1409,7 @@ p1B <- ggplot(fig1B_df, aes(Source, Count, fill=Source))+
     "PhosphoSitePlus"="#4C78A8",
     "EPSD"="#F58518",
     "iPTMNet"="#E45756",
-    "Cantley"="#72B7B2",
+    "Specificity Atlas"="#72B7B2",
     "Total"="#54A24B"
   ))+
   scale_x_discrete(labels = color_dataset_labels)+
@@ -1422,7 +1423,7 @@ p1B <- ggplot(fig1B_df, aes(Source, Count, fill=Source))+
   labs(x=NULL, y="Count", tag="C")
 
 deg_kin <- combined_pairs %>%
-  filter(Source %in% c("Cantley","PhosphoSitePlus","EPSD","iPTMNet")) %>%
+  filter(Source %in% c("Specificity Atlas","PhosphoSitePlus","EPSD","iPTMNet")) %>%
   count(Kinase, name="n_substrates")
 
 p1C <- ggplot(deg_kin, aes(n_substrates))+
@@ -1448,7 +1449,7 @@ pairs_set <- pairs_src_long %>%
 
 p1D <- ggplot(pairs_set, aes(x = Sets))+
   geom_bar(fill="#4C78A8", color="grey20")+
-  scale_x_upset(order_by = "freq", n_intersections = 20, sets = c("PhosphoSitePlus","EPSD","iPTMNet","Cantley"))+
+  scale_x_upset(order_by = "freq", n_intersections = 20, sets = c("PhosphoSitePlus","EPSD","iPTMNet","Specificity Atlas"))+
   geom_text(stat='count', aes(label=after_stat(count)), vjust=-0.3, size=3.2)+
   scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
   labs(y="# of Substrates", x=NULL, tag ="E")+
@@ -1520,7 +1521,7 @@ pS1A <- ggplot(figS1A_df %>% filter(Entity == "Sites"), aes(Source, Count, fill=
     "PhosphoSitePlus"="#4C78A8",
     "EPSD" ="#F58518",
     "iPTMNet"="#E45756",
-    "Cantley"="#72B7B2",
+    "Specificity Atlas"="#72B7B2",
     "Total"="#54A24B"
   ))+
   geom_text(aes(label=Count), vjust=-0.3, size=3.2)+
@@ -1543,7 +1544,7 @@ sites_set <- sites_src_long %>%
 
 pS1B <- ggplot(sites_set, aes(x = Sets))+
   geom_bar(fill="#4C78A8", color="grey20")+
-  scale_x_upset(order_by = "freq", n_intersections = 20, sets = c("PhosphoSitePlus","EPSD","iPTMNet","Cantley"))+
+  scale_x_upset(order_by = "freq", n_intersections = 20, sets = c("PhosphoSitePlus","EPSD","iPTMNet","Specificity Atlas"))+
   scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
   geom_text(stat='count', aes(label=after_stat(count)), vjust=-0.3, size=3.2)+
   labs(y="Site count", x=NULL)+
@@ -1619,7 +1620,7 @@ pS1C <- ggplot(s1c_pct, aes(Source, pct_func, fill = Source)) +
     "PhosphoSitePlus" = "#4C78A8",
     "EPSD"            = "#F58518",
     "iPTMNet"         = "#E45756",
-    "Cantley"         = "#72B7B2",
+    "Specificity Atlas" = "#72B7B2",
     "Total"           = "#54A24B"
   )) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1),
@@ -1802,10 +1803,10 @@ pal <- list(
 kinase_by_src <- combined_pairs %>%
   distinct(Kinase, Source)
 
-kins_cantley <- kinase_by_src %>% filter(Source == "Cantley") %>% pull(Kinase) %>% unique()
+kins_spec_atlas <- kinase_by_src %>% filter(Source == "Specificity Atlas") %>% pull(Kinase) %>% unique()
 kins_curated <- kinase_by_src %>% filter(Source %in% curated_sources) %>% pull(Kinase) %>% unique()
 
-overlap_kins <- intersect(kins_cantley, kins_curated)
+overlap_kins <- intersect(kins_spec_atlas, kins_curated)
 
 # 1) Build pair-level flags within the overlap
 pairs_flags_overlap <- combined_pairs %>%
@@ -1814,16 +1815,16 @@ pairs_flags_overlap <- combined_pairs %>%
   group_by(Kinase, Substrate) %>%
   summarise(
     is_curated = any(Source %in% curated_sources),
-    in_cantley = any(Source == "Cantley"),
+    in_spec_atlas = any(Source == "Specificity Atlas"),
     .groups = "drop"
   )
 
-# ── 3A. New pairs added by Cantley (restricted to overlap kinases) ────────────
+# ── 3A. New pairs added by Specificity Atlas (restricted to overlap kinases) ────────────
 # pair-level flags already built in `pairs_flags_overlap`
 cov_tbl <- pairs_flags_overlap %>%
   summarise(
     curated_pairs   = sum(is_curated),                 # existing curated pairs
-    new_pairs_added = sum(in_cantley & !is_curated)    # Cantley-only pairs
+    new_pairs_added = sum(in_spec_atlas & !is_curated)    # Specificity Atlas-only pairs
   ) %>%
   tidyr::pivot_longer(everything(), names_to = "metric", values_to = "count") %>%
   mutate(metric = factor(metric,
@@ -1853,11 +1854,11 @@ curated_vs_novel_edges_overlap <- combined_pairs %>%
   filter(Kinase %in% overlap_kins) %>%
   distinct(Kinase, Substrate, Source) %>%
   mutate(is_curated = Source %in% curated_sources,
-         is_cantley = Source == "Cantley") %>%
+         is_spec_atlas = Source == "Specificity Atlas") %>%
   group_by(Kinase, Substrate) %>%
   summarise(
     known = any(is_curated),
-    novel = any(is_cantley & !is_curated),
+    novel = any(is_spec_atlas & !is_curated),
     .groups = "drop"
   ) %>%
   group_by(Kinase) %>%
@@ -1889,7 +1890,7 @@ kin_expansion_overlap <- combined_pairs %>%
   group_by(Kinase) %>%
   summarise(
     n_known = n_distinct(Substrate[Source %in% curated_sources]),
-    n_novel = n_distinct(Substrate[Source == "Cantley" &
+    n_novel = n_distinct(Substrate[Source == "Specificity Atlas" &
                                      !(Substrate %in% Substrate[Source %in% curated_sources])]),
     n_total = n_known + n_novel,
     gain    = ifelse(n_known > 0, n_total / n_known, Inf),
@@ -1905,7 +1906,7 @@ p3C <- ggplot(top_gain, aes(x = gain, y = fct_reorder(Kinase, gain))) +
   geom_text(aes(label = paste0("+", n_novel)), hjust = -0.1, size = 3) +
   scale_x_continuous(expand = expansion(mult = c(0, 0.2))) +
   labs(x = "Expansion factor (total / curated substrates)", y = NULL,
-       title = "Kinase-wise expansion from Cantley (same kinases)") +
+       title = "Kinase-wise expansion from Specificity Atlas (same kinases)") +
   theme_pubr()
 
 # ── 3D. Family-wise novelty; show only families with >15 dark kinases ─────────
@@ -1925,7 +1926,7 @@ kin_fam_novelty_overlap <- combined_pairs %>%
   group_by(Family) %>%
   summarise(
     n_known = n_distinct(Substrate[Source %in% curated_sources]),
-    n_novel = n_distinct(Substrate[Source == "Cantley" &
+    n_novel = n_distinct(Substrate[Source == "Specificity Atlas" &
                          !(Substrate %in% Substrate[Source %in% curated_sources])]),
     frac_novel = ifelse(n_known + n_novel > 0, n_novel / (n_known + n_novel), NA_real_),
     .groups = "drop"
@@ -1945,7 +1946,7 @@ p3D <- ggplot(kin_fam_novelty_overlap,
 # curated sources
 curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet","PhosphoELM","PhosphoNetworks")
 
-# ── 3E. % of pairs involving Understudied (Dark) kinases: Curated vs Curated+Cantley ──
+# ── 3E. % of pairs involving Understudied (Dark) kinases: Curated vs Curated+Specificity Atlas ──
 kin_class <- all_kinases %>%
   transmute(Kinase_entrez = as.character(entrez_id),
             Kinase_class  = if_else(class_2019 == "Dark", "Understudied (Dark)", "Well-studied (Light)"))
@@ -1961,15 +1962,15 @@ curated_only_pairs <- combined_pairs %>%
   mutate(Set = "Curated")
 
 proposed_pairs <- combined_pairs %>%
-  filter(Source %in% c(curated_sources, "Cantley")) %>%
+  filter(Source %in% c(curated_sources, "Specificity Atlas")) %>%
   distinct(Kinase, Kinase_entrez, Substrate, Substrate_entrez) %>%
-  mutate(Set = "Curated + Cantley")
+  mutate(Set = "Curated + Specificity Atlas")
 
 pairs_for_compare <- bind_rows(curated_only_pairs, proposed_pairs) %>%
   mutate(Kinase_entrez = as.character(Kinase_entrez)) %>%
   left_join(kin_class, by = "Kinase_entrez") %>%
   filter(!is.na(Kinase_class)) %>%
-  mutate(Set = factor(Set, levels = c("Curated","Curated + Cantley")))
+  mutate(Set = factor(Set, levels = c("Curated","Curated + Specificity Atlas")))
 
 dark_fracs <- pairs_for_compare %>%
   mutate(is_dark = Kinase_class == "Understudied (Dark)") %>%
