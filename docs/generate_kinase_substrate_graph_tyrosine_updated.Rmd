@@ -1950,6 +1950,11 @@ kin_class <- all_kinases %>%
   transmute(Kinase_entrez = as.character(entrez_id),
             Kinase_class  = if_else(class_2019 == "Dark", "Understudied (Dark)", "Well-studied (Light)"))
 
+# kinase_list = read_xlsx(here("data/Comprehensive_Kinase_Simple.xlsx")) %>%
+#   mutate(Kinase_entrez = as.character(`Human Gene ID`)) %>%
+#   left_join(kin_class, by = "Kinase_entrez") %>%
+#   write_csv(here("data/Comprehensive_Kinase_Simple_with_class.csv"))
+
 curated_only_pairs <- combined_pairs %>%
   filter(Source %in% curated_sources) %>%
   distinct(Kinase, Kinase_entrez, Substrate, Substrate_entrez) %>%
