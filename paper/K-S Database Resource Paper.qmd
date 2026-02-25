@@ -43,7 +43,7 @@ affiliations:
     country: USA
   - id: aff4
     name: "Joint Department of Biomedical Engineering, University of North Carolina at Chapel Hill and North Carolina State University"
-    city: Chapel Hill
+    city: Chapel Hill / Raleigh
     state: North Carolina
     country: USA
   - id: aff5
@@ -61,9 +61,9 @@ format:
       layout: onecolumn
       cite-method: authoryear
   elsevier-html: default
-  docx:
+  elsevier-docx: 
     toc: false
-    number-sections: false    
+    number-sections: false
     highlight-style: github
 bibliography: ../refs/references.bib
 csl: https://www.zotero.org/styles/database

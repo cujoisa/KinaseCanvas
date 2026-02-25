@@ -11,3 +11,5 @@ renv/staging/
 *.fst
 
 /.quarto/
+
+/.luarc.json

@@ -17,3 +17,5 @@ contributes:
       number-sections: true
     html:
       theme: styles/elsevier.scss
+    docx:
+      reference-doc: elsevier.docx
