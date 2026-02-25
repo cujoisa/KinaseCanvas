@@ -1211,7 +1211,7 @@ color_dataset_labels <- function(labels) {
 
 p1A <- p_sankey_substrates +
   theme(legend.position = "none")+
-  labs(tag="B")
+  labs(tag="C")
 
 fig1B_df <- combined_pairs %>%
   group_by(Source) %>%
@@ -1245,7 +1245,7 @@ p1B <- ggplot(fig1B_df, aes(Source, Count, fill=Source))+
   theme(strip.background = element_rect(fill="grey90", color="black"),
         strip.text = element_text(face="bold"),
         axis.text.x = ggtext::element_markdown(angle = 45, hjust = 1))+
-  labs(x=NULL, y="Count", tag="C")
+  labs(x=NULL, y="Count", tag="B")
 
 deg_kin <- combined_pairs %>%
   filter(Source %in% c("Specificity Atlas","PhosphoSitePlus","EPSD","iPTMNet")) %>%
@@ -1277,7 +1277,7 @@ p1D <- ggplot(pairs_set, aes(x = Sets))+
   scale_x_upset(order_by = "freq", n_intersections = 20, sets = c("PhosphoSitePlus","EPSD","iPTMNet","Specificity Atlas"))+
   geom_text(stat='count', aes(label=after_stat(count)), vjust=-0.3, size=3.2)+
   scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
-  labs(y="# of Substrates", x=NULL, tag ="E")+
+  labs(y="# of Substrates", x=NULL, tag ="D")+
   theme_pubr()
 
 #Number kinases and substrates per family in the final set
@@ -1303,20 +1303,20 @@ p1E <- p1E_df %>%
     theme_pubr(x.text.angle = 45)+
   theme(strip.background = element_rect(fill="grey90", color="black"),
         strip.text = element_text(face="bold"))+
-  labs(x=NULL, y="Count", tag="D")
+  labs(x=NULL, y="Count", tag="E")
 
-# First row: make p1A taller
-row1 <- p1A
+# First row: Source counts (Panel B)
+row1 <- p1B
 
-# Second row: p1B and p1E, with p1E slightly wider
-row2 <- p1B + p1E + plot_layout(widths = c(1, 1.5))
+# Second row: Alluvial (Panel C)
+row2 <- p1A
 
-# Third row: p1D
-row3 <- p1D
+# Third row: UpSet (Panel D) and Family (Panel E)
+row3 <- p1D + p1E + plot_layout(widths = c(1, 1.5))
 
 # Combine with relative heights
 fig1 <- (row1 / row2 / row3) +
-  plot_layout(heights = c(1.7, 1, 1)) &
+  plot_layout(heights = c(1, 1.7, 1)) &
   theme(plot.tag = element_text(face = "bold"))
 fig1
 ggsave(here("figures/paper_figures/fig1.png"), fig1, width=544.3656/72*1.3, height=567.9596/72*1.3, dpi=500)
@@ -1456,11 +1456,11 @@ pS1C <- ggplot(s1c_pct, aes(Source, pct_func, fill = Source)) +
         strip.text       = element_text(face = "bold"))
 
 
-figS1 <- (pS1A | pS1C) / pS1B  +
+figS1 <- (pS1A | pS1B) / pS1C  +
   plot_annotation(tag_levels = 'A') &
   theme(plot.tag = element_text(face = "bold"))
 figS1
-ggsave(here("figures/paper_figures/figS1.png"), figS1, width=7, height=7, dpi=600)
+ggsave(here("figures/paper_figures/figS1.png"), figS1, width=9, height=7, dpi=600)
 
 ```
 
@@ -1811,7 +1811,7 @@ p3E_pairs <- ggplot(dark_fracs, aes(x = Set, y = frac_dark)) +
   labs(x = NULL, y = "% of KS pairs with\nDark Kinases") +
   theme_pubr()
 
-fig3 <- (p3A_coverage | p3B) / (p3D | p3E_pairs) +
+fig3 <- (p3D | p3E_pairs) / (p3A_coverage | p3B) +
   plot_annotation(tag_levels = 'A') &
   theme(plot.tag = element_text(face = "bold"))
 fig3
