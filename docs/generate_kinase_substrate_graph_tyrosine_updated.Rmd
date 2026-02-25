@@ -1789,7 +1789,7 @@ curated_only_pairs <- combined_pairs %>%
 proposed_pairs <- combined_pairs %>%
   filter(Source %in% c(curated_sources, "Specificity Atlas")) %>%
   distinct(Kinase, Kinase_entrez, Substrate, Substrate_entrez) %>%
-  mutate(Set = "Curated + Specificity Atlas")
+  mutate(Set = "Curated + Specificity")
 
 pairs_for_compare <- bind_rows(curated_only_pairs, proposed_pairs) %>%
   mutate(Kinase_entrez = as.character(Kinase_entrez)) %>%
