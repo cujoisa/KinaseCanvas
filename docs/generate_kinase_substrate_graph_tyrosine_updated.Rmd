@@ -1275,7 +1275,7 @@ pairs_set <- pairs_src_long %>%
 p1D <- ggplot(pairs_set, aes(x = Sets))+
   geom_bar(fill="#4C78A8", color="grey20")+
   scale_x_upset(order_by = "freq", n_intersections = 20, sets = c("PhosphoSitePlus","EPSD","iPTMNet","Specificity Atlas"))+
-  geom_text(stat='count', aes(label=after_stat(count)), vjust=-0.3, size=3.2)+
+  #geom_text(stat='count', aes(label=after_stat(count)), vjust=-0.3, size=3.2)+
   scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
   labs(y="# of Substrates", x=NULL, tag ="D")+
   theme_pubr()
@@ -1371,7 +1371,7 @@ pS1B <- ggplot(sites_set, aes(x = Sets))+
   geom_bar(fill="#4C78A8", color="grey20")+
   scale_x_upset(order_by = "freq", n_intersections = 20, sets = c("PhosphoSitePlus","EPSD","iPTMNet","Specificity Atlas"))+
   scale_y_continuous(labels=comma, expand=expansion(mult=c(0,0.1)))+ # 10% headroom
-  geom_text(stat='count', aes(label=after_stat(count)), vjust=-0.3, size=3.2)+
+  # geom_text(stat='count', aes(label=after_stat(count)), vjust=-0.3, size=3.2)+
   labs(y="Site count", x=NULL)+
   theme_pubr()
 
