@@ -59,6 +59,7 @@ library(cowplot)
 library(ggupset)
 library(ggalluvial)
 library(ggtext)
+library(magick)
 
 all_kinases = all_kinases
 
@@ -1244,7 +1245,7 @@ p1B <- ggplot(fig1B_df, aes(Source, Count, fill=Source))+
   theme_pubr()+
   theme(strip.background = element_rect(fill="grey90", color="black"),
         strip.text = element_text(face="bold"),
-        axis.text.x = ggtext::element_markdown(angle = 45, hjust = 1))+
+        axis.text.x = ggtext::element_markdown(angle = 30, hjust = 1))+
   labs(x=NULL, y="Count", tag="B")
 
 deg_kin <- combined_pairs %>%
@@ -1305,21 +1306,36 @@ p1E <- p1E_df %>%
         strip.text = element_text(face="bold"))+
   labs(x=NULL, y="Count", tag="E")
 
-# First row: Source counts (Panel B)
-row1 <- p1B
+# Load BioRender figure for Panel A
+# path: figures/paper_figures/KS resource figure.png
+biorender_img <- image_read(here("figures/paper_figures/KS resource figure.png"))
+p1_biorender <- ggplot() + 
+  draw_image(biorender_img) + 
+  theme_void() + 
+  labs(tag = "A")
+
+# First row: BioRender (Panel A) and Source counts (Panel B)
+row1 <- p1_biorender
+
+row2 <- p1B
 
 # Second row: Alluvial (Panel C)
-row2 <- p1A
+row3 <- p1A
 
 # Third row: UpSet (Panel D) and Family (Panel E)
-row3 <- p1D + p1E + plot_layout(widths = c(1, 1.5))
+row4 <- p1D + p1E + plot_layout(widths = c(1, 2))
 
 # Combine with relative heights
-fig1 <- (row1 / row2 / row3) +
-  plot_layout(heights = c(1, 1.7, 1)) &
+# BioRender image is 2038x688 (approx 3:1 width:height)
+# We adjust the relative height of row1 to 0.5 to keep it from taking too much vertical space,
+# and increase the ggsave height to compensate.
+fig1 <- (row1 / row2 / row3 / row4) +
+  plot_layout(heights = c(1.2, 1, 1.4, 0.8)) &
   theme(plot.tag = element_text(face = "bold"))
 fig1
-ggsave(here("figures/paper_figures/fig1.png"), fig1, width=544.3656/72*1.3, height=567.9596/72*1.3, dpi=500)
+# Original width ~10in, height ~10.2in. 
+# Adding Panel A requires more vertical space. Increasing height to 12.5in.
+ggsave(here("figures/paper_figures/fig1.png"), fig1, width=10, height=14, dpi=500)
 ```
 
 ## Figure S1
