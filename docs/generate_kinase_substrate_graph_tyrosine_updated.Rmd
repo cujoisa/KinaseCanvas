@@ -1976,4 +1976,9 @@ full_interaction_summary = full_interaction_data  %>%
     .groups = "drop"
   ) %>%
   write_csv(here("results/extended_kinome_network_summary.csv"))
+
+# Export supplemental datasets
+write_csv(cantley_feats, here("results/unfiltered_cantley_dataset.csv"))
+write_csv(subcellular_localization, here("results/subcellular_localization_mapping.csv"))
+write_csv(ochoa_fs_processed, here("results/ochoa_functional_scores.csv"))
 ```
