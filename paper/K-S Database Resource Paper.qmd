@@ -267,7 +267,7 @@ The KinaseCanvas interactive resource is available at https://cujoisa.github.io/
 :::
 
 ::: {#stab-3}
-**Phosphosite functional scores.** Pre-computed Ochoa functional scores for the human phosphoproteome. Provided as `ochoa_functional_scores.csv`.
+**Phosphosite functional scores.** Pre-computed functional scores for each reported phosphosite in the human phosphoproteome. Provided as `ochoa_functional_scores.csv`.
 :::
 
 ![**Comprehensive landscape and functional density of integrated phosphosites.** A) Distribution of unique phosphosite counts across individual database sources (PhosphoSitePlus, EPSD, iPTMnet) and the predicted specificity atlas, alongside the non-redundant integrated total. B) UpSet plot showing the intersection of unique phosphosites across the four primary sources. While many sites are unique to specific repositories, KinaseCanvas provides a unified framework that highlights the substantial expansion provided by integrating motif-based predictions. C) Percentage of phosphosites within each source designated as 'likely functional' (Ochoa functional score $\ge$ 0.5), demonstrating high functional density across both curated and predicted datasets.](../figures/paper_figures/figS1.png){#sfig-1}
