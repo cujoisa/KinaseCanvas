@@ -14,8 +14,8 @@ author:
       - ref: aff2
   - name: Xianlu L. Peng
     affiliations:
-      - ref: aff2
       - ref: aff1
+      - ref: aff2
   - name: Shawn M. Gomez
     affiliations:
       - ref: aff2
