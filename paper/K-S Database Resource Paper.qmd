@@ -60,6 +60,7 @@ format:
       formatting: preprint
       layout: onecolumn
       cite-method: authoryear
+      keep-tex: true
   elsevier-html: default
   elsevier-docx: 
     toc: false
