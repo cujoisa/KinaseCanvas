@@ -13,3 +13,5 @@ renv/staging/
 /.quarto/
 
 /.luarc.json
+
+**/*.quarto_ipynb

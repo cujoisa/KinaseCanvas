@@ -1,0 +1,44 @@
+---
+format:
+  pdf:
+    documentclass: article
+    geometry:
+      - margin=1in
+    fontsize: 11pt
+---
+
+Chinmaya Joisa  
+Lineberger Comprehensive Cancer Center  
+University of North Carolina at Chapel Hill  
+Chapel Hill, NC 27599  
+Chinmaya_Joisa@med.unc.edu | 919-527-8895  
+
+March 20, 2026  
+
+**Re: Submission of Database Resource Paper - "KinaseCanvas: An Integrated Resource for Curated and Novel Kinase-Substrate Interactions"**
+
+Dear Database Editors,
+
+We are pleased to submit our paper describing **KinaseCanvas**, an open-access resource that directly addresses a critical curation gap in the phosphoproteomics community by dramatically expanding the functional annotation of the understudied "dark" kinome.
+
+Currently, curated kinase databases are heavily skewed toward well-studied signaling hubs, while recent kinome-wide specificity atlases generate millions of raw predictions that are too noisy for direct interpretation. KinaseCanvas bridges this gap. By applying three stringent biological filters we successfully integrate empirical motif predictions with known interactions to yield a high-confidence and interpretable network.
+
+**Key Impacts and Discoveries:**
+
+* **Large Network Expansion:** We generate **13,048 novel kinase-substrate pairs** not present in existing databases, representing a 56% expansion of coverage (428 kinases and 4,614 substrates).
+
+* **Illuminating the Dark Kinome:** We triple the representation of understudied "dark" kinase interactions (from 3.4% to 11.2%), addressing a major priority in kinase biology.
+
+* **Biological Utility:** KinaseCanvas enables rapid hypothesis generation. For example, our integration highlights a novel ABL1→ARID1A phosphorylation event with actionable implications for cancer biology.
+
+**Resource Accessibility and Sustainability:**
+KinaseCanvas is FAIR-compliant and features an interactive web application (KinaseCanvas Explorer) for dynamic filtering by confidence and functional evidence. All underlying data (including >28 million raw specificity scores), code, and documentation are publicly available via GitHub (https://cujoisa.github.io/KinaseCanvas/). We are committed to 5+ years of automated updates and institutional maintenance. 
+
+Thank you for your time and consideration.
+
+Sincerely,
+
+**Chinmaya Joisa**   
+Postdoctoral Fellow  
+Lineberger Comprehensive Cancer Center  
+University of North Carolina at Chapel Hill

@@ -59,7 +59,7 @@ format:
       name: "Databases"
       formatting: preprint
       layout: onecolumn
-      cite-method: authoryear
+      cite-method: numeric
       keep-tex: true
   elsevier-html: default
   elsevier-docx: 
@@ -85,7 +85,7 @@ crossref:
 
 # Abstract
 
-Protein phosphorylation is a cornerstone of human physiology, regulating pathways critical for development, metabolism, and disease. While curated databases like PhosphoSitePlus and iPTMnet provide high-confidence kinase-substrate interactions (KSIs), they remain biased toward well-studied signaling nodes, leaving the vast majority of the "dark" kinome unconnected. Recent specificity atlases have begun to fill this gap by profiling motif specificities for nearly all human kinases, yet these raw predictions are often too dense and noisy for direct biological interpretation. Here, we present KinaseCanvas, an integrated resource that places these cutting-edge motif predictions within the context of high-confidence curated data. By applying stringent biological filters for subcellular co-localization and phosphosite functional importance, we distill millions of raw predictions into over 13,000 high-confidence novel interactions and integrate them with 8,365 curated predictions. This integration more than triples the coverage of understudied kinases and provides a context-aware framework for hypothesis generation, illuminating poorly characterized regions of the human kinome.
+Protein phosphorylation is a cornerstone of human physiology, regulating pathways critical for development, metabolism, and disease. While curated databases like PhosphoSitePlus and iPTMnet provide high-confidence kinase-substrate interactions (KSIs), they remain biased toward well-studied signaling nodes, leaving the vast majority of the "dark" kinome unconnected. Recent specificity atlases have begun to fill this gap by profiling motif specificities for nearly all human kinases, yet these raw predictions are often too dense and noisy for direct biological interpretation. Here, we present KinaseCanvas, an integrated resource that places these cutting-edge motif predictions within the context of high-confidence curated data. By applying stringent biological filters for subcellular co-localization and phosphosite functional importance, we distill millions of raw predictions into ~13,000 high-confidence novel interactions and integrate them with 8,365 curated predictions. This integration more than triples the coverage of understudied kinases and provides a context-aware framework for hypothesis generation, illuminating poorly characterized regions of the human kinome.
 
 Database URL: https://cujoisa.github.io/KinaseCanvas/
 
@@ -93,9 +93,9 @@ Database URL: https://cujoisa.github.io/KinaseCanvas/
 
 Protein phosphorylation is a pervasive regulatory mechanism that controls virtually every major cellular process. It has been estimated that roughly one-third of all eukaryotic proteins are phosphorylated in at least one cellular context, and that the human proteome may harbor on the order of $10^4-10^5$ distinct phosphosites [@Iakoucheva2004-ef; @Vlastaridis2017-hz]. Mapping which phosphorylation enzyme (kinase) modifies which protein (substrate) is therefore essential for understanding signal transduction, drug response and disease mechanisms, but this map remains far from complete. Over the past two decades, substantial effort has been put into building reference resources for kinase-substrate interactions (KSIs). Databases such as PhosphoSitePlus, EPSD and iPTMnet curate experimentally observed phosphosites and, where possible, annotate the upstream kinases based on low-throughput biochemistry, targeted phosphoproteomics and manual literature curation [@Hornbeck2015-dg; @Keshava-Prasad2009-yc; @Huang2018-bq]. Additional resources including Phospho.ELM, PhosphoNetworks and SIGNOR provide complementary KSI annotations derived from both focused and high-throughput studies [@Dinkel2011-pp; @Hu2014-dp; @Licata2020-fm]. However, these curated datasets are heavily skewed towards a small subset of well-studied kinases, substrates and pathways, leaving large regions of the human kinome (including understudied “dark” kinases) sparsely connected or completely unmapped [@Berginski2021-so].
 
-In parallel, unbiased experimental and computational approaches have recently produced near-comprehensive “specificity atlases” for the human kinome. Using peptide-library based specificity profiling, Johnson et al. systematically determined optimal substrate motifs for most human serine/threonine kinases and used these motifs to score reported human phosphosites [@Johnson2023-ai]. More recently, Yaron-Barir et al. generated an analogous atlas for the human tyrosine kinome [@Yaron-Barir2024-lv]. Together, these resources greatly expand the theoretical kinase-phosphosite search space: for each phosphosite, nearly all known kinases receive a motif-based compatibility score, yielding tens of millions of candidate KSIs. While these atlases have already been shown to recover known signaling relationships and highlight kinase dysregulation in disease contexts [@Johnson2023-ai; @Yaron-Barir2024-lv], their full potential as a systems-level KSI prior remains underexploited. Current visualization tools, such as the Kinase Library @Obenauer2003-fc focus on sequence-level scoring and do not support network-based exploration. Furthermore, while methods like Kinase-Substrate Enrichment Analysis (KSEA) are widely used to infer kinase activity, they typically rely on curated databases or require manual integration of specificity matrices.
+In parallel, unbiased experimental and computational approaches have recently produced near-comprehensive “specificity atlases” for the human kinome. Using peptide-library based specificity profiling, Johnson et al. systematically determined optimal substrate motifs for most human serine/threonine kinases and used these motifs to score reported human phosphosites [@Johnson2023-ai]. More recently, Yaron-Barir et al. generated an analogous atlas for the human tyrosine kinome [@Yaron-Barir2024-lv]. Together, these resources greatly expand the theoretical kinase-phosphosite search space: for each phosphosite, nearly all known kinases receive a motif-based compatibility score, yielding tens of millions of candidate KSIs. While these atlases have already been shown to recover known signaling relationships and highlight kinase dysregulation in disease contexts [@Johnson2023-ai; @Yaron-Barir2024-lv], their full potential as a systems-level KSI prior remains underexploited. Current visualization tools, such as the Kinase Library @Obenauer2003-fc focus on site-level scoring and lack interactive network visualization of kinase-substrate relationships. Furthermore, while methods like Kinase-Substrate Enrichment Analysis (KSEA) are widely used to infer kinase activity, they typically rely on curated databases or require manual integration of specificity matrices.
 
-Moreover, profiling thousands of phosphosites against hundreds of kinases generates an enormous combinatorial prediction space: most sites have multiple plausible motif matches, and naïve motif scanning across the phosphoproteome leads to high false-positive rates and spurious kinase-substrate couplings [@Miller2008-ey; @Linding2007-rk]. A major challenge is therefore that motif-based scores alone do not ensure that a kinase-substrate pair is physically or functionally plausible *in vivo*. Kinases and substrate pairs must co-localize in the cell, be expressed in the same tissues or conditions, and the modified site itself must be known or predicted to have some functional consequence. To address this, recent studies have demonstrated the value of integrating orthogonal data layers. In particular, Ochoa et al. developed a machine-learning approach that aggregates features ranging from evolutionary conservation and structural constraints to regulation across thousands of phosphoproteomics experiments. Their functional score effectively discriminates regulatory sites from non-functional 'noise,' substantially improving the biological interpretability of phosphoproteomic datasets [@Ochoa2020-og; @Higgins2023-jf]. When combined with orthogonal constraints such as subcellular localization, these functional indicators could provide a powerful filter for identifying physiologically relevant kinase-substrate relationships.
+Moreover, profiling thousands of phosphosites against hundreds of kinases generates an enormous combinatorial prediction space: most sites have multiple plausible motif matches, and naïve motif scanning across the phosphoproteome leads to high false-positive rates and spurious kinase-substrate couplings [@Miller2008-ey; @Linding2007-rk]. A major challenge is therefore that motif-based scores alone do not ensure that a kinase-substrate pair is physically or functionally plausible. Kinases and substrate pairs must co-localize in the cell, be expressed in the same tissues or conditions, and the modified site itself must be known or predicted to have some functional consequence. To address this, recent studies have demonstrated the value of integrating orthogonal data layers. In particular, Ochoa et al. developed a machine-learning approach that aggregates features ranging from evolutionary conservation and structural constraints to regulation across thousands of phosphoproteomics experiments. Their functional score effectively discriminates regulatory sites from non-functional 'noise,' substantially improving the biological interpretability of phosphoproteomic datasets [@Ochoa2020-og; @Higgins2023-jf]. When combined with orthogonal constraints such as subcellular localization, these functional indicators could provide a powerful filter for identifying physiologically relevant kinase-substrate relationships.
 
 Here, we build on these advances to construct an integrated resource of human kinase-substrate relationships that combines literature-curated KSIs with motif-based predictions from the serine/threonine and tyrosine kinome specificity atlases. We apply a set of simple but stringent biological filters based on (i) motif rank, (ii) subcellular co-localization using the Human Protein Atlas (HPA), and (iii) a data-driven phosphosite functional score [@Ochoa2020-og; @Invergo2020-kl; @Johnson2023-ai; @Thul2017-cl]. An overview of the data integration and filtering strategy is shown in @fig-1(A), including an example TRAF2 and NCK-interacting protein kinase (TNIK)-centred subnetwork. The resulting network is accessible through the KinaseCanvas Explorer, an interactive web application that allows users to query specific kinases or substrates, visualize their local interaction neighbourhoods, and seamlessly filter connections based on curation status or functional evidence. This unified framework enables researchers to distinguish novel from previously reported interactions and to systematically assess coverage of both well-studied and dark kinases.
 
@@ -162,18 +162,18 @@ All data integration, filtering and visualisation were performed in R using the 
 The final resource is organised into two primary tables:
 
 1.  **Kinase-substrate pair table.** This table lists each unique kinase–substrate pair (gene symbols), with columns indicating:
-    -   whether the pair is supported by curated databases, motif-based predictions, or both;
-    -   the number, identity and directionality of phosphosites linking the kinase and substrate;
-    -   source databases and PMIDs for curated evidence;
-    -   motif-related annotations (serine/threonine vs. tyrosine atlas);
-    -   contextual evidence flags (co-localization, functional score above threshold); and
-    -   dark/light status of the kinase.
+    - whether the pair is supported by curated databases, motif-based predictions, or both;
+    - the number, identity and directionality of phosphosites linking the kinase and substrate;
+    - source databases and PMIDs for curated evidence;
+    - motif-related annotations (serine/threonine vs. tyrosine atlas);
+    - contextual evidence flags (co-localization, functional score above threshold); and
+    - dark/light status of the kinase.
 2.  **Phosphosite table.** This table lists each unique substrate site (UniProt accession, residue, position) together with its assigned kinases and annotations, including:
-    -   motif-based scores and ranks for all compatible kinases;
-    -   flags for high-confidence motif assignments (top 10%);
-    -   phosphosite functional score (continuous) and functional classification ($\ge$ 0.5 vs. $\le$ 0.5);
-    -   curated vs. predicted status
-    -   basic protein metadata.
+    - motif-based scores and ranks for all compatible kinases;
+    - flags for high-confidence motif assignments (top 10%);
+    - phosphosite functional score (continuous) and functional classification ($\ge$ 0.5 vs. $\le$ 0.5);
+    - curated vs. predicted status
+    - basic protein metadata.
 
 Across all sources, the integrated resource covers 428 kinases and 4,614 substrate proteins (@fig-1(B)). PhosphoSitePlus and EPSD contribute the largest numbers of substrates, while the specificity atlas brings in additional substrates not present in curated databases (@fig-1(B)). At the site level, we catalogue 15,644 unique phosphosites across PhosphoSitePlus, EPSD, iPTMnet and the specificity atlas (@sfig-1(A)), with substantial but incomplete overlap between resources (@sfig-1(B)).
 
@@ -185,7 +185,7 @@ Alt text: Comparison of kinase coverage and substrate counts between curated dat
 
 ## Functional and family-level properties
 
-Application of the phosphosite functional score retains a large fraction of sites as likely functional, particularly for tyrosine residues and for sites drawn from iPTMnet (@fig-2(B) and @sfig-1(C)). After combining motif, co-localization and functional filters, the majority of retained substrates pass through all steps of the pipeline in @fig-1(C), indicating that high-confidence predictions are not dominated by poorly annotated sites or by non-co-localized pairs.
+Application of the phosphosite functional score retains a large fraction of sites as likely functional, particularly for tyrosine residues and for sites drawn from iPTMnet (@fig-2(B) and @sfig-1(C)). After combining motif, co-localization, and functional filters, the majority of retained substrates pass through all steps of the pipeline in @fig-1(C), indicating that high-confidence predictions are not dominated by poorly annotated sites or by non-co-localized pairs.
 
 Kinase and substrate coverage varies across kinase families (@fig-1(E)). TK and CMGC kinases are most numerous, whereas AGC, CAMK and “other” families contribute comparable numbers of kinases but differ in substrate counts (@fig-1(E)). When focusing on novel substrates, dark kinase families show particularly high fractions of predicted-only substrates: “other” and atypical kinases have 66.5% and 61.0% of their substrates classified as novel, respectively, while CMGC and CAMK kinases each have \~47% novel substrates (@fig-3(A)). Incorporating the specificity atlas more than triples the fraction of kinase–substrate pairs involving dark kinases, from 3.4% in curated databases alone to 11.2% in the integrated network (@fig-3(B)), underscoring the value of motif-based predictions for illuminating poorly studied regions of the kinome.
 
@@ -193,13 +193,15 @@ Kinase and substrate coverage varies across kinase families (@fig-1(E)). TK and 
 
 To make these integrated data accessible to the broader community, we developed KinaseCanvas Explorer, an interactive web application that enables users to query, filter, and visualize the kinase-substrate network. The explorer provides a unified interface where users can seed the graph with a kinase or substrate of interest to generate a local interaction neighbourhood (see interface in @fig-4(A) and representative output in @fig-4(B)). Key features include:
 
--   **Dynamic Filtering:** Users can toggle between viewing all interactions or restricting the view to curated pairs only. Additionally, a "Functional sites only" filter allows users to focus on high-confidence edges supported by phosphosite functional scores.
--   **Visual Distinctions:** Edges are visually encoded to distinguish between curated (known) and predicted (novel) interactions, as well as between likely functional and other sites.
--   **Graph Layouts:** Multiple layout algorithms (e.g., fCoSE, Concentric) are available to optimize the visualization of dense networks.
--   **Export Options:** High-quality network images can be exported as PNG or PDF files for publication, and the underlying edge data can be downloaded as CSV files for further analysis.
--   **Link-outs:** Nodes are linked directly to UniProt, facilitating rapid access to detailed protein information.
+- **Dynamic Filtering:** Users can toggle between viewing all interactions or restricting the view to curated pairs only. Additionally, a "Functional sites only" filter allows users to focus on high-confidence edges supported by phosphosite functional scores.
+- **Visual Distinctions:** Edges are visually encoded to distinguish between curated (known) and predicted (novel) interactions, as well as between likely functional and other sites.
+- **Graph Layouts:** Multiple layout algorithms (e.g., fCoSE, Concentric) are available to optimize the visualization of dense networks.
+- **Export Options:** High-quality network images can be exported as PNG or PDF files for publication, and the underlying edge data can be downloaded as CSV files for further analysis.
+- **Link-outs:** Nodes are linked directly to UniProt, facilitating rapid access to detailed protein information.
 
-![**Overview of the Kinase-Substrate Resource Explorer.** A) Banner with summary statistics and preliminary instructions for explorer use B) Sample graph using the kinase TNIK (TRAF2 and NCK interacting kinase) as a representative seed. The central viewport displays an interactive graph of known and predicted substrates. Edges are styled to differentiate between curated (dark) and predicted (light) interactions, with solid lines indicating likely functional sites and dotted lines representing interactions of unknown functional impact](../figures/paper_figures/fig4.png){#fig-4}
+![**Overview of the Kinase-Substrate Resource Explorer.** A) Banner with summary statistics and preliminary instructions for explorer use B) Sample graph using the kinase TNIK (TRAF2 and NCK interacting kinase) as a representative seed. The central viewport displays an interactive graph of known and predicted substrates. Edges are styled to differentiate between curated (dark colored) and predicted (light colored) interactions, with solid lines indicating likely functional sites and dotted lines representing interactions of unknown functional impact](../figures/paper_figures/fig4.png){#fig-4}
+
+Alt text: Interactive explorer interface displaying kinase-substrate interaction network graph with legend differentiating curated (dark colored) versus predicted (light colored) interactions and functional significance of phosphosites.
 
 By combining intuitive visualization with robust filtering, the KinaseCanvas Explorer empowers researchers to rapidly generate hypotheses about kinase function and substrate regulation in a context-aware manner.
 
@@ -248,6 +250,14 @@ Finally, there is an opportunity to exploit the resource in disease-focused stud
 # Conclusion
 
 In summary, we present a resource that substantially broadens the current landscape of human kinase–substrate relationships by integrating empirical specificity atlases with curated phosphorylation databases, subcellular localization and phosphosite functional scores. The integrated network more than doubles the number of candidate KSIs, markedly increases coverage for dark kinases, and enriches for sites with features indicative of regulatory function (@fig-1(A); @fig-2(A); @fig-3(C); @sfig-1(A)). By design, the predicted interactions are hypotheses that require experimental validation, but they provide a focused and context-aware starting point for dissecting signalling pathways, particularly in areas of the kinome that have received little prior attention. Bridging the gap between large-scale phosphoproteomic data and specific kinase assignments is essential for mechanistic understanding and for translating signalling knowledge into therapeutic strategies [@Hornbeck2015-dg; @Keshava-Prasad2009-yc; @Ochoa2020-og; @Wang2020-hj; @Sekar2024-nx]; our work represents a step toward that goal.
+
+# Funding
+
+This work was supported by the National Institutes of Health \[R01 CA288145 to J.J.Y.; U01 CA274298 to J.J.Y. and X.L.P.; P50 CA257911 to J.J.Y. and X.L.P.; U24 CA211000 to X.L.P. and J.J.Y.\].
+
+# Conflict of Interest
+
+The authors declare no competing interests.
 
 # Acknowledgements
 
