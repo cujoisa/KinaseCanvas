@@ -1640,6 +1640,9 @@ pal <- list(
   novel   = "#54A24B",
   line    = "grey20"
 )
+
+curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet")
+
 # 0) Identify overlapping kinases
 kinase_by_src <- combined_pairs %>%
   distinct(Kinase, Source)
@@ -1682,7 +1685,7 @@ p3A_coverage <- ggplot(cov_tbl, aes(x = metric, y = count, fill = metric)) +
     "text", x = 1.5, y = max(cov_tbl$count) * 1.2,
     label = {
       df <- tidyr::pivot_wider(cov_tbl, names_from = metric, values_from = count)
-      inc <- df$`Novel pairs` / df$`Curated pairs`
+      inc <- df$`Novel pairs` / (df$`Curated pairs` + df$`Novel pairs`)
       paste0("Increase = +", scales::percent(inc, accuracy = 0.1))
     },
     size = 3.3, fontface = 2
