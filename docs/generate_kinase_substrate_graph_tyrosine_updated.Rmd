@@ -46,6 +46,7 @@ library(AnnotationDbi)
 library(data.table)
 library(fastmatch) 
 library(Biostrings)
+library(httr2)
 library(tidytext)
 
 library(tidygraph)
@@ -207,9 +208,24 @@ conflicts_prefer(dplyr::desc)
 
     ochoa = read_excel(here("data/41587_2019_344_MOESM4_ESM.xlsx"), sheet = "annotated_phosphoproteome")
 
-    kinase_list = read_excel(here("data/Comprehensive_Kinase_Simple.xlsx")) %>%
-      select(Kinase = Gene, Kinase_Uniprot_ID = `Human Uniprot`, Family = `Kinase Family`) %>%
+    kinase_list_ref = read_excel(here("data/Comprehensive_Kinase_Simple.xlsx")) %>%
+      select(Kinase = Gene, Kinase_Uniprot_ID = `Human Uniprot`, Family = `Kinase Family`,
+             ref_entrez = `Human Gene ID`) %>%
       distinct()
+
+    # The kinome table uses some superseded symbols (ICK, PRPF4B, COL4A3BP, STK19),
+    # whereas the pipeline reports current HGNC symbols (CILK1, PRP4K, CERT1, WHR1).
+    # Add a row under the current symbol as well, so family lookups by symbol keep
+    # working for renamed genes.
+    kinase_current_symbol <- AnnotationDbi::mapIds(
+      org.Hs.eg.db, keys = as.character(kinase_list_ref$ref_entrez), column = "SYMBOL",
+      keytype = "ENTREZID", multiVals = "first")
+    kinase_list <- kinase_list_ref %>%
+      mutate(current_symbol = unname(kinase_current_symbol[as.character(ref_entrez)])) %>%
+      { bind_rows(select(., Kinase, Kinase_Uniprot_ID, Family),
+                  filter(., !is.na(current_symbol), current_symbol != Kinase) %>%
+                    transmute(Kinase = current_symbol, Kinase_Uniprot_ID, Family)) } %>%
+      distinct(Kinase, .keep_all = TRUE)
 
 ```    
 
@@ -219,32 +235,83 @@ conflicts_prefer(dplyr::desc)
 # Helper: normalize UniProt accessions (drop isoform suffix)
 norm_uniprot <- function(x) str_replace(x, "-\\d+$", "")
 
-# Build canonical symbol map for a vector of gene-like names
+# Build canonical symbol map for a vector of gene-like names.
+#
+# NOTE: the previous version of this helper fell back to an ALIAS -> ENTREZ
+# lookup and kept every hit. Because many legacy protein names are aliases of
+# several genes, that one-to-many join silently duplicated a protein's data onto
+# unrelated genes. For example "SMAP" is an alias of C11orf58 (UniProt O00193),
+# of KIFAP3 ("Smg GDS-associated protein") and of BRD8, so a single O00193
+# phosphosite was emitted three times under three different substrate names
+# while keeping O00193's residue numbering. We now accept an ALIAS only when it
+# resolves to exactly one gene, and let callers resolve the remainder from the
+# UniProt accession (see resolve_by_uniprot()).
 build_symbol_map <- function(x_symbols) {
   x_symbols <- unique(na.omit(x_symbols))
-  # 1) direct SYMBOL→ENTREZ
-  m1 <- tryCatch(bitr(x_symbols, fromType="SYMBOL", toType="ENTREZID", OrgDb=org.Hs.eg.db), error = function(e) NULL)
-  if (is.null(m1)) m1 <- tibble::tibble(SYMBOL=character(), ENTREZID=character())
 
-  # 2) remaining via ALIAS→ENTREZ
+  # 1) direct SYMBOL -> ENTREZ
+  m1 <- suppressWarnings(tryCatch(
+    bitr(x_symbols, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db),
+    error = function(e) NULL))
+  if (is.null(m1)) m1 <- tibble::tibble(SYMBOL = character(), ENTREZID = character())
+  # a current symbol should be unique; drop it if it is not
+  m1 <- m1 %>% add_count(SYMBOL) %>% filter(n == 1) %>% select(-n)
+
+  # 2) remaining via ALIAS -> ENTREZ, UNAMBIGUOUS MATCHES ONLY
   left <- setdiff(x_symbols, m1$SYMBOL)
-  m2 <- if (length(left)) tryCatch(bitr(left, fromType="ALIAS", toType="ENTREZID", OrgDb=org.Hs.eg.db), error = function(e) NULL) else NULL
-  if (is.null(m2)) m2 <- tibble::tibble(ALIAS=character(), ENTREZID=character()) else m2 <- rename(m2, SYMBOL=ALIAS)
+  m2 <- if (length(left)) suppressWarnings(tryCatch(
+    bitr(left, fromType = "ALIAS", toType = "ENTREZID", OrgDb = org.Hs.eg.db),
+    error = function(e) NULL)) else NULL
+  if (is.null(m2)) {
+    m2 <- tibble::tibble(SYMBOL = character(), ENTREZID = character())
+  } else {
+    m2 <- m2 %>%
+      rename(SYMBOL = ALIAS) %>%
+      distinct(SYMBOL, ENTREZID) %>%
+      add_count(SYMBOL) %>%
+      filter(n == 1) %>%          # <- the fix: reject ambiguous aliases
+      select(-n)
+  }
 
   mm <- bind_rows(m1, m2) %>% distinct()
 
   # canonical SYMBOL for each ENTREZ
-  can_sym <- AnnotationDbi::select(org.Hs.eg.db, keys=unique(mm$ENTREZID), keytype="ENTREZID", columns="SYMBOL")
-  left_join(mm, can_sym, by="ENTREZID") %>%
+  can_sym <- suppressMessages(AnnotationDbi::select(
+    org.Hs.eg.db, keys = unique(mm$ENTREZID), keytype = "ENTREZID", columns = "SYMBOL"))
+  left_join(mm, can_sym, by = "ENTREZID") %>%
     transmute(input_symbol = SYMBOL.x, ENTREZID, SYMBOL = SYMBOL.y) %>%
     distinct()
 }
 
+# Resolve gene identity from UniProt accessions, keeping only accessions that
+# map to exactly one gene. Used as the second line of defence for substrates
+# whose atlas gene label is an obsolete or ambiguous alias.
+resolve_by_uniprot <- function(accessions) {
+  accessions <- unique(na.omit(norm_uniprot(accessions)))
+  if (!length(accessions)) {
+    return(tibble::tibble(Substrate_Uniprot_ID = character(),
+                          ENTREZID = character(), SYMBOL = character()))
+  }
+  suppressMessages(AnnotationDbi::select(
+    org.Hs.eg.db, keys = accessions, keytype = "UNIPROT",
+    columns = c("ENTREZID", "SYMBOL"))) %>%
+    filter(!is.na(ENTREZID), !is.na(SYMBOL)) %>%
+    distinct(UNIPROT, ENTREZID, SYMBOL) %>%
+    add_count(UNIPROT) %>%
+    filter(n == 1) %>%            # unambiguous accessions only
+    select(-n) %>%
+    rename(Substrate_Uniprot_ID = UNIPROT)
+}
+
 # 1) Collect all kinase/substrate names we’ll need to harmonize
+# NB: both atlas files carry a `median_percentile` summary column that matches the
+# `_(rank|percentile)$` pattern. It is not a kinase; leaving it in previously
+# created a pseudo-kinase named "median" whose rows survived into the figure
+# inputs as `Kinase = NA`. Exclude it explicitly here and in the pivot below.
 kinases_cantley <- colnames(cantley_atlas %>% select(matches("_(rank|percentile)$"))) %>%
-  str_replace("(_percentile|_rank)$","") %>% unique()
+  str_replace("(_percentile|_rank)$","") %>% setdiff("median") %>% unique()
 kinases_tyr     <- colnames(cantley_tyrosine %>% select(matches("_(rank|percentile)$"))) %>%
-  str_replace("(_percentile|_rank)$","") %>% unique()
+  str_replace("(_percentile|_rank)$","") %>% setdiff("median") %>% unique()
 #kinases_psp     <- unique(phosphosite_plus$KINASE)
 genes_hpa       <- unique(subcellular_localization$`Gene name`)
 #kinases_pselm   <- unique(phospho_elm %>% filter(!str_detect(kinases, "group")) %>% pull(kinases))
@@ -262,6 +329,138 @@ subs_kinet = kinet %>% filter(!is.na(`Substrate Name`)) %>% pull(`Substrate Name
 symmap_kinase <- build_symbol_map(unique(c(kinases_cantley, kinases_tyr, genes_hpa, kinases_kinet)))
 symmap_subs   <- build_symbol_map(unique(c(subs_cantley, genes_hpa, subs_kinet)))
 
+# 3) Authoritative resolver for the specificity-atlas kinase column names.
+#
+# The atlases label kinase columns with Manning/CORAL-style short names
+# ("P38A", "CK1D", "ABL", "P90RSK", and "*_TYR" variants for kinases profiled in
+# the tyrosine atlas) rather than HGNC symbols. Resolving those through
+# org.Hs.eg.db is unsafe in both directions: 51 of the 396 atlas names have no
+# SYMBOL match at all (and were previously dropped silently), while several
+# short names are ambiguous aliases -- "ABL" resolves to ABL1, MTTP and DSP-AS1,
+# so a tyrosine-kinase profile was being attributed to a lipid-transfer protein
+# and an antisense RNA. We resolve atlas names against the curated kinome table
+# (CORAL.ID, then unambiguous Alias, then HGNC symbol), fall back to an explicit
+# override list, and stop the build if anything is still unmapped.
+atlas_kinase_overrides <- tibble::tribble(
+  ~key,      ~Kinase,
+  "MKK4",    "MAP2K4",
+  "MKK6",    "MAP2K6",
+  "MKK7",    "MAP2K7",
+  "P90RSK",  "RPS6KA1",
+  "ABL",     "ABL1",
+  "ARG",     "ABL2",
+  "ETK",     "BMX",
+  # Manning/CORAL alpha-kinase numbering does not follow HGNC numbering:
+  # CORAL "AlphaK3" is ALPK1 (an active kinase), not ALPK3 (a pseudokinase).
+  "ALPHAK3", "ALPK1"
+)
+
+kinase_ref <- read_excel(here("data/Comprehensive_Kinase_Simple.xlsx"),
+                         .name_repair = "unique_quiet")
+
+# The curated kinome table is authoritative for the kinases it lists. org.Hs.eg.db
+# is not, for a handful of them: it lists two Entrez IDs for the symbol "TEC", so
+# build_symbol_map() discards it, and it no longer knows ICK / PRPF4B / STK19 /
+# COL4A3BP under their old names. Left alone, those kinases reach the curated layer
+# with no Entrez ID (or a different symbol from the atlas layer), which breaks every
+# downstream join. Override the map for exactly the names the table lists.
+kinome_symbol_map <- kinase_ref %>%
+  transmute(input_symbol = as.character(Gene), ENTREZID = as.character(`Human Gene ID`)) %>%
+  filter(!is.na(input_symbol), !is.na(ENTREZID)) %>%
+  distinct(input_symbol, .keep_all = TRUE)
+kinome_current_symbol <- AnnotationDbi::mapIds(
+  org.Hs.eg.db, keys = kinome_symbol_map$ENTREZID, column = "SYMBOL",
+  keytype = "ENTREZID", multiVals = "first")
+kinome_symbol_map <- kinome_symbol_map %>%
+  mutate(SYMBOL = unname(kinome_current_symbol[ENTREZID])) %>%
+  filter(!is.na(SYMBOL))
+kinome_map_changes <- symmap_kinase %>%
+  inner_join(kinome_symbol_map, by = "input_symbol", suffix = c("", "_ref")) %>%
+  filter(ENTREZID != ENTREZID_ref)
+if (nrow(kinome_map_changes)) {
+  message("Kinome table overrides org.Hs.eg.db for ", nrow(kinome_map_changes), " name(s): ",
+          paste0(kinome_map_changes$input_symbol, " (", kinome_map_changes$ENTREZID, " -> ",
+                 kinome_map_changes$ENTREZID_ref, ")", collapse = ", "))
+}
+symmap_kinase <- bind_rows(
+  anti_join(symmap_kinase, kinome_symbol_map, by = "input_symbol"),
+  kinome_symbol_map) %>%
+  distinct()
+
+kinase_key_map <- bind_rows(
+  atlas_kinase_overrides %>% transmute(key = toupper(key), Kinase, pri = 0L),
+  kinase_ref %>% transmute(key = toupper(str_trim(Gene)), Kinase = Gene, pri = 1L),
+  kinase_ref %>% transmute(key = toupper(str_trim(as.character(CORAL.ID))),
+                           Kinase = Gene, pri = 2L),
+  kinase_ref %>%
+    transmute(Alias = as.character(Alias), Kinase = Gene) %>%
+    separate_rows(Alias, sep = "[,;|]\\s*") %>%
+    transmute(key = toupper(str_trim(Alias)), Kinase, pri = 3L) %>%
+    add_count(key) %>% filter(n == 1) %>% select(-n),
+  # last resort: org.Hs.eg.db, but only via build_symbol_map(), which has
+  # already discarded any alias resolving to more than one gene. This covers
+  # widely-used trivial names (MEK1 -> MAP2K1, HER2 -> ERBB2, PERK -> EIF2AK3,
+  # VEGFR2 -> KDR, ...) that the curated kinome table does not list.
+  symmap_kinase %>% transmute(key = toupper(input_symbol), Kinase = SYMBOL, pri = 4L)
+) %>%
+  filter(!is.na(key), key != "", key != "NA", !is.na(Kinase)) %>%
+  arrange(pri) %>%
+  distinct(key, .keep_all = TRUE) %>%
+  select(key, Kinase)
+
+kinase_ref_ids <- kinase_ref %>%
+  transmute(Kinase = Gene, ref_entrez = as.character(`Human Gene ID`)) %>%
+  filter(!is.na(Kinase), !is.na(ref_entrez)) %>%
+  distinct(Kinase, .keep_all = TRUE)
+
+resolve_atlas_kinases <- function(atlas_names) {
+  out <- tibble::tibble(Kinase_input = unique(na.omit(atlas_names))) %>%
+    mutate(key = toupper(str_remove(Kinase_input, "_TYR$"))) %>%
+    left_join(kinase_key_map, by = "key")
+  unmapped <- out %>% filter(is.na(Kinase)) %>% pull(Kinase_input)
+  if (length(unmapped)) {
+    stop("Unmapped specificity-atlas kinase names (add to atlas_kinase_overrides): ",
+         paste(sort(unmapped), collapse = ", "))
+  }
+  # Entrez ID: the curated kinome table's `Human Gene ID` is authoritative (it is
+  # complete, and covers names such as TEC -- ambiguous in org.Hs.eg.db, which
+  # lists two Entrez IDs for it -- and ICK/PRPF4B, which org.Hs.eg.db now knows
+  # only under their current symbols CILK1/PRP4K). org.Hs.eg.db is the fallback
+  # for names the table does not list.
+  out <- out %>%
+    left_join(kinase_ref_ids, by = "Kinase") %>%
+    left_join(symmap_kinase %>% distinct(SYMBOL, ENTREZID),
+              by = c("Kinase" = "SYMBOL")) %>%
+    mutate(Kinase_entrez = coalesce(ref_entrez, ENTREZID)) %>%
+    distinct(Kinase_input, .keep_all = TRUE)
+
+  n_disagree <- sum(!is.na(out$ref_entrez) & !is.na(out$ENTREZID) &
+                      out$ref_entrez != out$ENTREZID)
+  if (n_disagree > 0) {
+    message("WARNING: ", n_disagree, " atlas kinase(s) where the kinome table and ",
+            "org.Hs.eg.db disagree on the Entrez ID; the kinome table was used.")
+  }
+  if (anyNA(out$Kinase_entrez)) {
+    stop("Atlas kinase(s) with no Entrez ID: ",
+         paste(sort(out$Kinase_input[is.na(out$Kinase_entrez)]), collapse = ", "))
+  }
+
+  # Report every gene under its current HGNC symbol, so that the atlas layer and
+  # the curated layer (which is resolved through org.Hs.eg.db) always agree on the
+  # symbol for a given gene -- otherwise the same kinase-substrate pair can appear
+  # twice under an old and a new symbol (e.g. ICK / CILK1, PRPF4B / PRP4K).
+  current_symbol <- AnnotationDbi::mapIds(
+    org.Hs.eg.db, keys = unique(out$Kinase_entrez), column = "SYMBOL",
+    keytype = "ENTREZID", multiVals = "first")
+  out %>%
+    mutate(Kinase = dplyr::coalesce(unname(current_symbol[Kinase_entrez]), Kinase)) %>%
+    transmute(Kinase_input, Kinase, Kinase_entrez)
+}
+
+atlas_kinase_map <- resolve_atlas_kinases(c(kinases_cantley, kinases_tyr))
+message("Resolved ", nrow(atlas_kinase_map), " specificity-atlas kinase names to ",
+        dplyr::n_distinct(atlas_kinase_map$Kinase), " distinct genes.")
+
 # # 3) Normalize UniProt IDs early
 # phosphosite_plus <- phosphosite_plus %>%
 #   mutate(SUB_ACC_ID = norm_uniprot(SUB_ACC_ID))
@@ -270,6 +469,28 @@ symmap_subs   <- build_symbol_map(unique(c(subs_cantley, genes_hpa, subs_kinet))
 
 ### Weights and Helper Functions
 ```{r}
+# ── Tunable thresholds ─────────────────────────────────────────────────────────
+# Motif support: a site must rank in the top 10% of all phosphosites scored for
+# a given kinase, i.e. at or above the 90th percentile. This is the value stated
+# in the manuscript and matches the usage in Johnson et al. 2023 and
+# Yaron-Barir et al. 2024. Sensitivity across the 80th-99th percentiles is
+# reported separately (docs/revision_analyses.qmd).
+motif_percentile_cutoff <- 90
+
+# Phosphosite functional score: Ochoa et al. 2020 report that at a 0.5 cut-off
+# "around 10% of the phosphoproteome remains with 50% of the true positive
+# phosphosites recovered, suggesting that this is a useful cut-off for an
+# initial prioritization". Sensitivity across 0.3-0.7 is reported separately.
+functional_score_cutoff <- 0.5
+
+# Relaxed motif tier, released as a separate supplementary layer. Kinases whose
+# specificity is dominated by docking interactions rather than by the catalytic
+# cleft (SH2/PTB-mediated recruitment, MAPK D- and DEF-motifs) can phosphorylate
+# sites that score poorly against their linear motif, so a single stringent tier
+# structurally excludes them. This layer is clearly labelled and is NOT part of
+# the high-confidence set.
+relaxed_percentile_cutoff <- 75
+
 # ── Tunable weights ────────────────────────────────────────────────────────────
 # PSP evidence weights (you can re-tune these later if desired)
 w_invitro <- 0.5
@@ -302,27 +523,44 @@ make_site_key <- function(entrez, site_chr) {
 
 # Build site-bearing Cantley features (no combined score)
 cantley_serthr_long <- cantley_atlas %>%
-  pivot_longer(cols = matches("_(rank|percentile)$"),
+  pivot_longer(cols = matches("_(rank|percentile)$") & !matches("^median_"),
                names_to = "Kinase", values_to = "Value") %>%
   mutate(Metric = if_else(str_detect(Kinase, "_rank$"), "Rank", "Percentile"),
          Kinase = str_replace(Kinase, "(_percentile|_rank)$",""))
 
 cantley_tyr_long <- cantley_tyrosine %>%
-  pivot_longer(cols = matches("_(rank|percentile)$"),
+  pivot_longer(cols = matches("_(rank|percentile)$") & !matches("^median_"),
                names_to = "Kinase", values_to = "Value") %>%
   mutate(Metric = if_else(str_detect(Kinase, "_rank$"), "Rank", "Percentile"),
          Kinase = str_replace(Kinase, "(_percentile|_rank)$",""))
 
+# Substrate identity: prefer the atlas gene label when it resolves to exactly
+# one gene, otherwise fall back to the row's UniProt accession. This is what
+# stops obsolete/ambiguous aliases (e.g. "SMAP") from being fanned out across
+# several unrelated substrates.
+subs_by_uniprot <- resolve_by_uniprot(unique(c(
+  cantley_atlas$`Uniprot Primary Accession`,
+  cantley_tyrosine$`Uniprot Primary Accession`
+)))
+
 cantley_feats <- bind_rows(cantley_serthr_long, cantley_tyr_long) %>%
   pivot_wider(names_from = Metric, values_from = Value) %>%
-  # harmonize symbols (using symmap_kinase / symmap_subs)
-  left_join(symmap_kinase, by = c("Kinase" = "input_symbol")) %>%
-  rename(Kinase_input = Kinase, Kinase = SYMBOL, Kinase_entrez = ENTREZID) %>%
-  left_join(symmap_subs,   by = c("Gene"   = "input_symbol")) %>%
-  rename(Substrate_input = Gene, Substrate = SYMBOL, Substrate_entrez = ENTREZID) %>%
+  rename(Kinase_input = Kinase, Substrate_input = Gene) %>%
+  mutate(Substrate_Uniprot_ID = norm_uniprot(`Uniprot Primary Accession`)) %>%
+  # kinase identity from the authoritative atlas resolver (never a raw ALIAS hit)
+  left_join(atlas_kinase_map, by = "Kinase_input") %>%
+  # substrate identity: symbol first, UniProt accession as fallback
+  left_join(symmap_subs, by = c("Substrate_input" = "input_symbol")) %>%
+  left_join(subs_by_uniprot, by = "Substrate_Uniprot_ID",
+            suffix = c("", ".up")) %>%
+  mutate(
+    Substrate        = coalesce(SYMBOL, SYMBOL.up),
+    Substrate_entrez = coalesce(ENTREZID, ENTREZID.up)
+  ) %>%
   transmute(
-    Substrate_Uniprot_ID = norm_uniprot(`Uniprot Primary Accession`),
-    Substrate, Substrate_entrez, Kinase, Kinase_entrez,
+    Substrate_Uniprot_ID,
+    Substrate, Substrate_entrez, Substrate_input,
+    Kinase, Kinase_entrez, Kinase_input,
     Phosphosite = Phosphosite,
     Percentile, Rank, promiscuity_index
   ) %>%
@@ -366,7 +604,7 @@ promiscuity_index_cutoff = quantile(cantley_feats$promiscuity_index, 0.5, na.rm=
 #        x="Percentile", y="Count")
 
 cantley_top <- cantley_feats %>%
-  filter(!is.na(Percentile), Percentile > 95) %>%
+  filter(!is.na(Percentile), Percentile >= motif_percentile_cutoff) %>%
   filter(promiscuity_index < promiscuity_index_cutoff) %>%
   # standardize a site key for filtering
   mutate(site_key = make_site_key(Substrate_entrez, Site)) %>%
@@ -826,7 +1064,7 @@ ks_sites_all = psp_sites %>%
 promiscuity_index_cutoff = quantile(cantley_feats$promiscuity_index, 0.5, na.rm=TRUE)
 
 cantley_top <- cantley_feats %>%
-  filter(!is.na(Percentile), Percentile > 95) %>%
+  filter(!is.na(Percentile), Percentile >= motif_percentile_cutoff) %>%
   filter(promiscuity_index < promiscuity_index_cutoff) %>%
   # standardize a site key for filtering
   mutate(site_key = make_site_key(Substrate_entrez, Site)) %>%
@@ -855,6 +1093,10 @@ hpa_long <- subcellular_localization %>%
     by = c("Gene" = "SYMBOL")
   ) %>%
   transmute(Gene_entrez = ENTREZID, locs) %>%
+  # HPA genes that do not map to an Entrez ID must be dropped: an NA key would
+  # otherwise match any kinase or substrate that itself lacks an Entrez ID and
+  # manufacture a spurious shared compartment.
+  filter(!is.na(Gene_entrez)) %>%
   distinct()
 
 # long forms limited to needed genes
@@ -872,18 +1114,25 @@ ks_eval_dt   <- data.table(ks_key = ks_eval_keys)
 kin_dt <- as.data.table(kin_long); setkey(kin_dt, loc)
 sub_dt <- as.data.table(sub_long); setkey(sub_dt, loc)
 
+# The join is on `loc`, and kin_long/sub_long are distinct on (loc, gene), so the
+# number of rows per kinase-substrate key is exactly the number of HPA
+# compartments the two proteins share. Keep that count, not just the boolean:
+# it is reported in the released tables and feeds the composite score, and it
+# lets users distinguish a pair sharing one compartment from one sharing six.
 coloc_pairs <- kin_dt[sub_dt, allow.cartesian = TRUE][
-  , .(ks_key = paste(Kinase_entrez, Substrate_entrez, sep="|"))] %>%
-  unique()
+  , .(ks_key = paste(Kinase_entrez, Substrate_entrez, sep="|"))][
+  , .(n_shared_compartments = .N), by = ks_key]
 
 # reduce to only pairs present in cantley_top
 setkey(coloc_pairs, ks_key); setkey(ks_eval_dt, ks_key)
-coloc_keys <- coloc_pairs[ks_eval_dt, nomatch = 0L][, unique(ks_key)]
+coloc_counts <- coloc_pairs[ks_eval_dt, nomatch = 0L]
 
 # flag co-loc in cantley_top
 cantley_top_dt <- as.data.table(cantley_top)
 cantley_top_dt[, ks_key := paste(Kinase_entrez, Substrate_entrez, sep="|")]
-cantley_top_dt[, coloc_ok := !is.na(fmatch(ks_key, coloc_keys))]
+cantley_top_dt[coloc_counts, n_shared_compartments := i.n_shared_compartments, on = "ks_key"]
+cantley_top_dt[is.na(n_shared_compartments), n_shared_compartments := 0L]
+cantley_top_dt[, coloc_ok := n_shared_compartments > 0L]
 
 # =========================
 # STEP 3: Annotate curated + Ochoa, then filter with coloc_ok
@@ -913,9 +1162,9 @@ cantley_top_dt[, curated_site := !is.na(fmatch(site_key, curated_keys))]
 #   geom_vline(xintercept=quantile(ochoa_fs_processed$functional_score, 0.75, na.rm=TRUE), color="purple", linetype="dashed") +
 #   geom_vline(xintercept=0.5, color="red", linetype="dashed")
 
-cutoff = quantile(ochoa_fs_processed$functional_score, 0.75, na.rm=TRUE)
+cutoff <- functional_score_cutoff
 
-# (B) Ochoa functional score (> 0.5) -- join by UniProt + position only
+# (B) Ochoa functional score (>= functional_score_cutoff) -- join by UniProt + position
 # Make sure both sides use normalized UniProt and integer position
 ochoa_fs_norm <- ochoa_fs %>%
   transmute(
@@ -931,9 +1180,43 @@ cantley_top_annot <- as_tibble(cantley_top_dt) %>%
     ochoa_fs_norm,
     by = c("Substrate_Uniprot_ID", "position")
   ) %>%
-  mutate(ochoa_high = !is.na(functional_score) & functional_score > cutoff)
+  mutate(ochoa_high = !is.na(functional_score) & functional_score >= cutoff)
 
-# (C) Final filter: co-localized AND (curated OR Ochoa-high)
+# (B2) Evidence-layer contingency table.
+# All three filter indicators are available on a single object here, before any
+# of them has been applied, so this is the natural place to record how much
+# information each layer carries and how far they overlap. Feeds the
+# orthogonality / mutual-information analysis and the filter-rejection UpSet.
+filter_contingency <- cantley_top_annot %>%
+  count(coloc_ok, curated_site, ochoa_high, name = "n_site_kinase_pairs")
+write_csv(filter_contingency, here("results/filter_evidence_contingency.csv"))
+print(filter_contingency)
+
+# (B3) Continuous confidence score.
+# The binary flags are retained for backwards compatibility, but each evidence
+# layer is also mapped through a monotonic, continuously differentiable
+# transform so that a site scoring just below a threshold is down-weighted
+# rather than discarded outright. Each component is reported separately so users
+# can reweight them; the default is an unweighted mean.
+soft_step <- function(x, midpoint, steepness) 1 / (1 + exp(-steepness * (x - midpoint)))
+
+motif_steepness      <- 0.15   # transition spans roughly +/- 20 percentile points
+functional_steepness <- 12     # transition spans roughly +/- 0.25 score units
+compartment_scale    <- 2      # compartments at which localization evidence saturates
+
+cantley_top_annot <- cantley_top_annot %>%
+  mutate(
+    motif_evidence        = soft_step(Percentile, motif_percentile_cutoff, motif_steepness),
+    functional_evidence   = soft_step(coalesce(functional_score, 0),
+                                      functional_score_cutoff, functional_steepness),
+    localization_evidence = 1 - exp(-n_shared_compartments / compartment_scale),
+    kinasecanvas_score    = (motif_evidence + functional_evidence + localization_evidence) / 3
+  )
+
+# (C) Final filter: co-localized AND (curated OR Ochoa-high).
+# Note this is deliberately a disjunction on the two site-level criteria: a site
+# already curated in PhosphoSitePlus/EPSD/iPTMnet is retained regardless of its
+# functional score, because curation is itself direct evidence of relevance.
 cantley_filtered_dt <- as.data.table(cantley_top_annot)[
   coloc_ok == TRUE & (curated_site == TRUE | ochoa_high == TRUE)
 ]
@@ -947,11 +1230,29 @@ cantley_filtered <- as_tibble(cantley_filtered_dt) %>%
 #  - Site-level combined set
 # =========================
 
-# Pair-level from filtered Cantley
+# Pair-level from filtered Cantley.
+# The exported table now carries the continuous quantities behind every flag
+# (motif percentile and rank, promiscuity index, functional score, number of
+# shared compartments, and the composite score) so that downstream consumers --
+# including the KinaseCanvas Explorer -- can rank and threshold for themselves
+# rather than inheriting ours. The Evidence string no longer asserts
+# "functional", which was inaccurate for curated sites retained by the
+# disjunction above.
 cantley_pairs <- cantley_filtered %>%
-  transmute(Kinase, Kinase_entrez, Substrate, Substrate_entrez, Site, Curated_site = curated_site,
+  transmute(Kinase, Kinase_entrez, Substrate, Substrate_entrez,
+            Substrate_Uniprot_ID, Site,
+            Curated_site = curated_site,
             Likely_functional = ochoa_high,
-            Evidence = "Specificity Atlas (high-confidence, co-localized, functional)",
+            Motif_percentile = Percentile,
+            Motif_rank = Rank,
+            Promiscuity_index = promiscuity_index,
+            Functional_score = functional_score,
+            Shared_compartments = n_shared_compartments,
+            Motif_evidence = motif_evidence,
+            Functional_evidence = functional_evidence,
+            Localization_evidence = localization_evidence,
+            KinaseCanvas_score = kinasecanvas_score,
+            Evidence = "Specificity Atlas (motif-supported, co-localized)",
             Reference_PMID = NA_character_) %>%
   distinct()
 
@@ -960,9 +1261,17 @@ curated_pairs <- kinet_processed %>%
     mutate(residue = str_sub(Site, 1, 1),
          position = suppressWarnings(as.integer(str_sub(Site, 2)))) %>%
   left_join(ochoa_fs_norm, by = c("Substrate_Uniprot_ID", "position")) %>%
-  mutate(Likely_functional = !is.na(functional_score) & functional_score > cutoff) %>%
+  mutate(Likely_functional = !is.na(functional_score) & functional_score >= cutoff) %>%
   mutate(Curated_site = TRUE) %>%
-  transmute(Kinase, Kinase_entrez, Substrate, Substrate_entrez, Site, Curated_site, Likely_functional, Source, Evidence, Reference_PMID) %>%
+  transmute(Kinase, Kinase_entrez, Substrate, Substrate_entrez,
+            Substrate_Uniprot_ID, Site, Curated_site, Likely_functional,
+            Motif_percentile = NA_real_, Motif_rank = NA_real_,
+            Promiscuity_index = NA_real_,
+            Functional_score = functional_score,
+            Shared_compartments = NA_integer_,
+            Motif_evidence = NA_real_, Functional_evidence = NA_real_,
+            Localization_evidence = NA_real_, KinaseCanvas_score = NA_real_,
+            Source, Evidence, Reference_PMID) %>%
   distinct()
 
 combined_pairs <- bind_rows(
@@ -970,6 +1279,97 @@ combined_pairs <- bind_rows(
   curated_pairs
 ) %>%
   distinct()
+
+# ── Flanking sequence (+/-7 residues around the phosphoacceptor) ───────────────
+#
+# KiNet's own detail panel shows this for curated interactions (Site | Sequence,
+# phosphoacceptor bolded), and reviewers repeatedly used flanking-residue context
+# (e.g. the -3 position) to argue for or against a specific prediction. We derive
+# it once, here, from the canonical UniProt sequence for every site in the
+# resource -- curated and predicted alike -- rather than relying on the atlas's
+# own SITE_+/-7_AA column, which only covers the Cantley-derived rows. This also
+# doubles as a residue-identity check across the *entire* resource, extending
+# the same class of verification that caught the KIFAP3 alias-collision error
+# to the curated rows, which had never been cross-checked against a canonical
+# sequence before.
+uniprot_fasta_cache_path <- here("data/uniprot_sequences_cache.fasta")
+
+site_accessions <- combined_pairs %>%
+  distinct(Substrate_Uniprot_ID) %>%
+  filter(!is.na(Substrate_Uniprot_ID)) %>%
+  pull(Substrate_Uniprot_ID)
+
+cached_seqs <- if (file.exists(uniprot_fasta_cache_path)) {
+  readAAStringSet(uniprot_fasta_cache_path)
+} else {
+  AAStringSet()
+}
+names(cached_seqs) <- sub("\\|.*", "", sub("^[^|]*\\|", "", names(cached_seqs)))  # sp|ACC|NAME -> ACC
+
+missing_accessions <- setdiff(site_accessions, names(cached_seqs))
+
+if (length(missing_accessions) > 0) {
+  message("Fetching ", length(missing_accessions), " canonical sequences from UniProt...")
+  fetch_batch_size <- 150
+  batches <- split(missing_accessions, ceiling(seq_along(missing_accessions) / fetch_batch_size))
+  fetched_fasta <- map_chr(batches, function(batch) {
+    resp <- request("https://rest.uniprot.org/uniprotkb/accessions") %>%
+      req_url_query(accessions = paste(batch, collapse = ","), format = "fasta") %>%
+      req_retry(max_tries = 3) %>%
+      req_perform()
+    resp_body_string(resp)
+  })
+  # Biostrings' FASTA parser reads from a file path, not a connection.
+  tmp_fasta <- tempfile(fileext = ".fasta")
+  writeLines(paste(fetched_fasta, collapse = "\n"), tmp_fasta)
+  new_seqs <- readAAStringSet(tmp_fasta)
+  names(new_seqs) <- sub("\\|.*", "", sub("^[^|]*\\|", "", names(new_seqs)))
+  cached_seqs <- c(cached_seqs, new_seqs)
+  writeXStringSet(cached_seqs, uniprot_fasta_cache_path)
+}
+
+seq_lookup <- as.character(cached_seqs)
+
+flank_radius <- 7L  # residues shown on each side of the phosphoacceptor
+
+extract_flank <- function(acc, residue, position) {
+  seq <- seq_lookup[[acc]]
+  if (is.null(seq) || is.na(seq) || is.na(position)) return(NA_character_)
+  n <- nchar(seq)
+  if (position < 1 || position > n) return(NA_character_)
+  actual_residue <- substr(seq, position, position)
+  if (actual_residue != residue) return(NA_character_)  # verification failed
+  start <- max(1, position - flank_radius)
+  end   <- min(n, position + flank_radius)
+  paste0(
+    substr(seq, start, position - 1),
+    "[", actual_residue, "]",
+    substr(seq, position + 1, end)
+  )
+}
+
+site_flanks <- combined_pairs %>%
+  distinct(Substrate_Uniprot_ID, Site) %>%
+  filter(!is.na(Substrate_Uniprot_ID), !is.na(Site)) %>%
+  mutate(
+    residue  = str_sub(Site, 1, 1),
+    position = suppressWarnings(as.integer(str_sub(Site, 2))),
+    Flanking_sequence = pmap_chr(
+      list(Substrate_Uniprot_ID, residue, position),
+      ~ extract_flank(..1, ..2, ..3)
+    )
+  ) %>%
+  select(Substrate_Uniprot_ID, Site, Flanking_sequence)
+
+n_sites_checked <- nrow(site_flanks)
+n_sites_verified <- sum(!is.na(site_flanks$Flanking_sequence))
+message(sprintf(
+  "Flanking sequence / residue-identity check: %d of %d distinct sites verified against canonical UniProt sequences (%.1f%%).",
+  n_sites_verified, n_sites_checked, 100 * n_sites_verified / n_sites_checked
+))
+
+combined_pairs <- combined_pairs %>%
+  left_join(site_flanks, by = c("Substrate_Uniprot_ID", "Site"))
 
 write_csv(combined_pairs, here("results/combined_kinase_substrate_pairs_2025.csv"))
 
@@ -1049,6 +1449,7 @@ hpa_long <- subcellular_localization %>%
     by = c("Gene" = "SYMBOL")
   ) %>%
   transmute(Gene_entrez = ENTREZID, locs) %>%
+  filter(!is.na(Gene_entrez)) %>%   # an NA key would match any gene lacking an Entrez ID
   distinct()
 
 hpa_small <- hpa_long %>%
@@ -1091,7 +1492,7 @@ substrate_coloc <- cantley_pairs_with_coloc %>%
   summarise(any_coloc = any(coloc, na.rm = TRUE), .groups = "drop")
 
 ## 6) Site-level annotations on the Specificity Atlas universe (curated site? Ochoa-high?)
-cutoff = quantile(ochoa_fs_processed$functional_score, 0.75, na.rm=TRUE)
+cutoff <- functional_score_cutoff
 
 cantley_sites_annot <- cantley_uni %>%
   # curated site?
@@ -1101,12 +1502,14 @@ cantley_sites_annot <- cantley_uni %>%
     ochoa_fs_norm,
     by = c("Substrate_Uniprot_ID", "position")
   ) %>%
-  mutate(ochoa_high = !is.na(functional_score) & functional_score > cutoff)
+  mutate(ochoa_high = !is.na(functional_score) & functional_score >= cutoff)
 
 ## 7) Collapse to SUBSTRATE-level flags
 substrate_summary <- cantley_sites_annot %>%
   group_by(Substrate, Substrate_entrez) %>%
   summarise(
+    has_curated_site = any(curated_site, na.rm = TRUE),
+    has_functional_site = any(ochoa_high, na.rm = TRUE),
     passes_support = any(curated_site, na.rm = TRUE) | any(ochoa_high, na.rm = TRUE),
     novel_label = if_else(
       any(Substrate %in% curated_sub_universe, na.rm = TRUE),
@@ -1120,6 +1523,8 @@ substrate_summary <- cantley_sites_annot %>%
     by = c("Substrate", "Substrate_entrez")
   ) %>%
   mutate(
+    has_curated_site = replace_na(has_curated_site, FALSE),
+    has_functional_site = replace_na(has_functional_site, FALSE),
     passes_support = replace_na(passes_support, FALSE),
     any_coloc = replace_na(any_coloc, FALSE),
     keep = passes_support & any_coloc
@@ -1130,7 +1535,12 @@ substrate_paths <- cantley_sites_annot %>%
   left_join(substrate_summary, by = c("Substrate", "Substrate_entrez")) %>%
   mutate(
     `Specificity Atlas` = novel_label,
-    `Functional Site?` = if_else(passes_support, "Functional Site", "Non-Functional Site"),
+    `Site support` = case_when(
+      has_curated_site & has_functional_site ~ "Curated + functional score",
+      has_curated_site                      ~ "Curated site",
+      has_functional_site                   ~ "Functional score only",
+      TRUE                                  ~ "No site-level support"
+    ),
     `Co-localized?` = case_when(
       !passes_support ~ NA_character_,
       any_coloc ~ "Co-localized",
@@ -1139,7 +1549,20 @@ substrate_paths <- cantley_sites_annot %>%
     `Filtered Result` = if_else(keep, novel_label, NA_character_)
   )
 
-stage_vars <- c("Specificity Atlas", "Functional Site?", "Co-localized?", "Filtered Result")
+stage_vars <- c("Specificity Atlas", "Site support", "Co-localized?", "Filtered Result")
+
+# Per-stage counts for the alluvial, so readers can see how many substrates enter
+# and leave each stratum rather than having to read them off the ribbons.
+alluvial_stage_counts <- substrate_paths %>%
+  select(all_of(stage_vars)) %>%
+  pivot_longer(everything(), names_to = "stage", values_to = "stratum") %>%
+  filter(!is.na(stratum)) %>%
+  count(stage, stratum, name = "n_substrates") %>%
+  mutate(stage = factor(stage, levels = stage_vars)) %>%
+  arrange(stage, desc(n_substrates))
+
+write_csv(alluvial_stage_counts, here("results/alluvial_stage_counts.csv"))
+print(as.data.frame(alluvial_stage_counts), row.names = FALSE)
 
 alluv_df <- substrate_paths %>%
   select(all_of(stage_vars)) %>%
@@ -1156,16 +1579,23 @@ alluv_long <- alluv_df %>%
 ## 9) Plot (substrate-level Sankey)
 pal_stage <- c(
   "Specificity Atlas substrates"   = "#2C7BB6",
-  "Functional Site"               = "#00A6D6",
-  "Non-Functional Site"           = "#BFC0C0",
-  "Co-localized"                  = "#7BC950",
-  "No co-localization"            = "#F25F5C",
-  "Known substrate"               = "#4355B9",
-  "Novel substrate"               = "#F9A03F"
+  "Curated + functional score"     = "#00A6D6",
+  "Curated site"                   = "#3E8FA8",
+  "Functional score only"          = "#7FCDE0",
+  "No site-level support"          = "#BFC0C0",
+  "Co-localized"                   = "#7BC950",
+  "No co-localization"             = "#F25F5C",
+  "Known substrate"                = "#4355B9",
+  "Novel substrate"                = "#F9A03F"
 )
+# Look each label up by name and fall back to grey, rather than filtering the
+# palette and renaming positionally -- the latter silently mismatches (and then
+# errors) as soon as a new stratum label is introduced.
 lab_levels <- unique(alluv_long$label)
-pal_use <- setNames(pal_stage[names(pal_stage) %in% lab_levels], lab_levels)
-pal_use[setdiff(lab_levels, names(pal_use))] <- "#B0B0B0"
+pal_use <- setNames(
+  unname(ifelse(lab_levels %in% names(pal_stage), pal_stage[lab_levels], "#B0B0B0")),
+  lab_levels
+)
 
 p_sankey_substrates <- ggplot(
   alluv_long,
@@ -1174,7 +1604,7 @@ p_sankey_substrates <- ggplot(
 ) +
   geom_flow() +
   geom_stratum() +
-  geom_text(stat = "stratum", size = 5, color = "black", vjust = -0.2) +
+  geom_text(stat = "stratum", size = 3.2, color = "black") +
   scale_fill_manual(values = pal_use, guide = "none") +
   scale_y_continuous(expand = expansion(mult = c(0.02, 0.08)), labels = scales::comma) +
   labs(
@@ -1425,7 +1855,7 @@ ochoa_fs_norm <- ochoa_fs %>%
 sites_src_annot <- sites_src_annot %>%
   left_join(ochoa_fs_norm, by = c("Substrate_Uniprot_ID","position")) %>%
   filter(!is.na(functional_score)) %>%
-  mutate(functional_high = functional_score > cutoff)
+  mutate(functional_high = functional_score >= cutoff)
 
 s1c_pct <- sites_src_annot %>%
   group_by(Source) %>%
@@ -1483,7 +1913,7 @@ ggsave(here("figures/paper_figures/figS1.png"), figS1, width=9, height=7, dpi=60
 ## Figure 2
 ```{r}
 
-# ── A1. Cantley ≥90% at the site level (no coloc yet) ─────────────────────────
+# ── A1. Cantley at the motif percentile cutoff, site level (no coloc yet) ─────────────────────────
 cantley_sites90 <- cantley_top
 
 # ── A2. Curated-site flag (PSP/ELM/PN union) ──────────────────────────────────
@@ -1504,7 +1934,7 @@ ochoa_fs_norm <- ochoa_fs %>%
 
 cantley_sites90 <- cantley_sites90 %>%
   left_join(ochoa_fs_norm, by = c("Substrate_Uniprot_ID","position")) %>%
-  mutate(ochoa_high = !is.na(functional_score) & functional_score > cutoff)
+  mutate(ochoa_high = !is.na(functional_score) & functional_score >= cutoff)
 
 # ── A4. NEW site filter: keep if curated OR Ochoa-high ────────────────────────
 cantley_sites90_keep <- cantley_sites90 %>%
@@ -1563,16 +1993,21 @@ per_kinase_coloc <- denoms %>%
   ) %>%
   arrange(desc(pct_coloc_annot))
 
+# A percentage cannot exceed 100. This guard exists because NA Entrez IDs once
+# made a numerator pool across several kinases and pushed values past 6000%.
+stopifnot(max(per_kinase_coloc$pct_coloc_annot, na.rm = TRUE) <= 100,
+          max(per_kinase_coloc$pct_coloc_all,   na.rm = TRUE) <= 100)
+
 # Histogram + density + median (same look)
-p2B_dist <- ggplot(per_kinase_coloc, aes(pct_coloc_annot)) +
+p2B_dist <- ggplot(per_kinase_coloc, aes(pct_coloc_all)) +
   geom_histogram(bins = 40, fill = "#4C78A8", color = "grey20", alpha = 0.9) +
   geom_density(aes(y = after_stat(..count..)), linewidth = 0.8, color = "#2F4B7C", alpha = 0.6) +
-  geom_vline(xintercept = median(per_kinase_coloc$pct_coloc_annot, na.rm = TRUE),
+  geom_vline(xintercept = median(per_kinase_coloc$pct_coloc_all, na.rm = TRUE),
              linetype = "dashed", color = "black") +
   annotate("text",
            x = median(per_kinase_coloc$pct_coloc_all, na.rm = TRUE),
            y = Inf,
-           label = paste0("Median = ", round(median(per_kinase_coloc$pct_coloc_annot, na.rm=TRUE), 1), "%"),
+           label = paste0("Median = ", round(median(per_kinase_coloc$pct_coloc_all, na.rm=TRUE), 1), "%"),
            vjust = 2.5, hjust = -0.05, size = 3.1) +
   scale_x_continuous(labels = function(x) paste0(x, "%"), expand = expansion(mult = c(0, 0.02))) +
   scale_y_continuous(labels = scales::comma, expand = expansion(mult = c(0, 0.1))) +  # 10% headroom
@@ -1601,7 +2036,11 @@ p2B_dist <- ggplot(per_kinase_coloc, aes(pct_coloc_annot)) +
 #   theme_pubr() +
 #   coord_cartesian(clip = "off")
 
+# One observation per unique site: a site's support does not depend on which kinase
+# matched it, so averaging over kinase-site pairs would weight each site by the number
+# of kinases whose motif it fits. This is also the unit of the chi-square test below.
 p2C <- cantley_sites90 %>%
+  distinct(Substrate_Uniprot_ID, Site, curated_site, ochoa_high) %>%
   mutate(pass = curated_site | ochoa_high,
          class = case_when(substr(Site,1,1) == "S" ~ "Serine (S)",
                            substr(Site,1,1) == "T" ~ "Threonine (T)",
@@ -1685,7 +2124,9 @@ p3A_coverage <- ggplot(cov_tbl, aes(x = metric, y = count, fill = metric)) +
     "text", x = 1.5, y = max(cov_tbl$count) * 1.2,
     label = {
       df <- tidyr::pivot_wider(cov_tbl, names_from = metric, values_from = count)
-      inc <- df$`Novel pairs` / (df$`Curated pairs` + df$`Novel pairs`)
+      # increase relative to the curated set, i.e. novel / curated (the same
+      # quantity as the fold-change quoted in the text: total / curated = 1 + this)
+      inc <- df$`Novel pairs` / df$`Curated pairs`
       paste0("Increase = +", scales::percent(inc, accuracy = 0.1))
     },
     size = 3.3, fontface = 2
@@ -1838,12 +2279,194 @@ ggsave(here("figures/paper_figures/fig3.png"), fig3, width=9, height=7, dpi=600)
 
 ```
 
-## Add in substrate-substrate interactions from HIPPIE
+## Manuscript numbers
+
+Every statistic quoted in the manuscript is computed here and written to a single
+file, so that the text and the pipeline cannot drift apart between revisions.
 
 ```{r}
+curated_sources_final <- c("PhosphoSitePlus", "EPSD", "iPTMNet")
+# combined_pairs is re-read and relabelled upstream, so atlas rows carry the
+# label "Specificity Atlas" rather than "Cantley" by the time we get here.
+atlas_source_label <- if ("Specificity Atlas" %in% combined_pairs$Source)
+  "Specificity Atlas" else "Cantley"
+
+pairs_curated <- combined_pairs %>%
+  filter(Source %in% curated_sources_final) %>%
+  distinct(Kinase, Substrate)
+pairs_atlas <- combined_pairs %>%
+  filter(Source == atlas_source_label) %>%
+  distinct(Kinase, Substrate)
+pairs_novel <- anti_join(pairs_atlas, pairs_curated, by = c("Kinase", "Substrate"))
+
+novel_per_kinase <- pairs_novel %>% count(Kinase, name = "n_novel")
+
+# Matches the definition plotted in Figure 2B: one row per unique motif-passing
+# site, "pass" = curated OR functional-score support. `pct_func_only`
+# is the functional-score-only figure, restricted to sites that actually carry a
+# score, which is the quantity the running text refers to.
+residue_pass <- cantley_sites90 %>%
+  mutate(residue = substr(Site, 1, 1)) %>%
+  filter(residue %in% c("S", "T", "Y")) %>%
+  distinct(Substrate_Uniprot_ID, Site, residue, curated_site, ochoa_high, functional_score) %>%
+  group_by(residue) %>%
+  summarise(
+    n            = n(),
+    n_sites      = n_distinct(paste(Substrate_Uniprot_ID, Site)),
+    pct_pass     = 100 * mean(curated_site | ochoa_high, na.rm = TRUE),
+    pct_func_only = 100 * mean(ochoa_high[!is.na(functional_score)], na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Classify by Entrez ID, exactly as Figure 3B does: gene symbols are not a stable
+# key here (DarkKinaseTools still uses superseded symbols for a few genes).
+kin_class_final <- all_kinases %>%
+  transmute(Kinase_entrez = as.character(entrez_id),
+            Kinase_class = if_else(class_2019 == "Dark", "Dark", "Light"))
+kinase_entrez_lookup <- combined_pairs %>%
+  distinct(Kinase, Kinase_entrez) %>%
+  mutate(Kinase_entrez = as.character(Kinase_entrez))
+stopifnot(!anyDuplicated(kinase_entrez_lookup$Kinase))   # one Entrez ID per symbol
+dark_frac <- function(pairs) {
+  d <- pairs %>%
+    left_join(kinase_entrez_lookup, by = "Kinase") %>%
+    inner_join(kin_class_final, by = "Kinase_entrez")
+  100 * mean(d$Kinase_class == "Dark")
+}
+
+# The dark-kinase share is computed in two places (Figure 3B and the manuscript
+# numbers). They must agree; a mismatch means a join key has drifted.
+stopifnot(abs(100 * dark_fracs$frac_dark[dark_fracs$Set == "Curated + Specificity"] -
+                dark_frac(distinct(bind_rows(pairs_curated, pairs_atlas)))) < 0.05)
+
+manuscript_numbers <- tibble::tribble(
+  ~quantity, ~value,
+  "motif_percentile_cutoff",        as.character(motif_percentile_cutoff),
+  "functional_score_cutoff",        as.character(functional_score_cutoff),
+  "atlas_kinase_names_resolved",    as.character(nrow(atlas_kinase_map)),
+  "atlas_kinase_genes",             as.character(n_distinct(atlas_kinase_map$Kinase)),
+  "kinases_total",                  as.character(n_distinct(combined_pairs$Kinase)),
+  "substrates_total",               as.character(n_distinct(combined_pairs$Substrate)),
+  "phosphosites_total",             as.character(nrow(distinct(combined_pairs, Substrate, Site))),
+  "pairs_curated",                  as.character(nrow(pairs_curated)),
+  "pairs_atlas",                    as.character(nrow(pairs_atlas)),
+  "pairs_novel",                    as.character(nrow(pairs_novel)),
+  "pairs_total",                    as.character(nrow(distinct(bind_rows(pairs_curated, pairs_atlas)))),
+  "pct_increase_over_curated",      sprintf("%.1f", 100 * nrow(pairs_novel) / nrow(pairs_curated)),
+  "median_novel_substrates_per_kinase", as.character(median(novel_per_kinase$n_novel)),
+  "max_novel_substrates_per_kinase",    as.character(max(novel_per_kinase$n_novel)),
+  # Median over kinases of the fraction of a kinase's predicted substrates that share
+  # a compartment with it. This is the quantity plotted in Figure 2A and it is the
+  # fraction the co-localization filter retains: substrates with no HPA annotation
+  # count as non-co-localized, exactly as in the filter itself.
+  "median_pct_coloc_per_kinase", sprintf("%.1f", median(per_kinase_coloc$pct_coloc_all, na.rm = TRUE)),
+  "pct_pass_S",                     sprintf("%.1f", residue_pass$pct_pass[residue_pass$residue == "S"]),
+  "pct_pass_T",                     sprintf("%.1f", residue_pass$pct_pass[residue_pass$residue == "T"]),
+  "pct_pass_Y",                     sprintf("%.1f", residue_pass$pct_pass[residue_pass$residue == "Y"]),
+  "pct_func_only_S",                sprintf("%.1f", residue_pass$pct_func_only[residue_pass$residue == "S"]),
+  "pct_func_only_T",                sprintf("%.1f", residue_pass$pct_func_only[residue_pass$residue == "T"]),
+  "pct_func_only_Y",                sprintf("%.1f", residue_pass$pct_func_only[residue_pass$residue == "Y"]),
+  "n_sites_S",                      as.character(residue_pass$n_sites[residue_pass$residue == "S"]),
+  "n_sites_T",                      as.character(residue_pass$n_sites[residue_pass$residue == "T"]),
+  "n_sites_Y",                      as.character(residue_pass$n_sites[residue_pass$residue == "Y"]),
+  "dark_pct_curated",               sprintf("%.1f", dark_frac(pairs_curated)),
+  "dark_pct_integrated",            sprintf("%.1f", dark_frac(distinct(bind_rows(pairs_curated, pairs_atlas))))
+)
+
+# chi-square test for the residue-class difference the manuscript reports
+residue_tab <- cantley_sites90 %>%
+  mutate(residue = substr(Site, 1, 1)) %>%
+  filter(residue %in% c("S", "T", "Y")) %>%
+  distinct(Substrate_Uniprot_ID, Site, residue, curated_site, ochoa_high) %>%
+  mutate(pass = curated_site | ochoa_high) %>%
+  count(residue, pass) %>%
+  rename(ochoa_high = pass) %>%
+  tidyr::pivot_wider(names_from = ochoa_high, values_from = n, values_fill = 0) %>%
+  tibble::column_to_rownames("residue") %>%
+  as.matrix()
+residue_chisq <- chisq.test(residue_tab)
+manuscript_numbers <- bind_rows(manuscript_numbers, tibble::tibble(
+  quantity = c("residue_chisq_statistic", "residue_chisq_df", "residue_chisq_p"),
+  value = c(sprintf("%.1f", unname(residue_chisq$statistic)),
+            as.character(unname(residue_chisq$parameter)),
+            format.pval(residue_chisq$p.value, digits = 3))
+))
+
+write_csv(manuscript_numbers, here("results/manuscript_numbers.csv"))
+print(as.data.frame(manuscript_numbers), row.names = FALSE)
+```
+
+## Supplemental datasets
+
+```{r}
+# Supplementary Table S1: the complete unfiltered specificity-atlas prediction
+# matrix, retaining continuous percentile, rank and promiscuity values.
+write_csv(cantley_feats, here("results/unfiltered_cantley_dataset.csv"))
+
+# Supplementary Table S2: gene-level HPA subcellular compartment assignments.
+write_csv(subcellular_localization, here("results/subcellular_localization_mapping.csv"))
+
+# Supplementary Table S3: Ochoa et al. phosphosite functional scores mapped onto
+# our site identifiers.
+write_csv(ochoa_fs_processed, here("results/ochoa_functional_scores.csv"))
+
+# Relaxed motif tier: same contextual criteria, motif percentile lowered to
+# `relaxed_percentile_cutoff`. Released separately and explicitly labelled so it
+# cannot be mistaken for the high-confidence set.
+relaxed_candidates <- cantley_feats %>%
+  filter(!is.na(Percentile),
+         Percentile >= relaxed_percentile_cutoff,
+         Percentile <  motif_percentile_cutoff,
+         promiscuity_index < promiscuity_index_cutoff,
+         !is.na(Kinase), !is.na(Substrate)) %>%
+  mutate(position = as.integer(position)) %>%
+  left_join(ochoa_fs_norm, by = c("Substrate_Uniprot_ID", "position")) %>%
+  filter(!is.na(functional_score), functional_score >= functional_score_cutoff)
+
+# Co-localization is recomputed for this tier rather than reused: the top-tier
+# counts were restricted to genes appearing in the stringent set, so reusing them
+# would silently mark most relaxed-tier pairs as non-co-localized.
+relaxed_genes <- unique(c(relaxed_candidates$Kinase_entrez,
+                          relaxed_candidates$Substrate_entrez))
+relaxed_hpa <- hpa_long %>% filter(Gene_entrez %in% relaxed_genes)
+relaxed_coloc <- inner_join(
+    relaxed_hpa %>% transmute(locs, Kinase_entrez = Gene_entrez) %>% distinct(),
+    relaxed_hpa %>% transmute(locs, Substrate_entrez = Gene_entrez) %>% distinct(),
+    by = "locs", relationship = "many-to-many"
+  ) %>%
+  count(Kinase_entrez, Substrate_entrez, name = "n_shared_compartments")
+
+relaxed_tier <- relaxed_candidates %>%
+  left_join(relaxed_coloc, by = c("Kinase_entrez", "Substrate_entrez")) %>%
+  mutate(n_shared_compartments = coalesce(n_shared_compartments, 0L)) %>%
+  filter(n_shared_compartments > 0L) %>%
+  transmute(Kinase, Kinase_entrez, Substrate, Substrate_entrez,
+            Substrate_Uniprot_ID, Site,
+            Motif_percentile = Percentile, Motif_rank = Rank,
+            Promiscuity_index = promiscuity_index,
+            Functional_score = functional_score,
+            Shared_compartments = n_shared_compartments,
+            Tier = paste0("Relaxed (motif percentile ", relaxed_percentile_cutoff, "-",
+                          motif_percentile_cutoff, ")")) %>%
+  distinct()
+
+write_csv(relaxed_tier, here("results/relaxed_tier_kinase_substrate_pairs.csv"))
+message("Relaxed tier: ", nrow(relaxed_tier), " kinase-substrate-site rows across ",
+        dplyr::n_distinct(paste(relaxed_tier$Kinase, relaxed_tier$Substrate)), " pairs.")
+```
+
+## Add in substrate-substrate interactions from HIPPIE
+
+```{r, eval=FALSE}
 ## Adding in HIPPIE data for inter-substrate PPIs
+#
+# NOTE: this section is not part of the KinaseCanvas resource described in the
+# manuscript; it builds a substrate-substrate PPI extension used by a separate
+# downstream project. It is disabled because the HIPPIE file currently in
+# `data/` is the native six-column HIPPIE export, not the MITAB release whose
+# column names this code parses. Re-enable it only alongside a matching file.
 # Read in Hippie data for PPIs
-hippie <- read_tsv(here("data/HIPPIE-current.mitab.txt"))
+hippie <- read_tsv(here("data/hippie_current.txt"))
 
 hippie  %>% 
   names()
@@ -1980,8 +2603,4 @@ full_interaction_summary = full_interaction_data  %>%
   ) %>%
   write_csv(here("results/extended_kinome_network_summary.csv"))
 
-# Export supplemental datasets
-write_csv(cantley_feats, here("results/unfiltered_cantley_dataset.csv"))
-write_csv(subcellular_localization, here("results/subcellular_localization_mapping.csv"))
-write_csv(ochoa_fs_processed, here("results/ochoa_functional_scores.csv"))
 ```

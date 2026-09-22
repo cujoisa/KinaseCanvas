@@ -1,0 +1,628 @@
+---
+title: "Extended Kinome Network v2 — Build Pipeline"
+subtitle: "Relaxed HPA filter + OmniPath + HIPPIE brute-force expansion"
+author: "Chinmaya Joisa"
+date: today
+toc: true
+toc-depth: 3
+toc-title: Table of Contents
+format:
+  html:
+    page-layout: full
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+execute:
+  echo: true
+  cache: false
+  message: false
+  warning: false
+  fig-align: center
+  fig-dpi: 300
+---
+
+```{r setup, include=FALSE}
+require("knitr")
+knitr::opts_knit$set(root.dir = here::here())
+set.seed(123)
+```
+
+```{r libraries}
+library(data.table)
+library(tidyverse)
+library(fst)
+library(here)
+library(scales)
+library(ggpubr)
+library(patchwork)
+library(DT)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(OmnipathR)
+```
+
+# Overview
+
+This pipeline builds **v2** of the extended kinome network with three changes relative to v1:
+
+| Layer | v1 | v2 |
+|---|---|---|
+| Cantley motif filter | Percentile > 95, promiscuity < 50th pctile | **Same** |
+| Ochoa functional score | Score > 75th pctile | **Same** |
+| HPA co-localization | Required (both proteins annotated + shared compartment) | **Removed** |
+| OmniPath enzyme-substrate | Not included | **Added** |
+| HIPPIE PPI for drug targets | Not included | **Added (brute-force)** |
+
+# Step 1: Cantley Motif + Promiscuity Filter
+
+*Same thresholds as v1. Read from saved `unfiltered_cantley_dataset.csv`.*
+
+```{r cantley_motif_filter}
+cat("Loading unfiltered Cantley features (28.8M rows) — may take ~30s...\n")
+cantley_feats <- fread(
+  here("results/unfiltered_cantley_dataset.csv"),
+  colClasses = list(character = c("Substrate_entrez", "Kinase_entrez"))
+)
+
+cat("Rows loaded:", nrow(cantley_feats), "\n")
+
+# Same thresholds as v1
+promiscuity_cutoff <- quantile(cantley_feats$promiscuity_index, 0.5, na.rm = TRUE)
+cat("Promiscuity cutoff (50th percentile):", round(promiscuity_cutoff, 4), "\n")
+
+cantley_top <- cantley_feats[
+  !is.na(Percentile) & Percentile > 95 & promiscuity_index < promiscuity_cutoff
+]
+
+cat("\nAfter motif + promiscuity filter:\n")
+cat("  Site predictions: ", nrow(cantley_top), "\n")
+cat("  Unique substrates:", uniqueN(cantley_top$Substrate), "\n")
+cat("  Unique kinases:   ", uniqueN(cantley_top$Kinase), "\n")
+
+# Free memory
+rm(cantley_feats); invisible(gc())
+```
+
+# Step 2: Ochoa Functional Score Filter (No HPA)
+
+*HPA co-localization requirement is dropped. Only Ochoa score (>75th percentile) or curated site annotation is needed.*
+
+```{r ochoa_filter}
+# Load curated site keys from v1 combined pairs (non-Cantley sources only)
+combined_v1 <- fread(
+  here("results/combined_kinase_substrate_pairs_2025.csv"),
+  colClasses = list(character = c("Kinase_entrez", "Substrate_entrez"))
+)
+
+curated_sources <- c("PhosphoSitePlus", "EPSD", "iPTMNet", "PhosphoNetworks", "PhosphoELM")
+curated_site_keys <- combined_v1[Source %in% curated_sources][
+  , .(Substrate_entrez,
+      res = toupper(substr(Site, 1, 1)),
+      pos = suppressWarnings(as.integer(substr(Site, 2, nchar(Site))))
+  )
+][, site_key := paste(Substrate_entrez, res, pos, sep = ":")][, unique(site_key)]
+
+cat("Curated site keys (from KiNet sources):", length(curated_site_keys), "\n")
+
+# Ochoa functional scores
+ochoa <- fread(here("results/ochoa_functional_scores.csv"))
+ochoa_cutoff <- quantile(ochoa$functional_score, 0.75, na.rm = TRUE)
+cat("Ochoa cutoff (75th percentile):", round(ochoa_cutoff, 4), "\n")
+
+# Normalize UniProt IDs (strip isoform suffixes) to match Ochoa join key
+cantley_top[, Uniprot_norm := gsub("-\\d+$", "", Substrate_Uniprot_ID)]
+ochoa[, Uniprot_norm := gsub("-\\d+$", "", Substrate_Uniprot_ID)]
+
+# Annotate curated_site
+cantley_top[, site_key := paste(Substrate_entrez, toupper(residue), position, sep = ":")]
+cantley_top[, curated_site := site_key %in% curated_site_keys]
+
+# Join Ochoa by normalized UniProt + position
+setkey(cantley_top, Uniprot_norm, position)
+setkey(ochoa, Uniprot_norm, position)
+cantley_top_annot <- ochoa[, .(Uniprot_norm, position, functional_score)][cantley_top, on = .(Uniprot_norm, position)]
+cantley_top_annot[, ochoa_high := !is.na(functional_score) & functional_score > ochoa_cutoff]
+
+# Filter: curated site OR ochoa-high (HPA removed!)
+cantley_filtered_v2 <- cantley_top_annot[curated_site == TRUE | ochoa_high == TRUE]
+
+cat("\nAfter Ochoa filter (HPA removed):\n")
+cat("  Site predictions: ", nrow(cantley_filtered_v2), "\n")
+cat("  Unique substrates:", uniqueN(cantley_filtered_v2$Substrate), "\n")
+cat("  Unique KS pairs:  ", uniqueN(paste(cantley_filtered_v2$Kinase_entrez, cantley_filtered_v2$Substrate_entrez)), "\n")
+
+# Compare to v1 (which used HPA filter)
+cat("\nFor reference, v1 Cantley pairs (with HPA):",
+    nrow(combined_v1[Source == "Cantley"]), "\n")
+cat("v2 Cantley pairs (no HPA):              ",
+    uniqueN(paste(cantley_filtered_v2$Kinase_entrez, cantley_filtered_v2$Substrate_entrez)), "\n")
+```
+
+# Step 3: Build Combined KS Pairs v2
+
+```{r combined_pairs_v2}
+# Cantley pairs (v2 filtered, no HPA)
+cantley_pairs_v2 <- as_tibble(cantley_filtered_v2) %>%
+  transmute(
+    Kinase, Kinase_entrez, Substrate, Substrate_entrez,
+    Site,
+    Curated_site  = curated_site,
+    Likely_functional = ochoa_high,
+    Evidence = "Specificity Atlas (high-confidence, functional, no HPA filter)",
+    Reference_PMID = NA_character_,
+    Source = "Cantley_v2"
+  ) %>%
+  distinct()
+
+# Curated pairs from v1 (all non-Cantley sources — unchanged)
+curated_pairs_v1 <- as_tibble(combined_v1[Source %in% curated_sources])
+
+# Bind
+combined_pairs_v2 <- bind_rows(
+  cantley_pairs_v2,
+  curated_pairs_v1
+) %>%
+  mutate(
+    Kinase_entrez   = as.character(Kinase_entrez),
+    Substrate_entrez = as.character(Substrate_entrez)
+  ) %>%
+  distinct()
+
+cat("Combined KS pairs v2:\n")
+cat("  Total pairs:       ", nrow(combined_pairs_v2), "\n")
+cat("  From Cantley v2:   ", sum(combined_pairs_v2$Source == "Cantley_v2"), "\n")
+cat("  From curated:      ", sum(combined_pairs_v2$Source %in% curated_sources), "\n")
+cat("  Unique substrates: ", n_distinct(combined_pairs_v2$Substrate_entrez), "\n")
+cat("  Unique kinases:    ", n_distinct(combined_pairs_v2$Kinase_entrez), "\n")
+
+rm(cantley_top, cantley_top_annot, cantley_filtered_v2, cantley_pairs_v2, combined_v1); invisible(gc())
+```
+
+# Step 4: OmniPath Enzyme-Substrate Layer
+
+*Curated kinase-substrate phosphorylation events from PhosphoSite + SIGNOR, restricted to kinases already present in our network.*
+
+```{r omnipath_layer}
+cat("Querying OmniPath (PhosphoSite + SIGNOR)...\n")
+omnipath_es <- enzyme_substrate(
+  organism   = 9606,
+  resources  = c("PhosphoSite", "SIGNOR"),
+  genesymbols = TRUE,
+  silent     = TRUE
+)
+
+curated_kinases <- unique(combined_pairs_v2$Kinase)
+
+omnipath_sub_symbols <- omnipath_es %>%
+  dplyr::filter(enzyme_genesymbol %in% curated_kinases) %>%
+  dplyr::filter(residue_type %in% c("S", "T", "Y")) %>%
+  dplyr::select(enzyme_genesymbol, substrate_genesymbol, residue_type, residue_offset) %>%
+  distinct()
+
+cat("OmniPath records (curated kinases + S/T/Y):", nrow(omnipath_sub_symbols), "\n")
+
+# Map substrate gene symbols → Entrez IDs
+omnipath_entrez_map <- bitr(
+  unique(omnipath_sub_symbols$substrate_genesymbol),
+  fromType = "SYMBOL", toType = "ENTREZID",
+  OrgDb = org.Hs.eg.db, drop = TRUE
+) %>%
+  dplyr::rename(substrate_genesymbol = SYMBOL, Substrate_entrez = ENTREZID) %>%
+  distinct()
+
+# Map enzyme gene symbols → Entrez IDs
+omnipath_kin_map <- bitr(
+  unique(omnipath_sub_symbols$enzyme_genesymbol),
+  fromType = "SYMBOL", toType = "ENTREZID",
+  OrgDb = org.Hs.eg.db, drop = TRUE
+) %>%
+  dplyr::rename(enzyme_genesymbol = SYMBOL, Kinase_entrez = ENTREZID) %>%
+  distinct()
+
+omnipath_pairs <- omnipath_sub_symbols %>%
+  left_join(omnipath_entrez_map, by = "substrate_genesymbol") %>%
+  left_join(omnipath_kin_map,    by = "enzyme_genesymbol") %>%
+  dplyr::filter(!is.na(Substrate_entrez), !is.na(Kinase_entrez)) %>%
+  transmute(
+    Kinase           = enzyme_genesymbol,
+    Kinase_entrez    = as.character(Kinase_entrez),
+    Substrate        = substrate_genesymbol,
+    Substrate_entrez = as.character(Substrate_entrez),
+    Site             = paste0(residue_type, residue_offset),
+    Curated_site     = TRUE,
+    Likely_functional = NA,
+    Evidence         = "OmniPath enzyme-substrate (PhosphoSite/SIGNOR curated)",
+    Reference_PMID   = NA_character_,
+    Source           = "OmniPath"
+  ) %>%
+  distinct()
+
+cat("OmniPath pairs after Entrez mapping:", nrow(omnipath_pairs), "\n")
+cat("Unique OmniPath substrates:", n_distinct(omnipath_pairs$Substrate_entrez), "\n")
+
+# How many are novel (not already in combined_pairs_v2)?
+novel_omnipath_subs <- setdiff(omnipath_pairs$Substrate_entrez, combined_pairs_v2$Substrate_entrez)
+cat("Novel substrates added by OmniPath:", length(novel_omnipath_subs), "\n")
+
+# Bind to combined pairs
+combined_pairs_v2 <- bind_rows(combined_pairs_v2, omnipath_pairs) %>% distinct()
+cat("Total combined pairs after OmniPath:", nrow(combined_pairs_v2), "\n")
+```
+
+# Step 5: HIPPIE Substrate-Substrate PPIs
+
+*Physical interactions between substrate nodes — same logic as v1 but using the updated substrate universe.*
+
+```{r hippie_substrate_substrate}
+cat("Loading HIPPIE network...\n")
+hippie <- fread(
+  here("data/hippie_current.txt"),
+  col.names = c("Gene1", "Entrez1", "Gene2", "Entrez2", "Score", "Metadata"),
+  colClasses = list(character = c("Entrez1", "Entrez2"))
+)
+
+cat("HIPPIE interactions:", nrow(hippie), "\n")
+cat("Unique proteins:    ", uniqueN(c(hippie$Entrez1, hippie$Entrez2)), "\n")
+
+# Define substrate and kinase sets from combined pairs v2
+substrate_ids <- unique(combined_pairs_v2$Substrate_entrez)
+kinase_ids     <- unique(combined_pairs_v2$Kinase_entrez)
+substrate_only <- setdiff(substrate_ids, kinase_ids)
+all_network_ids <- union(substrate_ids, kinase_ids)
+
+# Confidence cutoff (top 25%, matching v1 approach)
+confidence_cutoff <- quantile(hippie$Score, 0.75, na.rm = TRUE)
+cat("HIPPIE confidence cutoff (75th pctile):", round(confidence_cutoff, 3), "\n")
+
+# Substrate-substrate PPIs (both proteins are substrates-only)
+hippie_ss <- hippie[
+  Score > confidence_cutoff &
+    Entrez1 %in% substrate_only & Entrez2 %in% substrate_only &
+    Entrez1 != Entrez2
+]
+
+# Deduplicate undirected edges
+hippie_ss_dedup <- hippie_ss[
+  , .(p1 = as.character(pmin(as.integer(Entrez1), as.integer(Entrez2))),
+      p2 = as.character(pmax(as.integer(Entrez1), as.integer(Entrez2))),
+      Gene1, Gene2, Score)
+] %>% unique(by = c("p1", "p2"))
+
+cat("HIPPIE substrate-substrate edges (high-confidence):", nrow(hippie_ss_dedup), "\n")
+cat("Unique substrates touched:", uniqueN(c(hippie_ss_dedup$p1, hippie_ss_dedup$p2)), "\n")
+
+# Build symbol maps for deduped pairs
+hippie_sym1 <- bitr(hippie_ss_dedup$p1, fromType = "ENTREZID", toType = "SYMBOL",
+                    OrgDb = org.Hs.eg.db, drop = TRUE) %>%
+  dplyr::rename(p1 = ENTREZID, Protein1 = SYMBOL) %>% distinct()
+hippie_sym2 <- bitr(hippie_ss_dedup$p2, fromType = "ENTREZID", toType = "SYMBOL",
+                    OrgDb = org.Hs.eg.db, drop = TRUE) %>%
+  dplyr::rename(p2 = ENTREZID, Protein2 = SYMBOL) %>% distinct()
+
+hippie_ss_final <- hippie_ss_dedup %>%
+  left_join(hippie_sym1, by = "p1") %>%
+  left_join(hippie_sym2, by = "p2") %>%
+  filter(!is.na(Protein1), !is.na(Protein2)) %>%
+  transmute(
+    Protein1, Protein2,
+    Protein1_entrez = p1,
+    Protein2_entrez = p2,
+    Evidence = "protein-protein interaction",
+    Source   = "HIPPIE"
+  ) %>%
+  distinct()
+
+cat("HIPPIE substrate-substrate pairs (with symbols):", nrow(hippie_ss_final), "\n")
+```
+
+# Step 6: HIPPIE Brute-Force for Missing Drug Targets
+
+*For each drug target not yet in the network, include it if it has a high-confidence HIPPIE interaction with any in-network protein.*
+
+```{r hippie_brute_force}
+# Load drug target panel
+drug_targets <- read.fst(here("data/kinome_profiling_novartis_evebio_combined.fst")) %>%
+  as_tibble() %>%
+  distinct(target, target_entrez_id) %>%
+  mutate(target_entrez_id = as.character(target_entrez_id))
+
+# Current network node set (after Cantley v2 + OmniPath)
+ks_nodes <- union(
+  as.character(combined_pairs_v2$Kinase_entrez),
+  as.character(combined_pairs_v2$Substrate_entrez)
+)
+
+missing_drug_targets <- drug_targets %>%
+  filter(!target_entrez_id %in% ks_nodes)
+
+cat("Drug targets not yet in network:", nrow(missing_drug_targets), "/", nrow(drug_targets), "\n")
+
+# Find HIPPIE edges connecting missing targets to in-network proteins
+hippie_bf <- hippie[Score > confidence_cutoff] %>%
+  filter(
+    (Entrez1 %in% missing_drug_targets$target_entrez_id & Entrez2 %in% ks_nodes) |
+    (Entrez2 %in% missing_drug_targets$target_entrez_id & Entrez1 %in% ks_nodes)
+  ) %>%
+  mutate(
+    # Orient: in-network protein is Protein1, missing target is Protein2
+    Protein1_entrez = case_when(
+      Entrez1 %in% ks_nodes ~ Entrez1,
+      TRUE ~ Entrez2
+    ),
+    Protein2_entrez = case_when(
+      Entrez1 %in% missing_drug_targets$target_entrez_id ~ Entrez1,
+      TRUE ~ Entrez2
+    )
+  ) %>%
+  distinct(Protein1_entrez, Protein2_entrez, Score)
+
+# Take the best-scoring edge per missing target
+hippie_bf_best <- hippie_bf %>%
+  group_by(Protein2_entrez) %>%
+  slice_max(Score, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+cat("Missing targets recoverable via HIPPIE:", n_distinct(hippie_bf_best$Protein2_entrez), "\n")
+
+# Resolve gene symbols
+hippie_bf_best_chr <- hippie_bf_best %>%
+  mutate(Protein1_entrez = as.character(Protein1_entrez),
+         Protein2_entrez = as.character(Protein2_entrez))
+
+hippie_bf_sym1 <- bitr(hippie_bf_best_chr$Protein1_entrez, fromType = "ENTREZID", toType = "SYMBOL",
+                       OrgDb = org.Hs.eg.db, drop = TRUE) %>%
+  dplyr::rename(Protein1_entrez = ENTREZID, Protein1 = SYMBOL) %>% distinct()
+hippie_bf_sym2 <- bitr(hippie_bf_best_chr$Protein2_entrez, fromType = "ENTREZID", toType = "SYMBOL",
+                       OrgDb = org.Hs.eg.db, drop = TRUE) %>%
+  dplyr::rename(Protein2_entrez = ENTREZID, Protein2 = SYMBOL) %>% distinct()
+
+hippie_bf_final <- hippie_bf_best_chr %>%
+  left_join(hippie_bf_sym1, by = "Protein1_entrez") %>%
+  left_join(hippie_bf_sym2, by = "Protein2_entrez") %>%
+  filter(!is.na(Protein1), !is.na(Protein2)) %>%
+  transmute(
+    Protein1, Protein2,
+    Protein1_entrez,
+    Protein2_entrez,
+    Evidence = "HIPPIE protein-protein interaction (drug target expansion)",
+    Source   = "HIPPIE_DrugTarget"
+  ) %>%
+  distinct()
+
+cat("HIPPIE drug-target brute-force edges (with symbols):", nrow(hippie_bf_final), "\n")
+
+still_unmappable <- missing_drug_targets %>%
+  filter(!target_entrez_id %in% hippie_bf_final$Protein2_entrez)
+cat("Remaining unmappable targets:", nrow(still_unmappable), "\n")
+if (nrow(still_unmappable) > 0) {
+  cat("  ", paste(still_unmappable$target, collapse = ", "), "\n")
+}
+```
+
+# Step 7: Assemble Full Network v2
+
+```{r assemble_network_v2}
+# Format KS pairs as network edges (same schema as HIPPIE edges)
+ks_edges_v2 <- combined_pairs_v2 %>%
+  transmute(
+    Protein1         = Kinase,
+    Protein2         = Substrate,
+    Protein1_entrez  = as.character(Kinase_entrez),
+    Protein2_entrez  = as.character(Substrate_entrez),
+    Evidence,
+    Source
+  ) %>%
+  distinct()
+
+# Combine all edge types
+full_network_v2 <- bind_rows(
+  ks_edges_v2,
+  hippie_ss_final,
+  hippie_bf_final
+) %>%
+  distinct()
+
+cat("=== Full Network v2 ===\n")
+cat("Total edges:        ", nrow(full_network_v2), "\n")
+cat("  KS (Cantley v2):  ", sum(full_network_v2$Source == "Cantley_v2"), "\n")
+cat("  KS (curated):     ", sum(full_network_v2$Source %in% curated_sources), "\n")
+cat("  OmniPath:         ", sum(full_network_v2$Source == "OmniPath"), "\n")
+cat("  HIPPIE SS:        ", sum(full_network_v2$Source == "HIPPIE"), "\n")
+cat("  HIPPIE DrugTarget:", sum(full_network_v2$Source == "HIPPIE_DrugTarget"), "\n")
+
+all_nodes_v2 <- union(full_network_v2$Protein1_entrez, full_network_v2$Protein2_entrez)
+cat("\nTotal unique nodes: ", length(all_nodes_v2), "\n")
+cat("  Unique Protein1:  ", n_distinct(full_network_v2$Protein1), "\n")
+cat("  Unique Protein2:  ", n_distinct(full_network_v2$Protein2), "\n")
+
+# Summarize across sources (one row per unique protein pair)
+full_network_v2_summary <- full_network_v2 %>%
+  group_by(Protein1, Protein2, Protein1_entrez, Protein2_entrez) %>%
+  summarise(
+    n_sources = n_distinct(Source),
+    Sources   = paste(sort(unique(Source)), collapse = "; "),
+    Evidence  = paste(sort(unique(Evidence)), collapse = "; "),
+    .groups   = "drop"
+  )
+
+cat("\nSummary rows (unique protein pairs):", nrow(full_network_v2_summary), "\n")
+
+# Save
+write_csv(full_network_v2,         here("results/extended_kinome_network_v2.csv"))
+write_csv(full_network_v2_summary, here("results/extended_kinome_network_summary_v2.csv"))
+cat("\nSaved:\n")
+cat("  results/extended_kinome_network_v2.csv\n")
+cat("  results/extended_kinome_network_summary_v2.csv\n")
+```
+
+# Step 8: Drug-Target Coverage Analysis
+
+## v1 vs v2 Comparison
+
+```{r coverage_comparison}
+# Drug target panel
+drug_target_ids <- drug_targets$target_entrez_id
+
+# v1 network
+network_v1 <- read_csv(here("results/extended_kinome_network_summary.csv"), show_col_types = FALSE)
+nodes_v1 <- union(as.character(network_v1$Protein1_entrez),
+                  as.character(network_v1$Protein2_entrez))
+
+# v2 network
+nodes_v2 <- all_nodes_v2
+
+# Coverage
+covered_v1 <- sum(drug_target_ids %in% nodes_v1)
+covered_v2 <- sum(drug_target_ids %in% nodes_v2)
+total       <- length(drug_target_ids)
+
+cat("=== Drug-Target Coverage ===\n")
+cat("v1 coverage:", covered_v1, "/", total, sprintf("(%.1f%%)\n", 100*covered_v1/total))
+cat("v2 coverage:", covered_v2, "/", total, sprintf("(%.1f%%)\n", 100*covered_v2/total))
+cat("Improvement: +", covered_v2 - covered_v1, "targets (+",
+    round(100*(covered_v2 - covered_v1)/total, 1), "ppts)\n", sep = "")
+
+still_missing_v2 <- drug_targets %>% filter(!target_entrez_id %in% nodes_v2)
+cat("\nTargets still missing from v2:", nrow(still_missing_v2), "\n")
+if (nrow(still_missing_v2) > 0) {
+  cat("  ", paste(still_missing_v2$target, collapse = ", "), "\n")
+}
+```
+
+```{r coverage_by_layer_viz}
+# Layer-by-layer coverage accumulation
+nodes_curated  <- union(as.character(combined_pairs_v2$Kinase_entrez[combined_pairs_v2$Source %in% curated_sources]),
+                        as.character(combined_pairs_v2$Substrate_entrez[combined_pairs_v2$Source %in% curated_sources]))
+nodes_cantley  <- union(nodes_curated,
+                        union(as.character(combined_pairs_v2$Kinase_entrez[combined_pairs_v2$Source == "Cantley_v2"]),
+                              as.character(combined_pairs_v2$Substrate_entrez[combined_pairs_v2$Source == "Cantley_v2"])))
+nodes_omnipath <- union(nodes_cantley,
+                        union(as.character(combined_pairs_v2$Kinase_entrez[combined_pairs_v2$Source == "OmniPath"]),
+                              as.character(combined_pairs_v2$Substrate_entrez[combined_pairs_v2$Source == "OmniPath"])))
+nodes_hippie_ss <- union(nodes_omnipath,
+                         c(hippie_ss_final$Protein1_entrez, hippie_ss_final$Protein2_entrez))
+nodes_hippie_bf <- union(nodes_hippie_ss,
+                         c(hippie_bf_final$Protein1_entrez, hippie_bf_final$Protein2_entrez))
+
+layer_coverage <- tibble(
+  layer = c("v1 (with HPA)", "v2: Curated only", "v2: + Cantley\n(no HPA)", 
+            "v2: + OmniPath", "v2: + HIPPIE SS", "v2: + HIPPIE\nDrug Targets"),
+  covered = c(
+    covered_v1,
+    sum(drug_target_ids %in% nodes_curated),
+    sum(drug_target_ids %in% nodes_cantley),
+    sum(drug_target_ids %in% nodes_omnipath),
+    sum(drug_target_ids %in% nodes_hippie_ss),
+    sum(drug_target_ids %in% nodes_hippie_bf)
+  )
+) %>%
+  mutate(
+    missing     = total - covered,
+    coverage_pct = 100 * covered / total,
+    layer = fct_inorder(layer)
+  )
+
+ggplot(layer_coverage, aes(x = layer)) +
+  geom_col(aes(y = coverage_pct), fill = "#4C78A8", color = "grey20", width = 0.7) +
+  geom_col(aes(y = 100 - coverage_pct), fill = "#E45756", color = "grey20",
+           width = 0.7, position = position_stack(reverse = FALSE)) +
+  geom_text(aes(y = coverage_pct / 2,
+                label = paste0(covered, "\n(", round(coverage_pct, 1), "%)")),
+            color = "white", fontface = "bold", size = 3.2) +
+  geom_text(aes(y = coverage_pct + (100 - coverage_pct) / 2,
+                label = paste0(missing, "\n(", round(100 - coverage_pct, 1), "%)")),
+            fontface = "bold", size = 3.2) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 100.5),
+                     expand = expansion(mult = c(0, 0.01))) +
+  labs(x = NULL, y = "% of drug targets",
+       title = "Drug-target coverage: v1 vs v2 layer-by-layer accumulation") +
+  theme_pubr(x.text.angle = 30) +
+  theme(axis.text.x = element_text(size = 9))
+```
+
+## Network Size Comparison
+
+```{r network_size_comparison}
+v1_stats <- tibble(
+  metric = c("Total edges", "Unique kinases (Protein1)", "Unique substrates (Protein2)",
+             "Total unique nodes"),
+  v1 = c(
+    nrow(network_v1),
+    n_distinct(network_v1$Protein1),
+    n_distinct(network_v1$Protein2),
+    length(nodes_v1)
+  ),
+  v2 = c(
+    nrow(full_network_v2_summary),
+    n_distinct(full_network_v2_summary$Protein1),
+    n_distinct(full_network_v2_summary$Protein2),
+    length(nodes_v2)
+  )
+) %>%
+  mutate(change = v2 - v1, pct_change = round(100 * change / v1, 1))
+
+cat("=== Network Size: v1 vs v2 ===\n")
+print(v1_stats)
+```
+
+## Remaining Missing Targets
+
+```{r remaining_missing}
+if (nrow(still_missing_v2) > 0) {
+  drug_targets_full <- read.fst(here("data/kinome_profiling_novartis_evebio_combined.fst")) %>%
+    as_tibble()
+  
+  missing_inhibition <- drug_targets_full %>%
+    filter(target_entrez_id %in% still_missing_v2$target_entrez_id) %>%
+    group_by(target, target_entrez_id) %>%
+    summarise(
+      max_inhibition = max(percent_inhibition, na.rm = TRUE),
+      n_compounds = n_distinct(compound_pubchem_cid),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(max_inhibition))
+
+  datatable(
+    missing_inhibition %>%
+      mutate(across(where(is.numeric), ~round(.x, 2))),
+    options = list(pageLength = 20),
+    caption = "Targets still missing from v2 network (not in any database or HIPPIE)"
+  )
+} else {
+  cat("All drug targets are covered in v2!\n")
+}
+```
+
+## Source Composition
+
+```{r source_composition}
+edge_sources <- full_network_v2 %>%
+  mutate(Source_clean = case_when(
+    Source %in% curated_sources ~ "Curated (KiNet)",
+    Source == "Cantley_v2"      ~ "Cantley Atlas\n(no HPA)",
+    Source == "OmniPath"        ~ "OmniPath",
+    Source == "HIPPIE"          ~ "HIPPIE\n(substrate-substrate)",
+    Source == "HIPPIE_DrugTarget" ~ "HIPPIE\n(drug target expansion)",
+    TRUE ~ Source
+  )) %>%
+  count(Source_clean) %>%
+  mutate(pct = 100 * n / sum(n),
+         Source_clean = fct_reorder(Source_clean, n))
+
+ggplot(edge_sources, aes(x = Source_clean, y = n, fill = Source_clean)) +
+  geom_col(color = "grey20", width = 0.7, show.legend = FALSE) +
+  geom_text(aes(label = paste0(comma(n), "\n(", round(pct, 1), "%)")),
+            vjust = -0.3, size = 3.2) +
+  scale_fill_manual(values = c(
+    "Curated (KiNet)"                = "#4C78A8",
+    "Cantley Atlas\n(no HPA)"        = "#54A24B",
+    "OmniPath"                       = "#F58518",
+    "HIPPIE\n(substrate-substrate)"  = "#72B7B2",
+    "HIPPIE\n(drug target expansion)"= "#B279A2"
+  )) +
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.15))) +
+  labs(x = NULL, y = "Number of edges",
+       title = "v2 network edge composition by source") +
+  theme_pubr(x.text.angle = 30) +
+  theme(axis.text.x = element_text(size = 9))
+```

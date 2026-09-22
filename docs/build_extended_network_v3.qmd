@@ -1,0 +1,555 @@
+---
+title: "Extended Kinome Network v3 — Build Pipeline"
+subtitle: "Strategy C: OmniPath directed signaling + HIPPIE 1-hop fallback for non-KS drug targets"
+author: "Chinmaya Joisa"
+date: today
+toc: true
+toc-depth: 3
+toc-title: Table of Contents
+format:
+  html:
+    page-layout: full
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+execute:
+  echo: true
+  cache: false
+  message: false
+  warning: false
+  fig-align: center
+  fig-dpi: 300
+---
+
+```{r setup, include=FALSE}
+require("knitr")
+knitr::opts_knit$set(root.dir = here::here())
+set.seed(123)
+```
+
+```{r libraries}
+library(data.table)
+library(tidyverse)
+library(fst)
+library(here)
+library(scales)
+library(ggpubr)
+library(patchwork)
+library(DT)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(OmnipathR)
+```
+
+# Overview
+
+v3 replaces the brute-force single-best-HIPPIE-edge expansion with **Strategy C**:
+
+| Layer | Source | Notes |
+|---|---|---|
+| Curated KS pairs | PSP / EPSD / iPTMNet | Unchanged from v1 |
+| Cantley predicted KS | Cantley atlas | HPA co-localization **RETAINED** |
+| OmniPath enzyme-substrate | PhosphoSite + SIGNOR | Kinase-substrate curated |
+| HIPPIE substrate-substrate PPIs | HIPPIE | High-confidence (75th pctile), substrates only |
+| **Strategy C Phase 1** | OmniPath directed network | Curated stimulation/inhibition edges FROM missing drug targets TO in-network nodes |
+| **Strategy C Phase 2** | HIPPIE 1-hop full | ALL high-confidence HIPPIE edges from OmniPath-uncovered targets to in-network nodes (not just 1 best) |
+
+**Key difference from v2:** The old approach gave each missing drug target exactly 1 PPI edge
+(degree=1, completely isolated). Strategy C gives them multiple connections, enabling network
+propagation methods like random walks or diffusion to actually reach them.
+
+# Step 1: Load v1 Combined KS Pairs (HPA-filtered)
+
+```{r load_v1_pairs}
+combined_v1 <- read_csv(here("results/combined_kinase_substrate_pairs_2025.csv"),
+                        show_col_types = FALSE) %>%
+  mutate(Kinase_entrez    = as.character(Kinase_entrez),
+         Substrate_entrez = as.character(Substrate_entrez))
+
+cat("v1 KS pairs (HPA-filtered):\n")
+cat("  Total:           ", nrow(combined_v1), "\n")
+cat("  Cantley:         ", sum(combined_v1$Source == "Cantley"), "\n")
+cat("  Curated:         ", sum(combined_v1$Source != "Cantley"), "\n")
+cat("  Unique kinases:  ", n_distinct(combined_v1$Kinase_entrez), "\n")
+cat("  Unique substrates:", n_distinct(combined_v1$Substrate_entrez), "\n")
+```
+
+# Step 2: Add OmniPath Enzyme-Substrate Layer
+
+```{r omnipath_ks_layer}
+cat("Querying OmniPath (PhosphoSite + SIGNOR enzyme-substrate)...\n")
+omnipath_es <- enzyme_substrate(
+  organism    = 9606,
+  resources   = c("PhosphoSite", "SIGNOR"),
+  genesymbols = TRUE,
+  silent      = TRUE
+)
+
+curated_kinases <- unique(combined_v1$Kinase)
+
+omnipath_sub_symbols <- omnipath_es %>%
+  dplyr::filter(enzyme_genesymbol %in% curated_kinases,
+                residue_type %in% c("S", "T", "Y")) %>%
+  dplyr::select(enzyme_genesymbol, substrate_genesymbol, residue_type, residue_offset) %>%
+  distinct()
+
+cat("OmniPath records (curated kinases, S/T/Y):", nrow(omnipath_sub_symbols), "\n")
+
+# Map symbols → Entrez
+omnipath_entrez_map <- bitr(
+  unique(omnipath_sub_symbols$substrate_genesymbol),
+  fromType = "SYMBOL", toType = "ENTREZID",
+  OrgDb = org.Hs.eg.db, drop = TRUE
+) %>%
+  dplyr::rename(substrate_genesymbol = SYMBOL, Substrate_entrez = ENTREZID) %>%
+  distinct()
+
+omnipath_kin_map <- bitr(
+  unique(omnipath_sub_symbols$enzyme_genesymbol),
+  fromType = "SYMBOL", toType = "ENTREZID",
+  OrgDb = org.Hs.eg.db, drop = TRUE
+) %>%
+  dplyr::rename(enzyme_genesymbol = SYMBOL, Kinase_entrez = ENTREZID) %>%
+  distinct()
+
+omnipath_pairs <- omnipath_sub_symbols %>%
+  left_join(omnipath_entrez_map, by = "substrate_genesymbol") %>%
+  left_join(omnipath_kin_map,    by = "enzyme_genesymbol") %>%
+  dplyr::filter(!is.na(Substrate_entrez), !is.na(Kinase_entrez)) %>%
+  transmute(
+    Kinase           = enzyme_genesymbol,
+    Kinase_entrez    = as.character(Kinase_entrez),
+    Substrate        = substrate_genesymbol,
+    Substrate_entrez = as.character(Substrate_entrez),
+    Site             = paste0(residue_type, residue_offset),
+    Curated_site     = TRUE,
+    Likely_functional = NA,
+    Evidence         = "OmniPath enzyme-substrate (PhosphoSite/SIGNOR curated)",
+    Reference_PMID   = NA_character_,
+    Source           = "OmniPath"
+  ) %>%
+  distinct()
+
+cat("OmniPath KS pairs after mapping:", nrow(omnipath_pairs), "\n")
+cat("Novel substrates vs v1:          ", length(setdiff(omnipath_pairs$Substrate_entrez, combined_v1$Substrate_entrez)), "\n")
+
+combined_with_omnipath <- bind_rows(combined_v1, omnipath_pairs) %>% distinct()
+cat("Total KS pairs after OmniPath:  ", nrow(combined_with_omnipath), "\n")
+```
+
+# Step 3: Add HIPPIE Substrate-Substrate PPIs
+
+```{r hippie_ss_layer}
+cat("Loading HIPPIE...\n")
+hippie <- fread(
+  here("data/hippie_current.txt"),
+  col.names = c("Gene1", "Entrez1", "Gene2", "Entrez2", "Score", "Metadata"),
+  colClasses = list(character = c("Entrez1", "Entrez2"))
+)
+
+cat("HIPPIE total interactions:", nrow(hippie), "\n")
+confidence_cutoff <- quantile(hippie$Score, 0.75, na.rm = TRUE)
+cat("Confidence cutoff (75th pctile):", round(confidence_cutoff, 3), "\n")
+
+# Substrate-only proteins (not kinases)
+substrate_ids  <- unique(combined_with_omnipath$Substrate_entrez)
+kinase_ids     <- unique(combined_with_omnipath$Kinase_entrez)
+substrate_only <- setdiff(substrate_ids, kinase_ids)
+
+hippie_ss <- hippie[
+  Score > confidence_cutoff &
+    Entrez1 %in% substrate_only & Entrez2 %in% substrate_only &
+    Entrez1 != Entrez2
+]
+
+# Canonicalise undirected edges
+hippie_ss_dedup <- hippie_ss[
+  , .(p1 = as.character(pmin(as.integer(Entrez1), as.integer(Entrez2))),
+      p2 = as.character(pmax(as.integer(Entrez1), as.integer(Entrez2))),
+      Gene1, Gene2, Score)
+] %>% unique(by = c("p1", "p2"))
+
+cat("HIPPIE substrate-substrate edges:", nrow(hippie_ss_dedup), "\n")
+
+# Map to symbols
+hippie_sym1 <- bitr(hippie_ss_dedup$p1, fromType = "ENTREZID", toType = "SYMBOL",
+                    OrgDb = org.Hs.eg.db, drop = TRUE) %>%
+  dplyr::rename(p1 = ENTREZID, Protein1 = SYMBOL) %>% distinct()
+hippie_sym2 <- bitr(hippie_ss_dedup$p2, fromType = "ENTREZID", toType = "SYMBOL",
+                    OrgDb = org.Hs.eg.db, drop = TRUE) %>%
+  dplyr::rename(p2 = ENTREZID, Protein2 = SYMBOL) %>% distinct()
+
+hippie_ss_final <- hippie_ss_dedup %>%
+  left_join(hippie_sym1, by = "p1") %>%
+  left_join(hippie_sym2, by = "p2") %>%
+  dplyr::filter(!is.na(Protein1), !is.na(Protein2)) %>%
+  transmute(
+    Protein1, Protein2,
+    Protein1_entrez = p1,
+    Protein2_entrez = p2,
+    Evidence = "protein-protein interaction",
+    Source   = "HIPPIE"
+  ) %>%
+  distinct()
+
+cat("HIPPIE SS pairs (with symbols):", nrow(hippie_ss_final), "\n")
+```
+
+# Step 4: Strategy C — Phase 1: OmniPath Directed Signaling
+
+For drug targets not covered by the KS + OmniPath + HIPPIE-SS layers, we query OmniPath's
+**directed interaction network** (85K+ curated edges from SIGNOR, HPRD, SPIKE). This captures
+GPCR → kinase activation, NR → downstream signalling, and receptor kinase cross-talk.
+
+We take edges where the **drug target is the source** and the **target node is in the KS
+network** — meaning the drug target exerts a measurable causal effect on a node we already model.
+
+```{r strategy_c_phase1}
+# Drug-target panel
+drug_targets <- read.fst(here("data/kinome_profiling_novartis_evebio_combined.fst")) %>%
+  as_tibble() %>%
+  distinct(target, target_entrez_id) %>%
+  mutate(target_entrez_id = as.character(target_entrez_id))
+
+# All nodes in KS + HIPPIE-SS backbone
+ks_nodes_entrez <- union(as.character(combined_with_omnipath$Kinase_entrez),
+                         as.character(combined_with_omnipath$Substrate_entrez))
+backbone_nodes_entrez <- union(ks_nodes_entrez,
+                               c(hippie_ss_final$Protein1_entrez, hippie_ss_final$Protein2_entrez))
+backbone_nodes_sym    <- union(
+  union(combined_with_omnipath$Kinase, combined_with_omnipath$Substrate),
+  c(hippie_ss_final$Protein1, hippie_ss_final$Protein2)
+)
+
+missing_drug_targets <- drug_targets %>%
+  dplyr::filter(!target_entrez_id %in% backbone_nodes_entrez)
+
+cat("Drug targets not in KS + HIPPIE-SS backbone:", nrow(missing_drug_targets), "/", nrow(drug_targets), "\n\n")
+
+# Query OmniPath directed interaction network
+cat("Querying OmniPath directed interaction network...\n")
+op_net <- omnipath_interactions(organism = 9606, datasets = "omnipath")
+cat("Total OmniPath directed interactions:", nrow(op_net), "\n\n")
+
+# Filter: source = missing drug target, target = in-backbone node, directed
+op_c_phase1 <- op_net %>%
+  dplyr::filter(source_genesymbol %in% missing_drug_targets$target,
+                target_genesymbol %in% backbone_nodes_sym) %>%
+  dplyr::filter(is_stimulation | is_inhibition)
+
+cat("=== Phase 1: OmniPath directed signaling ===\n")
+cat("Edges (drug target → backbone):  ", nrow(op_c_phase1), "\n")
+cat("Drug targets covered:             ", n_distinct(op_c_phase1$source_genesymbol), 
+    "/", nrow(missing_drug_targets), "\n")
+
+# Map OmniPath gene symbols to Entrez IDs for the new source nodes
+op_src_map <- bitr(unique(op_c_phase1$source_genesymbol),
+                   fromType = "SYMBOL", toType = "ENTREZID",
+                   OrgDb = org.Hs.eg.db, drop = TRUE) %>%
+  dplyr::rename(source_genesymbol = SYMBOL, Protein1_entrez = ENTREZID) %>% distinct()
+
+op_tgt_map <- bitr(unique(op_c_phase1$target_genesymbol),
+                   fromType = "SYMBOL", toType = "ENTREZID",
+                   OrgDb = org.Hs.eg.db, drop = TRUE) %>%
+  dplyr::rename(target_genesymbol = SYMBOL, Protein2_entrez = ENTREZID) %>% distinct()
+
+op_c_phase1_final <- op_c_phase1 %>%
+  left_join(op_src_map, by = "source_genesymbol") %>%
+  left_join(op_tgt_map, by = "target_genesymbol") %>%
+  dplyr::filter(!is.na(Protein1_entrez), !is.na(Protein2_entrez)) %>%
+  dplyr::mutate(
+    edge_type = case_when(
+      is_stimulation & !is_inhibition ~ "stimulation",
+      !is_stimulation & is_inhibition ~ "inhibition",
+      TRUE ~ "dual"
+    )
+  ) %>%
+  transmute(
+    Protein1         = source_genesymbol,
+    Protein2         = target_genesymbol,
+    Protein1_entrez  = as.character(Protein1_entrez),
+    Protein2_entrez  = as.character(Protein2_entrez),
+    Evidence         = paste0("OmniPath directed signaling (", edge_type, ") [", sources, "]"),
+    Source           = "OmniPath_Signaling"
+  ) %>%
+  distinct()
+
+cat("\nOmniPath signaling edges (after Entrez mapping):", nrow(op_c_phase1_final), "\n")
+
+# Targets covered by Phase 1
+phase1_covered_genes   <- unique(op_c_phase1_final$Protein1)
+phase1_covered_entrez  <- unique(op_c_phase1_final$Protein1_entrez)
+cat("Drug targets now connected (Phase 1):", length(phase1_covered_genes), "\n")
+```
+
+# Step 5: Strategy C — Phase 2: HIPPIE 1-Hop for Uncovered Targets
+
+For drug targets with no OmniPath directed signaling to the backbone, we take **ALL**
+high-confidence HIPPIE PPI edges connecting them to backbone proteins — not just the
+single best edge as in v2.
+
+```{r strategy_c_phase2}
+# Targets still missing after Phase 1
+still_missing <- missing_drug_targets %>%
+  dplyr::filter(!target %in% phase1_covered_genes)
+
+cat("=== Phase 2: HIPPIE 1-hop for remaining ", nrow(still_missing), " targets ===\n\n")
+
+# Find ALL high-confidence HIPPIE edges from still-missing targets to backbone
+hippie_hc <- hippie[Score > confidence_cutoff]
+
+hippie_c_phase2 <- hippie_hc %>%
+  dplyr::filter(
+    (Entrez1 %in% still_missing$target_entrez_id & Entrez2 %in% backbone_nodes_entrez) |
+    (Entrez2 %in% still_missing$target_entrez_id & Entrez1 %in% backbone_nodes_entrez)
+  ) %>%
+  dplyr::mutate(
+    drug_target_entrez = as.character(if_else(Entrez1 %in% still_missing$target_entrez_id, Entrez1, Entrez2)),
+    drug_target_gene   = if_else(Entrez1 %in% still_missing$target_entrez_id, Gene1, Gene2),
+    backbone_entrez    = as.character(if_else(Entrez1 %in% still_missing$target_entrez_id, Entrez2, Entrez1)),
+    backbone_gene      = if_else(Entrez1 %in% still_missing$target_entrez_id, Gene2, Gene1)
+  ) %>%
+  distinct(drug_target_entrez, drug_target_gene, backbone_entrez, backbone_gene, Score)
+
+cat("HIPPIE edges (uncovered drug target → backbone):", nrow(hippie_c_phase2), "\n")
+cat("Drug targets covered by Phase 2:", n_distinct(hippie_c_phase2$drug_target_entrez),
+    "/", nrow(still_missing), "\n")
+
+# Degree check for Phase 2 targets
+phase2_degree <- hippie_c_phase2 %>%
+  count(drug_target_gene) %>%
+  dplyr::rename(degree = n)
+
+cat("\nPhase 2 degree distribution (connections per target):\n")
+summary(phase2_degree$degree) %>% print()
+cat("Targets with degree 1 (still leaf nodes): ", sum(phase2_degree$degree == 1), "\n")
+cat("Targets with degree >= 2:                 ", sum(phase2_degree$degree >= 2), "\n")
+
+# Map to symbols for Phase 2 backbone nodes (already have drug target gene names)
+hippie_p2_sym <- bitr(unique(hippie_c_phase2$backbone_entrez),
+                      fromType = "ENTREZID", toType = "SYMBOL",
+                      OrgDb = org.Hs.eg.db, drop = TRUE) %>%
+  dplyr::rename(backbone_entrez = ENTREZID, backbone_symbol = SYMBOL) %>% distinct()
+
+hippie_c_phase2_final <- hippie_c_phase2 %>%
+  left_join(hippie_p2_sym, by = "backbone_entrez") %>%
+  dplyr::filter(!is.na(backbone_symbol)) %>%
+  transmute(
+    Protein1         = drug_target_gene,
+    Protein2         = backbone_symbol,
+    Protein1_entrez  = as.character(drug_target_entrez),
+    Protein2_entrez  = as.character(backbone_entrez),
+    Evidence         = "HIPPIE high-confidence PPI (drug target 1-hop expansion)",
+    Source           = "HIPPIE_DrugTarget"
+  ) %>%
+  distinct()
+
+cat("\nHIPPIE Phase 2 edges (with symbols):", nrow(hippie_c_phase2_final), "\n")
+
+# Final coverage check
+phase2_covered_entrez <- unique(hippie_c_phase2_final$Protein1_entrez)
+total_new_covered <- c(phase1_covered_entrez, phase2_covered_entrez)
+still_unreachable <- still_missing %>%
+  dplyr::filter(!target_entrez_id %in% phase2_covered_entrez)
+
+cat("\nFinal coverage summary:\n")
+cat("  Phase 1 (OmniPath signaling): ", length(phase1_covered_entrez), "targets\n")
+cat("  Phase 2 (HIPPIE 1-hop):       ", length(phase2_covered_entrez), "targets\n")
+cat("  Still unreachable:            ", nrow(still_unreachable), "targets\n")
+if (nrow(still_unreachable) > 0) {
+  cat("  Unreachable targets:", paste(still_unreachable$target, collapse=", "), "\n")
+}
+```
+
+# Step 6: Assemble Full Network v3
+
+```{r assemble_network_v3}
+# Format KS pairs as network edges
+ks_edges <- combined_with_omnipath %>%
+  transmute(
+    Protein1        = Kinase,
+    Protein2        = Substrate,
+    Protein1_entrez = Kinase_entrez,
+    Protein2_entrez = Substrate_entrez,
+    Evidence,
+    Source
+  ) %>%
+  distinct()
+
+# Combine all layers
+full_network_v3 <- bind_rows(
+  ks_edges,
+  hippie_ss_final,
+  op_c_phase1_final,
+  hippie_c_phase2_final
+) %>%
+  distinct()
+
+cat("=== Full Network v3 (Strategy C) ===\n\n")
+cat("Layer summary:\n")
+cat("  KS pairs total:              ", nrow(ks_edges), "\n")
+cat("    Curated (PSP/EPSD/iPTMNet):", sum(ks_edges$Source %in% c("PhosphoSitePlus", "EPSD", "iPTMNet",
+                                          "PhosphoNetworks", "PhosphoELM")), "\n")
+cat("    Cantley (HPA-filtered):    ", sum(ks_edges$Source == "Cantley"), "\n")
+cat("    OmniPath enzyme-substrate: ", sum(ks_edges$Source == "OmniPath"), "\n")
+cat("  HIPPIE substrate-substrate:  ", nrow(hippie_ss_final), "\n")
+cat("  OmniPath directed signaling: ", nrow(op_c_phase1_final), "\n")
+cat("  HIPPIE 1-hop (drug targets): ", nrow(hippie_c_phase2_final), "\n")
+cat("\n  TOTAL edges:                 ", nrow(full_network_v3), "\n")
+
+all_nodes_v3 <- union(full_network_v3$Protein1_entrez, full_network_v3$Protein2_entrez)
+cat("  Total nodes:                 ", length(all_nodes_v3), "\n")
+
+# Summarise to unique protein pairs
+full_network_v3_summary <- full_network_v3 %>%
+  group_by(Protein1, Protein2, Protein1_entrez, Protein2_entrez) %>%
+  summarise(
+    n_sources = n_distinct(Source),
+    Sources   = paste(sort(unique(Source)), collapse = "; "),
+    Evidence  = paste(sort(unique(Evidence)), collapse = "; "),
+    .groups   = "drop"
+  )
+
+cat("\n  Unique protein pairs (summary): ", nrow(full_network_v3_summary), "\n")
+
+# Save
+write_csv(full_network_v3,         here("results/extended_kinome_network_v3.csv"))
+write_csv(full_network_v3_summary, here("results/extended_kinome_network_summary_v3.csv"))
+cat("\nSaved:\n")
+cat("  results/extended_kinome_network_v3.csv\n")
+cat("  results/extended_kinome_network_summary_v3.csv\n")
+```
+
+# Drug-Target Coverage Analysis
+
+```{r coverage_analysis}
+network_v1 <- read_csv(here("results/extended_kinome_network_summary.csv"),  show_col_types = FALSE)
+network_v2 <- read_csv(here("results/extended_kinome_network_summary_v2.csv"), show_col_types = FALSE)
+
+nodes_v1 <- union(as.character(network_v1$Protein1_entrez), as.character(network_v1$Protein2_entrez))
+nodes_v2 <- union(as.character(network_v2$Protein1_entrez), as.character(network_v2$Protein2_entrez))
+nodes_v3 <- all_nodes_v3
+
+drug_ids <- drug_targets$target_entrez_id
+n_drugs  <- length(drug_ids)
+
+cov_v1 <- sum(drug_ids %in% nodes_v1)
+cov_v2 <- sum(drug_ids %in% nodes_v2)
+cov_v3 <- sum(drug_ids %in% nodes_v3)
+
+cat("=== Drug-Target Coverage ===\n")
+cat("v1:  ", cov_v1, "/", n_drugs, sprintf("(%.1f%%)\n", 100*cov_v1/n_drugs))
+cat("v2:  ", cov_v2, "/", n_drugs, sprintf("(%.1f%%)\n", 100*cov_v2/n_drugs))
+cat("v3:  ", cov_v3, "/", n_drugs, sprintf("(%.1f%%)\n", 100*cov_v3/n_drugs))
+```
+
+```{r coverage_viz}
+# Layer-by-layer build for v3
+nodes_after_ks      <- union(as.character(combined_with_omnipath$Kinase_entrez),
+                              as.character(combined_with_omnipath$Substrate_entrez))
+nodes_after_hippie  <- union(nodes_after_ks,
+                              c(hippie_ss_final$Protein1_entrez, hippie_ss_final$Protein2_entrez))
+nodes_after_op_sig  <- union(nodes_after_hippie,
+                              c(op_c_phase1_final$Protein1_entrez, op_c_phase1_final$Protein2_entrez))
+nodes_after_hippie2 <- union(nodes_after_op_sig,
+                              c(hippie_c_phase2_final$Protein1_entrez, hippie_c_phase2_final$Protein2_entrez))
+
+layer_cov <- tibble(
+  label    = c("v1 (Curated +\nCantley HPA)",
+               "v2: + OmniPath\nKS",
+               "v2: + HIPPIE\nsubstrate-substrate",
+               "v3: + OmniPath\ndirected signaling",
+               "v3: + HIPPIE\n1-hop drug targets"),
+  covered  = c(cov_v1,
+               sum(drug_ids %in% nodes_after_ks),
+               sum(drug_ids %in% nodes_after_hippie),
+               sum(drug_ids %in% nodes_after_op_sig),
+               sum(drug_ids %in% nodes_after_hippie2))
+) %>%
+  mutate(
+    missing  = n_drugs - covered,
+    pct      = 100 * covered / n_drugs,
+    label    = fct_inorder(label)
+  )
+
+ggplot(layer_cov, aes(x = label)) +
+  geom_col(aes(y = pct),       fill = "#4C78A8", color = "grey20", width = 0.7) +
+  geom_col(aes(y = 100 - pct), fill = "#E45756", color = "grey20", width = 0.7,
+           position = position_stack(reverse = FALSE)) +
+  geom_text(aes(y = pct / 2,
+                label = paste0(covered, "\n(", round(pct, 1), "%)")),
+            color = "white", fontface = "bold", size = 3.5) +
+  geom_text(aes(y = pct + (100 - pct) / 2,
+                label = paste0(missing, "\n(", round(100 - pct, 1), "%)")),
+            fontface = "bold", size = 3.5) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"),
+                     limits = c(0, 101), expand = expansion(mult = c(0, 0.01))) +
+  labs(x = NULL, y = "% of drug targets covered",
+       title = "Drug-target coverage by network build layer") +
+  theme_pubr(x.text.angle = 20) +
+  theme(axis.text.x = element_text(size = 9))
+```
+
+# Source Composition
+
+```{r source_composition}
+edge_sources <- full_network_v3 %>%
+  mutate(Source_clean = case_when(
+    Source %in% c("PhosphoSitePlus", "EPSD", "iPTMNet",
+                  "PhosphoNetworks", "PhosphoELM") ~ "Curated KS",
+    Source == "Cantley"            ~ "Cantley (HPA-filtered)",
+    Source == "OmniPath"           ~ "OmniPath KS",
+    Source == "HIPPIE"             ~ "HIPPIE substrate-substrate",
+    Source == "OmniPath_Signaling" ~ "OmniPath directed signaling",
+    Source == "HIPPIE_DrugTarget"  ~ "HIPPIE drug-target 1-hop",
+    TRUE ~ Source
+  )) %>%
+  count(Source_clean) %>%
+  mutate(pct = 100 * n / sum(n),
+         Source_clean = fct_reorder(Source_clean, n))
+
+ggplot(edge_sources, aes(x = Source_clean, y = n, fill = Source_clean)) +
+  geom_col(color = "grey20", width = 0.7, show.legend = FALSE) +
+  geom_text(aes(label = paste0(comma(n), "\n(", round(pct, 1), "%)")),
+            vjust = -0.3, size = 3.2) +
+  scale_fill_manual(values = c(
+    "Curated KS"                    = "#4C78A8",
+    "Cantley (HPA-filtered)"        = "#54A24B",
+    "OmniPath KS"                   = "#F58518",
+    "HIPPIE substrate-substrate"    = "#72B7B2",
+    "OmniPath directed signaling"   = "#B279A2",
+    "HIPPIE drug-target 1-hop"      = "#BAB0AC"
+  )) +
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.15))) +
+  labs(x = NULL, y = "Number of edges",
+       title = "v3 network edge composition") +
+  theme_pubr(x.text.angle = 30) +
+  theme(axis.text.x = element_text(size = 9))
+```
+
+# v1 vs v2 vs v3 Comparison
+
+```{r version_comparison}
+compare_df <- tibble(
+  version = c("v1", "v2 conservative", "v3 (Strategy C)"),
+  edges   = c(nrow(network_v1), nrow(network_v2), nrow(full_network_v3_summary)),
+  nodes   = c(length(nodes_v1), length(nodes_v2), length(nodes_v3)),
+  drug_cov = c(cov_v1, cov_v2, cov_v3),
+  drug_pct = round(100 * c(cov_v1, cov_v2, cov_v3) / n_drugs, 1)
+)
+
+cat("=== Version Comparison ===\n")
+print(compare_df)
+
+# v3 new drug targets vs v2 (check isolation)
+v3_drug_targets_entrez <- drug_ids[drug_ids %in% nodes_v3]
+v3_new_vs_v2 <- drug_ids[drug_ids %in% nodes_v3 & !drug_ids %in% nodes_v2]
+cat("\nNew targets in v3 vs v2:", length(v3_new_vs_v2), "\n")
+
+# Strategy C expansion in v3
+cat("\nStrategy C layer breakdown in v3:\n")
+cat("  OmniPath directed signaling edges:     ", nrow(op_c_phase1_final), "\n")
+cat("  HIPPIE 1-hop drug-target edges:         ", nrow(hippie_c_phase2_final), "\n")
+cat("  Total strategy C edges:                ", nrow(op_c_phase1_final) + nrow(hippie_c_phase2_final), "\n")
+cat("\nvs v2 brute-force: 114 edges (all degree-1)\n")
+```

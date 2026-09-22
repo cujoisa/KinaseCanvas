@@ -1,0 +1,432 @@
+---
+title: "Extended Kinome Network v4 — Network EDA"
+subtitle: "Drug target importance, hub analysis, and community structure"
+author: "Chinmaya Joisa"
+date: today
+toc: true
+toc-depth: 3
+toc-title: Table of Contents
+format:
+  html:
+    page-layout: full
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+execute:
+  echo: true
+  cache: false
+  message: false
+  warning: false
+  fig-align: center
+  fig-dpi: 300
+---
+
+```{r setup, include=FALSE}
+require("knitr")
+knitr::opts_knit$set(root.dir = here::here())
+set.seed(123)
+```
+
+```{r libraries}
+library(tidyverse)
+library(fst)
+library(here)
+library(scales)
+library(ggpubr)
+library(patchwork)
+library(igraph)
+library(DT)
+invisible(gc())
+```
+
+# Overview
+
+Network exploratory data analysis (EDA) of the v4 extended kinome network (curated kinase-substrate only, no HIPPIE). Focus areas:
+- **Drug-target importance**: Which drug targets are most influential by centrality measures?
+- **Non-drug target hubs**: Which backbone proteins are critical bridges?
+- **Network communities**: Leiden clustering to identify functional modules
+- **Drug target distribution**: How drug targets distribute across communities
+- **Source quality**: Breakdown of edges by curation source
+
+# 1. Load Data
+
+```{r load_v4}
+# Load v4 network
+network_v4 <- read_csv(here("results/extended_kinome_network_summary_v4.csv"),
+                       show_col_types = FALSE) %>%
+  dplyr::filter(!is.na(Protein1), !is.na(Protein2),
+                Protein1 != "", Protein2 != "") %>%
+  mutate(Protein1_entrez = as.character(Protein1_entrez),
+         Protein2_entrez = as.character(Protein2_entrez))
+
+network_v4_full <- read_csv(here("results/extended_kinome_network_v4.csv"),
+                            show_col_types = FALSE) %>%
+  dplyr::filter(!is.na(Protein1), !is.na(Protein2),
+                Protein1 != "", Protein2 != "") %>%
+  mutate(Protein1_entrez = as.character(Protein1_entrez),
+         Protein2_entrez = as.character(Protein2_entrez))
+
+# Drug target panel
+drug_targets <- read.fst(here("data/kinome_profiling_novartis_evebio_combined.fst")) %>%
+  as_tibble() %>%
+  distinct(target, target_entrez_id) %>%
+  mutate(target_entrez_id = as.character(target_entrez_id),
+         is_drug_target = TRUE)
+
+# Identify drug targets in network
+drug_target_set <- drug_targets$target_entrez_id
+
+nodes_v4 <- union(network_v4$Protein1_entrez, network_v4$Protein2_entrez)
+drug_targets_in_v4 <- drug_targets %>%
+  dplyr::filter(target_entrez_id %in% nodes_v4)
+
+cat("v4 Network overview:\n")
+cat("  Edges:               ", nrow(network_v4), "\n")
+cat("  Nodes:               ", length(nodes_v4), "\n")
+cat("  Drug targets:        ", nrow(drug_targets), "\n")
+cat("  Drug targets in v4:  ", nrow(drug_targets_in_v4), 
+    sprintf(" (%.1f%%)\n", 100 * nrow(drug_targets_in_v4) / nrow(drug_targets)))
+cat("  Non-drug nodes:      ", length(nodes_v4) - nrow(drug_targets_in_v4), "\n")
+```
+
+# 2. Build Network Graph
+
+```{r build_graph}
+build_igraph <- function(net) {
+  graph_from_data_frame(
+    net %>% dplyr::select(from = Protein1, to = Protein2),
+    directed = FALSE
+  )
+}
+
+g_v4 <- build_igraph(network_v4)
+
+# Basic stats
+comps <- igraph::components(g_v4)
+comp_sizes <- sort(comps$csize, decreasing = TRUE)
+degs <- igraph::degree(g_v4)
+
+cat("=== v4 Network-Wide Properties ===\n")
+cat("Nodes:                    ", vcount(g_v4), "\n")
+cat("Edges:                    ", ecount(g_v4), "\n")
+cat("Density:                  ", round(edge_density(g_v4), 5), "\n")
+cat("Number of components:     ", comps$no, "\n")
+cat("Largest component nodes:  ", comp_sizes[1], " (", 
+    round(100 * comp_sizes[1] / vcount(g_v4), 1), "%)\n")
+cat("Global clustering coeff:  ", round(igraph::transitivity(g_v4, type = "global"), 4), "\n\n")
+
+cat("Degree statistics:\n")
+cat("  Mean:   ", round(mean(degs), 1), "\n")
+cat("  Median: ", median(degs), "\n")
+cat("  Max:    ", max(degs), "\n")
+```
+
+# 3. Drug-Target Importance: Centrality Measures
+
+```{r drug_target_centrality}
+# Create mapping from gene symbol to Entrez ID
+symbol_to_entrez <- bind_rows(
+  network_v4 %>% dplyr::select(symbol = Protein1, entrez = Protein1_entrez),
+  network_v4 %>% dplyr::select(symbol = Protein2, entrez = Protein2_entrez)
+) %>%
+  distinct(symbol, entrez)
+
+# Compute centrality measures
+betweenness <- igraph::betweenness(g_v4, normalized = TRUE)
+closeness <- igraph::closeness(g_v4, normalized = TRUE)
+eigenvector <- igraph::eigen_centrality(g_v4)$vector
+pagerank <- igraph::page_rank(g_v4)$vector
+
+centrality_df <- tibble(
+  node = names(degs),
+  degree = as.numeric(degs),
+  betweenness = betweenness[names(degs)],
+  closeness = closeness[names(degs)],
+  eigenvector = eigenvector[names(degs)],
+  pagerank = pagerank[names(degs)]
+) %>%
+  left_join(symbol_to_entrez, by = c("node" = "symbol")) %>%
+  mutate(
+    is_drug_target = entrez %in% drug_target_set,
+    degree_rank = rank(-degree),
+    betweenness_rank = rank(-betweenness),
+    closeness_rank = rank(-closeness),
+    eigenvector_rank = rank(-eigenvector),
+    pagerank_rank = rank(-pagerank),
+    combined_rank = degree_rank + betweenness_rank + closeness_rank + 
+                    eigenvector_rank + pagerank_rank
+  )
+
+# Top drug targets by importance
+top_drug_targets <- centrality_df %>%
+  dplyr::filter(is_drug_target) %>%
+  slice_min(combined_rank, n = 15)
+
+cat("=== Top 15 Drug Targets by Importance (combined rank) ===\n")
+top_drug_targets %>%
+  dplyr::select(node, degree, betweenness, closeness, eigenvector, pagerank, combined_rank) %>%
+  arrange(combined_rank) %>%
+  print()
+
+# Centrality comparison: drug targets vs non-drug nodes
+comparison_stats <- centrality_df %>%
+  group_by(is_drug_target) %>%
+  summarise(
+    n_nodes = n(),
+    mean_degree = mean(degree),
+    mean_betweenness = mean(betweenness),
+    mean_closeness = mean(closeness),
+    mean_eigenvector = mean(eigenvector),
+    mean_pagerank = mean(pagerank),
+    .groups = "drop"
+  ) %>%
+  mutate(node_type = if_else(is_drug_target, "Drug targets", "Backbone nodes"))
+
+cat("\nCentrality: Drug targets vs Backbone nodes\n")
+print(comparison_stats)
+```
+
+```{r plot_centrality_dist}
+cent_long <- centrality_df %>%
+  pivot_longer(cols = c(degree, betweenness, closeness, eigenvector, pagerank),
+               names_to = "metric", values_to = "value") %>%
+  mutate(
+    metric = factor(metric, levels = c("degree", "betweenness", "closeness", "eigenvector", "pagerank")),
+    node_type = if_else(is_drug_target, "Drug target", "Backbone")
+  )
+
+ggplot(cent_long, aes(x = node_type, y = value, fill = node_type)) +
+  geom_boxplot(color = "grey20", width = 0.5, show.legend = FALSE, alpha = 0.8) +
+  facet_wrap(~metric, scales = "free_y") +
+  scale_fill_manual(values = c("Drug target" = "#E15759", "Backbone" = "#4C78A8")) +
+  labs(x = NULL, y = "Centrality value", 
+       title = "Centrality measures: drug targets vs backbone nodes") +
+  theme_pubr() +
+  theme(axis.text.x = element_text(angle = 15, hjust = 1))
+```
+
+# 4. Non-Drug Target Hubs
+
+```{r non_drug_hubs}
+backbone_hubs <- centrality_df %>%
+  dplyr::filter(!is_drug_target) %>%
+  slice_min(combined_rank, n = 20)
+
+cat("=== Top 20 Backbone Hubs (non-drug targets) ===\n")
+backbone_hubs %>%
+  dplyr::select(node, degree, betweenness, closeness, eigenvector, pagerank, combined_rank) %>%
+  arrange(combined_rank) %>%
+  print()
+
+# Plot top backbone hubs
+ggplot(backbone_hubs, aes(x = reorder(node, -combined_rank), y = degree)) +
+  geom_col(fill = "#4C78A8", color = "grey20") +
+  geom_text(aes(label = degree), vjust = -0.3, size = 3) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  coord_flip() +
+  labs(x = NULL, y = "Degree",
+       title = "Top 20 backbone hub proteins (non-drug targets)") +
+  theme_pubr()
+```
+
+# 5. Louvain Community Detection
+
+```{r leiden_clustering}
+cat("Running community detection (Louvain method)...\n")
+
+# Use largest component for better clustering
+largest_comp_nodes <- which(comps$membership == which.max(comps$csize))
+g_main <- igraph::induced_subgraph(g_v4, largest_comp_nodes)
+
+# Run Louvain community detection (igraph implementation)
+communities <- igraph::cluster_louvain(g_main)
+
+cat("Community detection complete.\n")
+cat("  Number of communities: ", length(communities), "\n")
+cat("  Modularity:            ", round(modularity(communities), 4), "\n")
+cat("  Main component size:   ", vcount(g_main), "\n")
+
+# Add cluster assignments to centrality data
+cluster_map <- tibble(
+  node = names(V(g_main)),
+  cluster = as.integer(membership(communities))
+)
+
+centrality_clustered <- centrality_df %>%
+  left_join(cluster_map, by = "node") %>%
+  replace_na(list(cluster = 0))  # 0 for nodes not in largest component
+
+cat("\nCluster sizes:\n")
+cluster_sizes <- centrality_clustered %>%
+  count(cluster, name = "n_nodes") %>%
+  mutate(n_drug_targets = NA_integer_,
+         pct_drug_targets = NA_real_)
+
+for (i in cluster_sizes$cluster) {
+  n_dt <- sum(centrality_clustered$is_drug_target & centrality_clustered$cluster == i)
+  n_tot <- sum(centrality_clustered$cluster == i)
+  cluster_sizes$n_drug_targets[cluster_sizes$cluster == i] <- n_dt
+  if (n_tot > 0) {
+    cluster_sizes$pct_drug_targets[cluster_sizes$cluster == i] <- 100 * n_dt / n_tot
+  }
+}
+
+print(cluster_sizes %>% arrange(desc(n_nodes)) %>% head(15))
+```
+
+```{r plot_cluster_composition}
+# Drug target distribution across clusters
+cluster_composition <- centrality_clustered %>%
+  dplyr::filter(cluster > 0) %>%  # Exclude isolated nodes
+  group_by(cluster) %>%
+  summarise(
+    n_drug = sum(is_drug_target),
+    n_backbone = sum(!is_drug_target),
+    n_total = n(),
+    pct_drug = 100 * n_drug / n_total,
+    .groups = "drop"
+  ) %>%
+  slice_max(n_total, n = 15) %>%
+  arrange(desc(n_total))
+
+ggplot(cluster_composition, aes(x = reorder(factor(cluster), -n_total), y = n_total, 
+                                fill = pct_drug)) +
+  geom_col(color = "grey20") +
+  geom_text(aes(label = paste0(n_drug, " drug\n", n_backbone, " backbone")),
+            vjust = 0.5, hjust = 0.5, size = 2.5, color = "white") +
+  scale_fill_gradient(low = "#4C78A8", high = "#E15759", name = "% Drug targets") +
+  labs(x = "Community", y = "Node count",
+       title = "Louvain communities: size and drug-target composition") +
+  theme_pubr()
+```
+
+# 6. Drug Targets Across Clusters
+
+```{r drug_targets_per_cluster}
+drug_targets_in_clusters <- centrality_clustered %>%
+  dplyr::filter(is_drug_target, cluster > 0) %>%
+  arrange(desc(degree))
+
+cat("Drug targets per community:\n")
+drug_targets_in_clusters %>%
+  count(cluster, name = "n_drug_targets") %>%
+  arrange(desc(n_drug_targets)) %>%
+  print()
+
+# Identify which drug targets are in which clusters
+dt_cluster_map <- drug_targets_in_clusters %>%
+  left_join(drug_targets, by = c("node" = "target_entrez_id")) %>%
+  dplyr::select(gene = target, cluster, degree, betweenness, eigenvector) %>%
+  arrange(cluster, desc(degree))
+
+cat("\nDrug target community assignments (sorted by degree):\n")
+dt_cluster_map %>%
+  group_by(cluster) %>%
+  slice_max(degree, n = 5) %>%
+  print()
+```
+
+# 7. Source Quality Breakdown
+
+```{r source_breakdown}
+source_quality <- tibble(
+  source_name = c("Curated_KS", "Cantley", "OmniPath", "OmniPath_Signaling"),
+  quality_tier = c("Curated KS", "Predicted (HPA-validated)", "Curated enzyme-substrate",
+                   "Curated directed signaling")
+)
+
+# Parse sources from the Sources column
+edge_sources_parsed <- network_v4_full %>%
+  separate_rows(Source, sep = "; ") %>%
+  mutate(Source = str_trim(Source)) %>%
+  count(Source, name = "n_edges") %>%
+  left_join(source_quality, by = c("Source" = "source_name")) %>%
+  mutate(
+    quality_tier = replace_na(quality_tier, "Other"),
+    pct = round(100 * n_edges / sum(n_edges), 1),
+    Source = fct_reorder(Source, n_edges)
+  )
+
+ggplot(edge_sources_parsed, aes(x = Source, y = n_edges, fill = quality_tier)) +
+  geom_col(color = "grey20", width = 0.7) +
+  geom_text(aes(label = paste0(comma(n_edges), "\n(", pct, "%)")),
+            hjust = -0.05, size = 3) +
+  scale_fill_manual(values = c(
+    "Curated KS"                    = "#4C78A8",
+    "Predicted (HPA-validated)"     = "#54A24B",
+    "Curated enzyme-substrate"      = "#F58518",
+    "Curated directed signaling"    = "#B279A2"
+  )) +
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.25))) +
+  coord_flip() +
+  labs(x = NULL, y = "Number of edges",
+       title = "v4 network edges by source and quality tier",
+       fill = "Quality tier") +
+  theme_pubr() +
+  theme(legend.position = "bottom", legend.direction = "vertical")
+```
+
+# 8. Degree Distribution
+
+```{r degree_dist}
+deg_df <- tibble(
+  degree = as.numeric(degs),
+  is_drug_target = names(degs) %in% drug_target_set
+)
+
+ggplot(deg_df, aes(x = degree + 1, fill = is_drug_target)) +
+  geom_histogram(bins = 30, color = "grey20", alpha = 0.8) +
+  scale_x_log10(labels = label_comma(), breaks = scales::trans_breaks("log10", function(x) 10^x)) +
+  scale_fill_manual(values = c("TRUE" = "#E15759", "FALSE" = "#4C78A8"),
+                    labels = c("TRUE" = "Drug target", "FALSE" = "Backbone")) +
+  labs(x = "Node degree + 1 (log scale)", y = "Count",
+       title = "v4 network degree distribution",
+       fill = NULL) +
+  theme_pubr() +
+  theme(legend.position = "bottom")
+```
+
+# 9. Summary Report
+
+```{r summary}
+cat("======================================================================\n")
+cat("EXTENDED KINOME NETWORK v4 — EDA SUMMARY\n")
+cat("======================================================================\n\n")
+
+cat("A. Network overview\n")
+cat("   Edges:  ", nrow(network_v4), "\n")
+cat("   Nodes:  ", length(nodes_v4), "\n")
+cat("   Drug targets:  ", nrow(drug_targets_in_v4), "/", nrow(drug_targets),
+    sprintf(" (%.1f%%)\n", 100 * nrow(drug_targets_in_v4) / nrow(drug_targets)))
+cat("   Mean degree:   ", round(mean(degs), 1), "\n\n")
+
+cat("B. Architecture (curated only, no HIPPIE PPIs)\n")
+cat("   Kinase-substrate (curated):    experimental evidence from PSP/EPSD/iPTMNet/etc.\n")
+cat("   Kinase-substrate (predicted):  Cantley atlas with HPA co-localization\n")
+cat("   Enzyme-substrate (curated):    OmniPath/PhosphoSite/SIGNOR\n")
+cat("   Directed signaling:            OmniPath (SIGNOR/HPRD/SPIKE) for drug targets\n\n")
+
+cat("C. Drug-target centrality\n")
+cat("   Mean degree (drug):     ", 
+    round(mean(centrality_df$degree[centrality_df$is_drug_target]), 2), "\n")
+cat("   Mean degree (backbone): ", 
+    round(mean(centrality_df$degree[!centrality_df$is_drug_target]), 2), "\n")
+cat("   Mean betweenness (drug):     ", 
+    round(mean(centrality_df$betweenness[centrality_df$is_drug_target]), 4), "\n")
+cat("   Mean betweenness (backbone): ", 
+    round(mean(centrality_df$betweenness[!centrality_df$is_drug_target]), 4), "\n\n")
+
+cat("D. Louvain community structure\n")
+n_clusters <- length(unique(centrality_clustered$cluster[centrality_clustered$cluster > 0]))
+cat("   Number of communities: ", n_clusters, "\n")
+cat("   Largest community:     ", max(cluster_sizes$n_nodes), " nodes\n\n")
+
+cat("======================================================================\n")
+cat("KEY INSIGHTS\n")
+cat("======================================================================\n")
+cat("1. Drug-target importance varies widely across centrality metrics\n")
+cat("2. Backbone hubs are critical for signal propagation through the network\n")
+cat("3. Louvain community detection reveals functional modules with varying drug-target density\n")
+cat("4. v4 (curated-only) is more conservative than v3 but mechanistically grounded\n")
+cat("======================================================================\n")
+```

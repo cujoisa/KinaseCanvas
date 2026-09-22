@@ -45,11 +45,40 @@ library(htmltools)
 
 library(ggupset)
 library(patchwork)
-combined_pairs = read_csv(here("results/combined_kinase_substrate_pairs_2025.csv"))
+combined_pairs = read_csv(here("results/combined_kinase_substrate_pairs_2025.csv")) %>%
+  # The released table labels the atlas layer "Cantley"; show it under the name the
+  # manuscript uses so the portal and the paper agree.
+  mutate(Source = if_else(Source == "Cantley", "Specificity Atlas", Source))
 ```
 
 ```{r, echo=FALSE, results='asis'}
 curated_sources <- c("PhosphoSitePlus","EPSD","iPTMNet","PhosphoELM","PhosphoNetworks")
+
+# Per-site detail, kept alongside the collapsed edge table so the portal can
+# answer "which site on this substrate does this kinase hit?" -- the case where a
+# kinase is known to phosphorylate a protein but the residue is unidentified.
+site_tbl <- combined_pairs %>%
+  mutate(evidence = if_else(Source %in% curated_sources, "Curated", "Predicted")) %>%
+  group_by(Kinase, Substrate, Site) %>%
+  summarise(
+    evidence           = if_else(any(evidence == "Curated"), "Curated", "Predicted"),
+    Uniprot            = dplyr::first(na.omit(Substrate_Uniprot_ID)),
+    CuratedSite        = any(Curated_site),
+    LikelyFunctional   = any(Likely_functional),
+    MotifPercentile    = suppressWarnings(max(Motif_percentile, na.rm = TRUE)),
+    MotifRank          = suppressWarnings(min(Motif_rank, na.rm = TRUE)),
+    FunctionalScore    = suppressWarnings(max(Functional_score, na.rm = TRUE)),
+    SharedCompartments = suppressWarnings(max(Shared_compartments, na.rm = TRUE)),
+    Score              = suppressWarnings(max(KinaseCanvas_score, na.rm = TRUE)),
+    # +/-7 residues around the phosphoacceptor, canonical-sequence-verified in
+    # the main pipeline; NA where verification failed (see the pipeline's
+    # "Flanking sequence" step) rather than showing an unverified guess.
+    FlankingSequence   = dplyr::first(na.omit(Flanking_sequence)),
+    .groups = "drop"
+  ) %>%
+  mutate(across(c(MotifPercentile, MotifRank, FunctionalScore,
+                  SharedCompartments, Score),
+                ~ if_else(is.finite(.x), round(.x, 3), NA_real_)))
 
 edge_tbl <- combined_pairs %>%
   mutate(evidence = if_else(Source %in% curated_sources, "Curated", "Predicted")) %>%
@@ -59,10 +88,19 @@ edge_tbl <- combined_pairs %>%
     Likely_functional = any(Likely_functional),
     SiteCount     = n_distinct(Site),
     Sites         = paste(sort(unique(na.omit(Site))), collapse = "; "),
+    Uniprot       = dplyr::first(na.omit(Substrate_Uniprot_ID)),
+    MotifPercentile    = suppressWarnings(max(Motif_percentile, na.rm = TRUE)),
+    MotifRank          = suppressWarnings(min(Motif_rank, na.rm = TRUE)),
+    FunctionalScore    = suppressWarnings(max(Functional_score, na.rm = TRUE)),
+    SharedCompartments = suppressWarnings(max(Shared_compartments, na.rm = TRUE)),
+    Score              = suppressWarnings(max(KinaseCanvas_score, na.rm = TRUE)),
     Reference_PMID = paste(sort(unique(Reference_PMID[!is.na(Reference_PMID) & Reference_PMID != ""])), collapse = "; "),
     Sources       = paste(sort(unique(Source)), collapse = "; "),
     .groups = "drop"
   ) %>%
+  mutate(across(c(MotifPercentile, MotifRank, FunctionalScore,
+                  SharedCompartments, Score),
+                ~ if_else(is.finite(.x), round(.x, 3), NA_real_))) %>%
   transmute(
     source = Kinase,
     target = Substrate,
@@ -70,6 +108,12 @@ edge_tbl <- combined_pairs %>%
     Likely_functional,
     SiteCount,
     Sites,
+    Uniprot,
+    MotifPercentile,
+    MotifRank,
+    FunctionalScore,
+    SharedCompartments,
+    Score,
     Reference_PMID,
     edgeLabel = paste0(evidence, ifelse(Likely_functional, " · functional", "")),
     SourceList = Sources
@@ -120,20 +164,41 @@ nodes_json <- node_tbl %>%
   tidyr::unnest_wider(data)
 
 edges_json <- edge_tbl %>%
-  transmute(data = pmap(list(source, target, evidence, Likely_functional, SiteCount, Sites, Reference_PMID, edgeLabel, SourceList),
-                        ~ list(source = ..1, target = ..2,
-                               evidence = ..3,
-                               Likely_functional = ..4, 
-                               SiteCount = ..5,
-                               Sites = ..6,
-                               Reference_PMID = ..7,
-                               edgeLabel = ..8,
-                               SourceList = ..9))) %>%
+  transmute(data = pmap(
+    list(source, target, evidence, Likely_functional, SiteCount, Sites, Uniprot,
+         MotifPercentile, MotifRank, FunctionalScore, SharedCompartments, Score,
+         Reference_PMID, edgeLabel, SourceList),
+    ~ list(source = ..1, target = ..2,
+           evidence = ..3,
+           Likely_functional = ..4,
+           SiteCount = ..5,
+           Sites = ..6,
+           Uniprot = ..7,
+           MotifPercentile = ..8,
+           MotifRank = ..9,
+           FunctionalScore = ..10,
+           SharedCompartments = ..11,
+           Score = ..12,
+           Reference_PMID = ..13,
+           edgeLabel = ..14,
+           SourceList = ..15))) %>%
+  tidyr::unnest_wider(data)
+
+sites_json <- site_tbl %>%
+  transmute(data = pmap(
+    list(Kinase, Substrate, Site, Uniprot, evidence, CuratedSite, LikelyFunctional,
+         MotifPercentile, MotifRank, FunctionalScore, SharedCompartments, Score,
+         FlankingSequence),
+    ~ list(kinase = ..1, substrate = ..2, site = ..3, uniprot = ..4,
+           evidence = ..5, curatedSite = ..6, likelyFunctional = ..7,
+           motifPercentile = ..8, motifRank = ..9, functionalScore = ..10,
+           sharedCompartments = ..11, score = ..12, flankingSequence = ..13))) %>%
   tidyr::unnest_wider(data)
 
 payload <- list(nodes = nodes_json, edges = edges_json)
 
 json_payload <- jsonlite::toJSON(payload, auto_unbox = TRUE)
+json_sites   <- jsonlite::toJSON(sites_json, auto_unbox = TRUE)
 json_kinases <- jsonlite::toJSON(sort(node_tbl$Gene[grepl("Kinase", node_tbl$role, fixed = TRUE)]), auto_unbox = TRUE)
 json_subs    <- jsonlite::toJSON(sort(node_tbl$Gene[grepl("Substrate", node_tbl$role, fixed = TRUE)]), auto_unbox = TRUE)
 ```
@@ -142,168 +207,249 @@ json_subs    <- jsonlite::toJSON(sort(node_tbl$Gene[grepl("Substrate", node_tbl$
 data_tags <- tagList(
   tags$script(id = "ks-data",  type = "application/json", HTML(json_payload)),
   tags$script(id = "kin-data", type = "application/json", HTML(json_kinases)),
-  tags$script(id = "sub-data", type = "application/json", HTML(json_subs))
+  tags$script(id = "sub-data", type = "application/json", HTML(json_subs)),
+  tags$script(id = "site-data", type = "application/json", HTML(json_sites))
 )
 
 viewer_tags <- tags$div(
   `data-quarto-disable-processing` = "true",
 
   tags$style(HTML("
-    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Manrope:wght@400;600&display=swap');
     :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', monospace;
       --bg: #f5f1e6;
       --panel: #f0ece2;
       --panel-2: #e8e3d8;
       --ink: #1f1b16;
       --muted: #5b564c;
-      --accent: #2f2a24;
+      --accent: #1f1b16;
       --accent-2: #4b4336;
-      --stroke: rgba(0,0,0,0.12);
-      --card-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      --stroke: rgba(0,0,0,0.16);
+      --radius-sm: 3px;
+      --radius-md: 5px;
     }
     /* Quarto Overrides */
     .quarto-container, .quarto-page-container, .main, .quarto-content-column { max-width: 100% !important; margin: 0 !important; }
-    body {font-family:'Manrope', 'Space Grotesk', sans-serif; background: repeating-linear-gradient(0deg, #f5f1e6 0px, #f5f1e6 18px, #f2ede3 18px, #f2ede3 36px); color: var(--ink);} 
-    .page-shell{max-width:1800px;margin:0 auto;padding:24px 18px 42px;}
-    header#topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;margin-bottom:14px;border:1px solid var(--stroke);background:linear-gradient(120deg, rgba(0,0,0,0.02), rgba(0,0,0,0.01));border-radius:14px;box-shadow:var(--card-shadow);backdrop-filter: blur(2px);position:sticky;top:0;z-index:10}
-    #brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink)}
-    #brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent-2);box-shadow:none}
-    nav a{color:var(--muted);text-decoration:none;margin-left:16px;font-weight:600;font-size:13px;padding:6px 10px;border-radius:10px;border:1px solid transparent}
-    nav a:hover{color:var(--ink);border-color:var(--stroke);background:rgba(0,0,0,0.03)}
-    #hero{padding:22px 20px 18px;border:1px solid var(--stroke);border-radius:18px;background:linear-gradient(140deg, rgba(0,0,0,0.02), rgba(0,0,0,0.05));box-shadow:var(--card-shadow);margin-bottom:20px}
-    #hero h1{margin:0 0 10px;font-size:26px;letter-spacing:0.2px}
-    #hero p{margin:0;color:var(--muted)}
-    .stat-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px}
-    .stat{flex:1 1 160px;border:1px solid var(--stroke);background:var(--panel);border-radius:14px;padding:10px 12px}
-    .stat .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
-    .stat .value{font-size:20px;font-weight:700;color:var(--ink)}
-    .section-head{display:flex;align-items:center;justify-content:space-between;margin:18px 2px 10px}
-    .section-head h3{margin:0;font-size:18px}
-    .section-head .pill{font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid var(--stroke);color:var(--muted)}
-    .panel{border:1px solid var(--stroke);background:var(--panel);border-radius:16px;padding:14px 14px 10px;box-shadow:var(--card-shadow)}
-    #controls{display:flex;flex-direction:column;gap:10px}
-    .control-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    .control-row .field-label{font-weight:600;color:var(--muted);margin-right:4px}
-    #exportbar{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 10px 0}
-    #legend{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:4px 0 8px 0;font-size:13px;color:var(--muted)}
-    #legend .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 6px;border-radius:10px;border:1px solid var(--stroke);background:var(--panel-2)}
-    #legend .line{width:32px;height:0;border-top:3px solid #999}
+    body {font-family: var(--font-sans); background: var(--bg); color: var(--ink); font-size:14px;}
+    .page-shell{max-width:1800px;margin:0 auto;padding:16px 18px 32px;}
+    header#topbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 20px;padding:12px 16px;margin-bottom:16px;border:1px solid var(--stroke);background:var(--panel);border-radius:var(--radius-md);position:sticky;top:0;z-index:10}
+    #brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:16px;letter-spacing:0.2px;color:var(--ink)}
+    #brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent-2)}
+    #statLine{font-size:12px;color:var(--muted);font-family:var(--font-mono)}
+    nav a{color:var(--muted);text-decoration:none;margin-left:14px;font-weight:600;font-size:13px;padding:5px 8px;border-radius:var(--radius-sm);border:1px solid transparent}
+    nav a:hover{color:var(--ink);border-color:var(--stroke);background:var(--panel-2)}
+
+    /* Quarto's page-layout:full mode injects 'page-columns page-full' onto every
+       nested div for its own margin-note grid system, and its combined-class
+       selector outranks our single-class .app-grid rule for grid-template-columns.
+       !important, plus explicit column placement on each child below, makes our
+       three-column layout win regardless of what Quarto adds. */
+    .app-grid{display:grid !important;grid-template-columns:260px minmax(0,1fr) 360px !important;gap:16px;align-items:start}
+    @media (max-width: 1100px){
+      .app-grid{grid-template-columns:1fr !important}
+      #sidebar, #main-col, #detailPanel{grid-column:1 !important}
+      #sidebar, #detailPanel{position:static;max-height:none}
+    }
+    @media (max-width: 640px){#cy{height:480px}}
+
+    #sidebar{grid-column:1;border:1px solid var(--stroke);background:var(--panel);border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:14px;position:sticky;top:70px}
+    #main-col{grid-column:2;min-width:0}
+    .sidebar-intro{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
+    .sidebar-group{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--stroke)}
+    .sidebar-group:first-of-type{border-top:none;padding-top:0}
+    .sidebar-group h4{margin:0 0 2px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);font-weight:700}
+    .field-row{display:flex;flex-direction:column;gap:4px}
+    .field-row label{font-weight:600;color:var(--muted);font-size:12px}
+    .check-row{display:flex;align-items:flex-start;gap:6px;font-size:13px}
+    .check-row input{margin-top:3px}
+
+    .section-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px}
+    .section-head h3{margin:0;font-size:15px}
+    .panel{border:1px solid var(--stroke);background:var(--panel);border-radius:var(--radius-md);padding:12px}
+
+    #legend, #nodeLegend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)}
+    #legend .chip, #nodeLegend .chip{display:inline-flex;align-items:center;gap:6px;padding:3px 6px;border-radius:var(--radius-sm);border:1px solid var(--stroke);background:var(--panel-2)}
+    #legend .line{width:28px;height:0;border-top:3px solid #999}
     #legend .line.known{border-color:#1f1b16}
     #legend .line.novel{border-color:#5f564c}
-    #legend .dot{width:14px;height:14px;border-radius:50%;display:inline-block;border:1px solid #444}
-    #legend .kin{background:#f4efe4}
-    #legend .sub{background:#e9e2d6}
-    .legend-note{color:var(--muted)}
-    #cywrap{margin-top:10px}
-    #cy {width:100%;height:800px;border:1px solid var(--stroke);border-radius:12px;background:#f7f2e8}
-    .label {font-weight:600;color:var(--muted)}
-    .badge {display:inline-block;padding:2px 8px;border-radius:999px;margin-left:6px;border:1px solid var(--stroke);color:var(--muted);background:var(--panel-2)}
+    .legend-note{color:var(--muted);font-size:12px;margin:0}
+    /* Swatches mirror the node selectors in the Cytoscape stylesheet below --
+       shape and colour both encode role, so keep these two definitions in sync.
+       The hexagon is an inline SVG rather than a clipped div: clip-path crops a
+       CSS border along with the box, so only the flat edges keep a border and
+       the diagonals are left bare -- an SVG stroke follows the actual outline. */
+    .shape-swatch{flex:none;width:14px;height:14px;box-sizing:border-box}
+    .shape-swatch.sub{border-radius:3px;background:#e1d7c7;border:1.5px solid #6a5c4a}
+    .shape-swatch.both{width:12px;height:12px;background:#f2e6cf;border:1.5px solid #2a241b;transform:rotate(45deg)}
+
+    #truncNote{display:block;font-size:12px;color:var(--muted);margin-bottom:8px;min-height:1em}
+    #cywrap{margin-bottom:12px}
+    #cy {width:100%;height:800px;border:1px solid var(--stroke);border-radius:var(--radius-md);background:#f7f2e8}
+
+    .badge {display:inline-block;padding:2px 6px;border-radius:var(--radius-sm);border:1px solid var(--stroke);color:var(--muted);background:var(--panel-2);font-size:11px;font-family:var(--font-mono)}
     .kbadge{background:#f4efe4;border-color:#3b352c;color:#1f1b16}
     .sbadge{background:#e9e2d6;border-color:#4a4339;color:#1f1b16}
-    .tablewrap{margin-top:12px}
-    .filters {display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
-    .filters input {padding:8px 10px;border:1px solid var(--stroke);border-radius:10px;font-size:13px;background:var(--panel);color:var(--ink)}
+
+    .filters {display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+    .filters input {padding:6px 8px;border:1px solid var(--stroke);border-radius:var(--radius-sm);font-size:12px;background:var(--panel-2);color:var(--ink)}
     .filters input:focus{outline:1px solid var(--accent)}
-    .tablebox {max-height:400px; overflow:auto; border:1px solid var(--stroke); border-radius:12px;background:var(--panel-2)}
+    .tablebox {max-height:400px; overflow:auto; border:1px solid var(--stroke); border-radius:var(--radius-md);background:var(--panel-2)}
     .tbl {border-collapse:collapse;width:100%}
-    .tbl th, .tbl td{border-bottom:1px solid var(--stroke);padding:8px 10px;font-size:13px;text-align:left;white-space:nowrap;color:var(--ink)}
-    .tbl th{background:rgba(0,0,0,0.02); position: sticky; top: 0; z-index: 1; color:var(--muted)}
-    .btn{padding:8px 12px;border:1px solid var(--stroke);border-radius:10px;background:linear-gradient(120deg, rgba(0,0,0,0.02), rgba(0,0,0,0.04));cursor:pointer;color:var(--ink);font-weight:600}
-    .btn:hover{background:linear-gradient(120deg, rgba(0,0,0,0.05), rgba(0,0,0,0.07))}
-    .btn.primary{border-color:var(--accent);box-shadow:none}
-    .tip{margin:10px 0 4px;border:1px dashed var(--stroke);border-radius:10px;padding:8px 10px;font-size:13px;color:var(--muted);background:rgba(0,0,0,0.02)}
-    select, input[type='checkbox'], input[list]{background:var(--panel-2);color:var(--ink);border:1px solid var(--stroke);border-radius:8px;padding:6px 8px}
-    select{padding:8px 10px}
-    input[list]{min-width:220px}
-    @media (max-width: 768px){#controls{flex-direction:column;align-items:flex-start} #cy{height:520px}}
+    .tbl th, .tbl td{border-bottom:1px solid var(--stroke);padding:6px 8px;font-size:12px;text-align:left;white-space:nowrap;color:var(--ink)}
+    .tbl td.num{font-family:var(--font-mono)}
+    .tbl th{background:var(--panel); position: sticky; top: 0; z-index: 1; color:var(--muted)}
+
+    .btn{display:inline-block;padding:7px 11px;border:1px solid var(--stroke);border-radius:var(--radius-md);background:transparent;cursor:pointer;color:var(--ink);font-weight:600;font-size:13px;font-family:var(--font-sans)}
+    .btn:hover{background:var(--panel-2)}
+    .btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+    .btn.primary:hover{background:var(--accent-2)}
+    .btn-row{display:flex;flex-wrap:wrap;gap:8px}
+
+    .tip{margin:0;border:1px dashed var(--stroke);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--muted)}
+
+    select, input[type='checkbox'], input[list], input[type='text'], input[type='range']{font-family:var(--font-sans)}
+    select, input[list]{background:var(--panel-2);color:var(--ink);border:1px solid var(--stroke);border-radius:var(--radius-sm);padding:6px 8px;font-size:13px;width:100%}
+
+    #detailPanel{grid-column:3;border:1px solid var(--stroke);background:var(--panel);border-radius:var(--radius-md);padding:14px;font-size:13px;position:sticky;top:70px;max-height:calc(100vh - 90px);overflow:auto}
+    #detailPanel h4{margin:0 0 8px;font-size:14px}
+    .detail-role{display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:var(--muted);border:1px solid var(--stroke);border-radius:var(--radius-sm);padding:2px 6px;margin-bottom:8px}
+    .detail-link{font-size:12px}
+    .detail-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px solid var(--stroke)}
+    .detail-row .k{color:var(--muted)}
+    .detail-row .v{font-family:var(--font-mono)}
+    .detail-sites{margin-top:10px}
+    /* The sites table (7 columns including a 15-character sequence) is wider
+       than the 300px detail panel; scroll it horizontally rather than letting
+       it clip or force the whole panel wider. */
+    .detail-sites .table-scroll{overflow-x:auto;margin-top:4px}
+    .detail-sites table{width:100%;border-collapse:collapse;font-size:11px}
+    .detail-sites th,.detail-sites td{border-bottom:1px solid var(--stroke);padding:3px 4px;text-align:left;white-space:nowrap}
+    .detail-sites th.num,.detail-sites td.num{font-family:var(--font-mono)}
+    .detail-interactions{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+    .detail-interactions li{font-size:12px}
+    .detail-jump{background:none;border:none;padding:0;color:var(--ink);text-decoration:underline;cursor:pointer;font-size:12px;font-family:var(--font-sans)}
   ")),
 
   tags$div(
     class="page-shell",
     tags$header(id="topbar",
       tags$div(id="brand", tags$span(class="dot"), "KinaseCanvas Explorer"),
+      tags$div(id="statLine"),
       tags$nav(
         tags$a(href="#network", "Network"),
         tags$a(href="#table", "Edges"),
-        tags$a(href="https://kinet.kinametrix.com/#section-proteins", target="_blank", "Reference")
+        tags$a(href="https://kinet.kinametrix.com/#section-proteins", target="_blank", "KiNet (curated resource)")
       )
     ),
 
-    tags$section(id="hero",
-      tags$h1("Curated kinase–substrate network, ready to explore"),
-      tags$p("Seed the graph with a kinase and/or substrate, filter on functional evidence, and export images or tables for publication."),
-      tags$div(class="stat-row",
-        tags$div(class="stat", tags$div(class="label", "Kinases"), tags$div(id="statKinases", class="value", "—")),
-        tags$div(class="stat", tags$div(class="label", "Substrates"), tags$div(id="statSubstrates", class="value", "—")),
-        tags$div(class="stat", tags$div(class="label", "Interactions"), tags$div(id="statEdges", class="value", "—")),
-        tags$div(class="stat", tags$div(class="label", "Curated share"), tags$div(id="statCurated", class="value", "—"))
-      )
-    ),
+    tags$div(class="app-grid",
 
-    tags$section(id="network",
-      class="section",
-      tags$div(class="section-head", tags$h3("Network"), tags$span(class="pill", "Choose seeds, then explore")),
-      tags$div(class="panel",
-          tags$div(
-            id = "controls",
-            tags$div(class="control-row",
-              tags$label(class="label", "Kinase:", `for`="kinSel"),
-              tags$input(id="kinSel", list="kinList", placeholder="Type a kinase…", style="min-width:240px"),
-              tags$datalist(id="kinList"),
-              tags$span(class="badge kbadge", "Kinase colour")
-            ),
-            tags$div(class="control-row",
-              tags$label(class="label", "Substrate:", `for`="subSel"),
-              tags$input(id="subSel", list="subList", placeholder="Type a substrate… (optional)", style="min-width:240px"),
-              tags$datalist(id="subList"),
-              tags$span(class="badge sbadge", "Substrate colour")
-            ),
-            tags$div(class="control-row",
-              tags$label(class="label", "Layout:", `for`="layoutSel"),
-              tags$select(
-                id="layoutSel",
-                tags$option(value="fcose","fCoSE"),
-                tags$option(value="cose","COSE"),
-                tags$option(value="cose-bilkent","CoSE-Bilkent"),
-                tags$option(value="concentric","Concentric"),
-                tags$option(value="breadthfirst","Breadthfirst")
-              ),
-              tags$label(class="label", "Label size:", `for`="labelScale", style="margin-left:12px"),
-              tags$input(type="range", id="labelScale", min="50", max="180", value="100", step="10", style="width:140px"),
-              tags$span(id="labelScaleVal", class="badge", "100%")
-            ),
-            tags$div(class="control-row",
-              tags$label(tags$input(type="checkbox", id="edgeLabelsChk"), " Edge labels"),
-              tags$label(tags$input(type="checkbox", id="arrowsChk", checked=NA), " Arrows"),
-              tags$label(tags$input(type="checkbox", id="onlyFunctionalChk"), " Functional sites only"),
-              tags$label(tags$input(type="checkbox", id="curatedOnlyChk"), " Curated pairs only")
+      tags$div(id="sidebar",
+        tags$p(class="sidebar-intro", "Search a kinase or substrate to explore curated and predicted interactions."),
+
+        tags$div(class="sidebar-group",
+          tags$h4("Search"),
+          tags$div(class="field-row",
+            tags$label(`for`="kinSel", "Kinase"),
+            tags$input(id="kinSel", list="kinList", placeholder="Type a kinase…"),
+            tags$datalist(id="kinList")
+          ),
+          tags$div(class="field-row",
+            tags$label(`for`="subSel", "Substrate"),
+            tags$input(id="subSel", list="subList", placeholder="Type a substrate…"),
+            tags$datalist(id="subList")
+          ),
+          tags$label(class="check-row", tags$input(type="checkbox", id="pairModeChk"),
+                     "Pair mode (show only this kinase–substrate link)")
+        ),
+
+        tags$div(class="sidebar-group",
+          tags$h4("Filters"),
+          tags$label(class="check-row", tags$input(type="checkbox", id="curatedOnlyChk"), "Curated pairs only"),
+          tags$label(class="check-row", tags$input(type="checkbox", id="onlyFunctionalChk"), "Functional sites only"),
+          tags$div(class="field-row",
+            tags$label(`for`="scoreMin", "Min. confidence"),
+            tags$input(type="range", id="scoreMin", min="0", max="100", value="0", step="5"),
+            tags$span(id="scoreMinVal", class="badge", "0.00"),
+            tags$span(class="legend-note", "Filters predicted edges by composite score; curated edges are always kept.")
+          )
+        ),
+
+        tags$div(class="sidebar-group",
+          tags$h4("Display"),
+          tags$div(class="field-row",
+            tags$label(`for`="layoutSel", "Layout"),
+            tags$select(
+              id="layoutSel",
+              tags$option(value="fcose","fCoSE"),
+              tags$option(value="cose","COSE"),
+              tags$option(value="cose-bilkent","CoSE-Bilkent"),
+              tags$option(value="concentric","Concentric"),
+              tags$option(value="breadthfirst","Breadthfirst")
             )
           ),
-
-        tags$div(id="legend",
-          tags$span(class="chip", tags$span(class="line known"), "Curated"),
-          tags$span(class="chip", tags$span(class="line novel"), "Predicted"),
-          tags$span(class="legend-note", "Dotted = not flagged functional; Solid = likely functional; Size of edge does not indicate strength")
+          tags$div(class="field-row",
+            tags$label(`for`="labelScale", "Label size"),
+            tags$input(type="range", id="labelScale", min="50", max="180", value="100", step="10"),
+            tags$span(id="labelScaleVal", class="badge", "100%")
+          ),
+          tags$label(class="check-row", tags$input(type="checkbox", id="edgeLabelsChk"), "Edge labels"),
+          tags$label(class="check-row", tags$input(type="checkbox", id="arrowsChk", checked=NA), "Arrows"),
+          tags$label(class="check-row", tags$input(type="checkbox", id="showAllChk"), "Show all substrates (no cap)")
         ),
 
-        tags$div(class="tip", "Click and hold to move around nodes. Scroll to zoom. Click nodes to open UniProt page."),
-
-        tags$div(id="exportbar",
-          tags$button(id="btnPng", class="btn primary", "Export PNG"),
-          tags$button(id="btnPdf", class="btn", "Export PDF"),
-          tags$button(id="btnCsvEdges", class="btn", "Export Edge CSV"),
-          tags$button(id="btnFullNetwork", class="btn", "Download Full Network")
+        tags$div(class="sidebar-group",
+          tags$h4("Legend"),
+          tags$div(id="nodeLegend",
+            tags$span(class="chip",
+                      HTML('<svg class="shape-swatch kin" viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><polygon points="5,0 15,0 20,10 15,20 5,20 0,10" fill="#fbf6ec" stroke="#2a241b" stroke-width="1.6"/></svg>'),
+                      "Kinase"),
+            tags$span(class="chip", tags$span(class="shape-swatch sub"), "Substrate"),
+            tags$span(class="chip", tags$span(class="shape-swatch both"), "Both")
+          ),
+          tags$div(id="legend",
+            tags$span(class="chip", tags$span(class="line known"), "Curated"),
+            tags$span(class="chip", tags$span(class="line novel"), "Predicted")
+          ),
+          tags$p(class="legend-note", "Dotted = not flagged functional; solid = likely functional. For predicted edges, thickness and opacity scale with the composite confidence score.")
         ),
 
-        tags$div(id="cywrap", tags$div(id="cy"))
-      )
-    ),
+        tags$div(class="sidebar-group",
+          tags$h4("Export"),
+          tags$div(class="btn-row",
+            tags$button(id="btnPng", class="btn primary", "PNG"),
+            tags$button(id="btnPdf", class="btn", "PDF"),
+            tags$button(id="btnCsvEdges", class="btn", "Edge CSV"),
+            tags$button(id="btnCsvSites", class="btn", "Site CSV"),
+            tags$button(id="btnFullNetwork", class="btn", "Full network")
+          )
+        ),
 
-    tags$section(id="table", class="section",
-      tags$div(class="section-head", tags$h3("Edges in View"), tags$span(class="pill", "Filter columns")),
-      tags$div(class="panel",
-        tags$div(id="edgesFilters", class="filters"),
-        tags$div(id="edgesTable", class="tablebox")
+        tags$p(class="tip", "Drag nodes to reposition. Scroll to zoom. Click a node or edge for details.")
+      ),
+
+      tags$div(id="main-col",
+        tags$div(id="network", class="section",
+          tags$div(class="section-head", tags$h3("Network")),
+          tags$div(id="truncNote"),
+          tags$div(id="cywrap", tags$div(id="cy"))
+        ),
+
+        tags$div(id="table", class="section",
+          tags$div(class="section-head", tags$h3("Edges in View")),
+          tags$div(class="panel",
+            tags$div(id="edgesFilters", class="filters"),
+            tags$div(id="edgesTable", class="tablebox")
+          )
+        )
+      ),
+
+      tags$div(id="detailPanel",
+        tags$h4("Details"),
+        tags$div(id="detailBody",
+          tags$p(id="detailPlaceholder", "Click a node or edge to see details.")
+        )
       )
     )
   ),
@@ -320,6 +466,12 @@ viewer_tags <- tags$div(
     const data       = JSON.parse(document.getElementById('ks-data').textContent);
     const kinases    = JSON.parse(document.getElementById('kin-data').textContent);
     const substrates = JSON.parse(document.getElementById('sub-data').textContent);
+    const siteData   = JSON.parse(document.getElementById('site-data').textContent);
+
+    // Largest neighbourhood rendered before truncation kicks in. Chosen so the
+    // median kinase (41 substrates) is never truncated while the hubs are.
+    const NEIGHBOURHOOD_CAP = 75;
+    let lastTruncation = {shown: 0, total: 0, hidden: 0};
     let currentSeeds = [];
     const maxDeg     = data.nodes.reduce((m,n) => Math.max(m, (n.indeg || 0) + (n.outdeg || 0)), 0);
 
@@ -329,26 +481,33 @@ viewer_tags <- tags$div(
       edges: data.edges.length,
       curated: data.edges.filter(e => e.evidence === 'Curated').length
     };
-    const setStat = (id, text) => { const el = document.getElementById(id); if(el) el.textContent = text; };
-    setStat('statKinases', stats.kinases.toLocaleString());
-    setStat('statSubstrates', stats.substrates.toLocaleString());
-    setStat('statEdges', stats.edges.toLocaleString());
-    setStat('statCurated', stats.edges ? Math.round((stats.curated / stats.edges) * 100).toString() + '% curated' : '—');
+    const statLineEl = document.getElementById('statLine');
+    if(statLineEl){
+      const pctCurated = stats.edges ? Math.round((stats.curated / stats.edges) * 100) : 0;
+      statLineEl.textContent = stats.kinases.toLocaleString() + ' kinases · ' +
+        stats.substrates.toLocaleString() + ' substrates · ' +
+        stats.edges.toLocaleString() + ' interactions · ' +
+        pctCurated + '% curated';
+    }
 
     const kinDL = document.getElementById('kinList');
     kinases.forEach(g => { const opt = document.createElement('option'); opt.value = g; kinDL.appendChild(opt); });
     const subDL = document.getElementById('subList');
     substrates.forEach(g => { const opt = document.createElement('option'); opt.value = g; subDL.appendChild(opt); });
-    // default seeds so something renders immediately
     const kinInput = document.getElementById('kinSel');
     const subInput = document.getElementById('subSel');
-    if(kinases.length){ kinInput.value = kinases[0]; }
-    if(substrates.length){ subInput.placeholder = 'Type a substrate… (optional)'; }
+    kinInput.placeholder = 'Type a kinase…';
+    subInput.placeholder = 'Type a substrate…';
+    // Seed with a kinase on first load so the page isn't blank; TNIK is a good
+    // demo case (moderate degree, mix of curated and predicted substrates). The
+    // field is still just a normal search box -- clearing it and typing a
+    // substrate works exactly as it would from a blank start.
+    kinInput.value = 'TNIK';
 
     const labelScale   = document.getElementById('labelScale');
     const labelScaleEl = document.getElementById('labelScaleVal');
-    const baseFont     = 9;
-    const basePad      = 5;
+    const baseFont     = 12;
+    const basePad      = 10;
 
     const cy = cytoscape({
       container: document.getElementById('cy'),
@@ -363,7 +522,7 @@ viewer_tags <- tags$div(
             'color': '#1f1b16',
             'text-opacity': 1,
             'text-wrap': 'wrap',
-            'text-max-width': '100px',
+            'text-max-width': '130px',
             'min-zoomed-font-size': 6,
             'text-margin-y': -2,
             'text-halign': 'center',
@@ -375,10 +534,17 @@ viewer_tags <- tags$div(
             'padding': '4px'
           }
         },
+        // Shape as well as colour encodes role, so the three classes stay
+        // distinguishable in greyscale and for colour-vision-deficient readers.
         { selector: 'node[role *= \"Substrate\"]:not([role *= \"Kinase\"])',
-          style: { 'background-color': '#e1d7c7', 'border-color': '#6a5c4a' } },
-        { selector: 'node[role *= \"Kinase\"]',
-          style: { 'background-color': '#fbf6ec', 'border-color': '#2a241b' } },
+          style: { 'shape': 'round-rectangle',
+                   'background-color': '#e1d7c7', 'border-color': '#6a5c4a' } },
+        { selector: 'node[role *= \"Kinase\"]:not([role *= \"Substrate\"])',
+          style: { 'shape': 'round-hexagon',
+                   'background-color': '#fbf6ec', 'border-color': '#2a241b' } },
+        { selector: 'node[role *= \"Kinase\"][role *= \"Substrate\"]',
+          style: { 'shape': 'round-diamond',
+                   'background-color': '#f2e6cf', 'border-color': '#2a241b' } },
         { selector: 'node.qk', style: { 'border-width': 2.5 } },
         { selector: 'node.qs', style: { 'border-width': 2.5 } },
         { selector: 'edge',
@@ -401,6 +567,11 @@ viewer_tags <- tags$div(
           style: { 'line-color': '#16110c', 'target-arrow-color': '#16110c' } },
         { selector: 'edge[evidence = \"Predicted\"]',
           style: { 'line-color': '#7b6d5d', 'target-arrow-color': '#7b6d5d' } },
+        // Predicted edges are drawn in proportion to their composite confidence
+        // score, so relative strength is visible rather than only filterable.
+        { selector: 'edge[evidence = \"Predicted\"][Score]',
+          style: { 'width': 'mapData(Score, 0, 1, 0.8, 4.5)',
+                   'opacity': 'mapData(Score, 0, 1, 0.45, 1)' } },
         { selector: 'edge[Likely_functional = \"Likely functional\"]',
           style: { 'line-style': 'solid' } },
         { selector: 'edge[Likely_functional = \"Other/Unknown\"]',
@@ -409,12 +580,152 @@ viewer_tags <- tags$div(
       layout: { name: 'fcose' }
     });
 
-    cy.on('tap', 'node', evt => {
-      const up = (evt.target && evt.target.data) ? evt.target.data('uniprot') : null;
-      if(!up) return;
-      const url = 'https://www.uniprot.org/uniprotkb/' + encodeURIComponent(up);
-      window.open(url, '_blank', 'noopener');
-    });
+    // Ranks a kinase-substrate interaction for both the neighbourhood-cap
+    // truncation (incidentSubgraph) and the node-detail top-interactions list:
+    // curated first (direct experimental evidence, no composite score), then
+    // predicted by descending confidence, ties broken alphabetically so ordering
+    // is stable across renders.
+    function edgeRankCompare(a, b){
+      const ac = a.evidence === 'Curated', bc = b.evidence === 'Curated';
+      if(ac !== bc) return ac ? -1 : 1;
+      const as = (a.Score == null) ? -1 : Number(a.Score);
+      const bs = (b.Score == null) ? -1 : Number(b.Score);
+      if(as !== bs) return bs - as;
+      return (a.source + a.target).localeCompare(b.source + b.target);
+    }
+
+    function escHtml(v){
+      return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function uniprotLink(acc, label){
+      if(!acc) return escHtml(label || '');
+      const url = 'https://www.uniprot.org/uniprotkb/' + encodeURIComponent(acc);
+      return '<a class=\\'detail-link\\' href=\\'' + url + '\\' target=\\'_blank\\' rel=\\'noopener\\'>' +
+             escHtml(label || acc) + ' (UniProt)</a>';
+    }
+
+    function detailRow(k, v){
+      return '<div class=\\'detail-row\\'><span class=\\'k\\'>' + escHtml(k) +
+             '</span><span class=\\'v\\'>' + escHtml(v) + '</span></div>';
+    }
+
+    // Flanking sequences are stored as e.g. 'DGTEIAV[S]PRSLHSE', with the
+    // phosphoacceptor bracketed by the pipeline once it has verified the
+    // residue against the canonical UniProt sequence. Sites that failed
+    // verification carry no flanking sequence at all (see the pipeline's
+    // 'Flanking sequence' step) rather than showing an unverified guess.
+    function renderFlank(flank){
+      if(!flank) return '<span class=\\'legend-note\\'>not verified against canonical sequence</span>';
+      const m = /^(.*)\\[(.)\\](.*)$/.exec(flank);
+      if(!m) return '<span class=\\'v\\'>' + escHtml(flank) + '</span>';
+      return '<span class=\\'v\\'>' + escHtml(m[1]) + '<strong>' + escHtml(m[2]) +
+             '</strong>' + escHtml(m[3]) + '</span>';
+    }
+
+    function renderDetailPanel(html){
+      const body = document.getElementById('detailBody');
+      if(body){ body.innerHTML = html; }
+    }
+    function clearDetailPanel(){
+      renderDetailPanel('<p id=\\'detailPlaceholder\\'>Click a node or edge to see details.</p>');
+    }
+
+    function showNodeDetail(node){
+      const d = node.data();
+      const role = d.role || '';
+      const isK = role.indexOf('Kinase') >= 0, isS = role.indexOf('Substrate') >= 0;
+      const roleLabel = (isK && isS) ? 'Kinase and substrate' : isK ? 'Kinase' : 'Substrate';
+      const outN = node.outgoers('node').length;
+      const inN  = node.incomers('node').length;
+      const relatedEdges = data.edges
+        .filter(e => e.source === d.id || e.target === d.id)
+        .slice().sort(edgeRankCompare).slice(0, 5);
+
+      let html = '<span class=\\'detail-role\\'>' + escHtml(roleLabel) + '</span>';
+      html += '<h4>' + escHtml(d.label) + '</h4>';
+      if(d.uniprot){ html += '<p>' + uniprotLink(d.uniprot, d.label) + '</p>'; }
+      if(isK){ html += detailRow('Substrates', outN); }
+      if(isS){ html += detailRow('Upstream kinases', inN); }
+      if(relatedEdges.length){
+        html += '<div class=\\'detail-sites\\'><strong>Top interactions</strong><ul class=\\'detail-interactions\\'>';
+        relatedEdges.forEach(e => {
+          const other = (e.source === d.id) ? e.target : e.source;
+          const dir   = (e.source === d.id) ? ' -> ' : ' <- ';
+          html += '<li><button type=\\'button\\' class=\\'detail-jump\\' data-source=\\'' + escHtml(e.source) +
+                  '\\' data-target=\\'' + escHtml(e.target) + '\\'>' + escHtml(d.label) + dir + escHtml(other) +
+                  '</button> (' + escHtml(e.evidence) + ')</li>';
+        });
+        html += '</ul></div>';
+      }
+      renderDetailPanel(html);
+    }
+
+    function showEdgeDetail(edge){
+      const d = edge.data();
+      let html = '<span class=\\'detail-role\\'>' + escHtml(d.evidence) + '</span>';
+      html += '<h4>' + escHtml(d.source) + ' -> ' + escHtml(d.target) + '</h4>';
+      html += '<p>' + uniprotLink(d.Uniprot, d.target) + '</p>';
+      if(d.Score != null && d.Score !== ''){ html += detailRow('Composite score', Number(d.Score).toFixed(2)); }
+      if(d.MotifPercentile != null && d.MotifPercentile !== ''){ html += detailRow('Motif percentile', d.MotifPercentile); }
+      if(d.MotifRank != null && d.MotifRank !== ''){ html += detailRow('Kinase rank for site', d.MotifRank); }
+      if(d.SharedCompartments != null && d.SharedCompartments !== ''){ html += detailRow('Shared compartments', d.SharedCompartments); }
+      if(d.SourceList){ html += detailRow('Sources', d.SourceList); }
+      if(d.Reference_PMID){ html += detailRow('PMID', d.Reference_PMID); }
+
+      // Rank candidate sites for the pair: sites where this kinase-site pairing is
+      // curated first, then by how well the site fits the kinase motif, then by name.
+      const sites = siteData
+        .filter(s => s.kinase === d.source && s.substrate === d.target)
+        .slice()
+        .sort((a, b) => ((b.evidence === 'Curated') - (a.evidence === 'Curated')) ||
+                        ((b.motifPercentile ?? -1) - (a.motifPercentile ?? -1)) ||
+                        String(a.site).localeCompare(String(b.site)));
+      if(sites.length){
+        html += '<div class=\\'detail-sites\\'><strong>Sites</strong><div class=\\'table-scroll\\'><table><thead><tr>' +
+          '<th>Site</th><th title=\\'Flanking sequence, -7 to +7\\'>Sequence (+/-7)</th>' +
+          '<th class=\\'num\\' title=\\'Site curated in PhosphoSitePlus, EPSD or iPTMnet\\'>Cur.</th>' +
+          '<th class=\\'num\\' title=\\'Phosphosite functional score\\'>Func.</th>' +
+          '<th class=\\'num\\' title=\\'Motif percentile\\'>Motif</th>' +
+          '<th class=\\'num\\' title=\\'Kinase rank for this site\\'>Rank</th>' +
+          '<th class=\\'num\\' title=\\'Shared subcellular compartments\\'>Comp.</th>' +
+          '</tr></thead><tbody>';
+        sites.forEach(s => {
+          html += '<tr><td>' + escHtml(s.site) + '</td>' +
+            '<td class=\\'num\\'>' + renderFlank(s.flankingSequence) + '</td>' +
+            '<td class=\\'num\\'>' + (s.curatedSite ? 'yes' : 'no') + '</td>' +
+            '<td class=\\'num\\'>' + escHtml(s.functionalScore) + '</td>' +
+            '<td class=\\'num\\'>' + escHtml(s.motifPercentile) + '</td>' +
+            '<td class=\\'num\\'>' + escHtml(s.motifRank) + '</td>' +
+            '<td class=\\'num\\'>' + escHtml(s.sharedCompartments) + '</td></tr>';
+        });
+        html += '</tbody></table></div></div>';
+      }
+      renderDetailPanel(html);
+    }
+
+    // Node/edge click now opens the detail panel instead of navigating directly
+    // to UniProt -- the link is inside the panel instead, so clicking to inspect
+    // doesn't cost the user their place in the graph.
+    cy.on('tap', 'node', evt => showNodeDetail(evt.target));
+    cy.on('tap', 'edge', evt => showEdgeDetail(evt.target));
+    cy.on('tap', evt => { if(evt.target === cy){ clearDetailPanel(); } });
+
+    const detailBodyEl = document.getElementById('detailBody');
+    if(detailBodyEl){
+      detailBodyEl.addEventListener('click', evt => {
+        const btn = evt.target.closest('.detail-jump');
+        if(!btn) return;
+        const src = btn.getAttribute('data-source');
+        const tgt = btn.getAttribute('data-target');
+        const matches = cy.edges().filter(ele => ele.data('source') === src && ele.data('target') === tgt);
+        if(matches.length){
+          showEdgeDetail(matches[0]);
+          cy.edges().unselect();
+          matches[0].select();
+        }
+      });
+    }
 
     function setEdgeLabels(show){
       cy.style().selector('edge').style('label', show ? 'data(edgeLabel)' : '').update();
@@ -427,8 +738,14 @@ viewer_tags <- tags$div(
       if(labelScaleEl){ labelScaleEl.textContent = Math.round(scale * 100) + '%'; }
       cy.batch(() => {
         cy.nodes().forEach(n => {
-          const fontSize = Math.max(7, Math.min(14, baseFont * scale));
-          const pad      = Math.max(3, Math.min(12, basePad * scale));
+          const fontSize = Math.max(9, Math.min(18, baseFont * scale));
+          const role = n.data('role') || '';
+          const isK = role.indexOf('Kinase') >= 0, isS = role.indexOf('Substrate') >= 0;
+          // Hexagon and diamond shapes have less usable interior than a rectangle
+          // of the same bounding box, so give them extra padding to keep labels
+          // clear of the sloped edges.
+          const extra = (isK && isS) ? 5 : isK ? 3 : 0;
+          const pad = Math.max(7, Math.min(20, basePad * scale)) + extra;
           n.style({ 'font-size': fontSize, 'padding': pad });
         });
       });
@@ -444,39 +761,64 @@ viewer_tags <- tags$div(
     function applyFilters(doLayout = true){
       const onlyFunctional = document.getElementById('onlyFunctionalChk').checked;
       const curatedOnly    = document.getElementById('curatedOnlyChk')?.checked;
+      const scoreMinEl     = document.getElementById('scoreMin');
+      const scoreMin       = scoreMinEl ? Number(scoreMinEl.value) / 100 : 0;
 
       const seedSet = new Set(currentSeeds || []);
       cy.batch(() => {
         cy.edges().forEach(e => {
-          const keep = (!curatedOnly || isCuratedEdge(e)) && (!onlyFunctional || isFunctionalEdge(e));
+          // curated edges have no composite score and are never filtered by it
+          const s = e.data('Score');
+          const passScore = isCuratedEdge(e) || s == null || Number(s) >= scoreMin;
+          const keep = passScore &&
+                       (!curatedOnly || isCuratedEdge(e)) && (!onlyFunctional || isFunctionalEdge(e));
           e.style('display', keep ? 'element' : 'none');
         });
         cy.nodes().forEach(n => {
           const hasVisibleEdge = n.connectedEdges(':visible').length > 0;
           const isSeed = seedSet.has(n.id());
-          const noEdgeFilters = !curatedOnly && !onlyFunctional;
+          const noEdgeFilters = !curatedOnly && !onlyFunctional && scoreMin === 0;
           n.style('display', (noEdgeFilters || hasVisibleEdge || isSeed) ? 'element' : 'none');
         });
       });
       if(doLayout){ relayout(document.getElementById('layoutSel').value); }
     }
 
-    function refreshEdgesTable(){
-      const rows = cy.edges(':visible').map(e => [
+    const EDGE_COLUMNS = ['From','To','UniProt','Evidence','Functional Site?','#Sites','Sites',
+                          'Motif percentile','Kinase rank for site','Functional score',
+                          'Shared compartments','KinaseCanvas score','Sources','Reference_PMID'];
+
+    function edgeRow(e){
+      const fmt = v => (v == null || v === '') ? '' : v;
+      return [
         e.data('source'),
         e.data('target'),
+        fmt(e.data('Uniprot')),
         e.data('evidence'),
         e.data('Likely_functional'),
         e.data('SiteCount'),
         e.data('Sites'),
+        fmt(e.data('MotifPercentile')),
+        fmt(e.data('MotifRank')),
+        fmt(e.data('FunctionalScore')),
+        fmt(e.data('SharedCompartments')),
+        fmt(e.data('Score')),
         e.data('SourceList') ?? '',
         e.data('Reference_PMID')
-      ]);
-      renderFilterableTable('edgesFilters','edgesTable',
-        ['From','To','Evidence','Functional Site?','#Sites','Sites','Sources','Reference_PMID'], rows);
+      ];
     }
 
-    function renderFilterableTable(filtersId, tableBoxId, headers, rows){
+    // UniProt, Motif percentile, Kinase rank, Functional score, Shared
+    // compartments, KinaseCanvas score -- rendered in the monospace data font.
+    const EDGE_NUMERIC_COLS = [2, 7, 8, 9, 10, 11];
+
+    function refreshEdgesTable(){
+      const rows = cy.edges(':visible').map(edgeRow);
+      renderFilterableTable('edgesFilters','edgesTable', EDGE_COLUMNS, rows, EDGE_NUMERIC_COLS);
+    }
+
+    function renderFilterableTable(filtersId, tableBoxId, headers, rows, numericCols){
+      numericCols = numericCols || [];
       const fwrap = document.getElementById(filtersId);
       const box   = document.getElementById(tableBoxId);
       fwrap.innerHTML = '';
@@ -512,7 +854,12 @@ viewer_tags <- tags$div(
         rows.forEach(r => {
           if(!passes(r, q)) return;
           const tr = document.createElement('tr');
-          r.forEach(v => { const td = document.createElement('td'); td.textContent = (v ?? '').toString(); tr.appendChild(td); });
+          r.forEach((v, i) => {
+            const td = document.createElement('td');
+            if(numericCols.indexOf(i) >= 0){ td.className = 'num'; }
+            td.textContent = (v ?? '').toString();
+            tr.appendChild(td);
+          });
           tbody.appendChild(tr);
         });
       }
@@ -523,10 +870,41 @@ viewer_tags <- tags$div(
     function incidentSubgraph(seeds){
       const nodeIndex = new Map(data.nodes.map(n => [n.id, n]));
       const validSeeds = seeds.filter(s => nodeIndex.has(s));
-      if(!validSeeds.length){ return {nodes:[], edges:[]}; }
+      if(!validSeeds.length){
+        lastTruncation = {shown: 0, total: 0, hidden: 0};
+        return {nodes:[], edges:[]};
+      }
 
-      const edges = data.edges.filter(e => validSeeds.includes(e.source) || validSeeds.includes(e.target));
-      if(!edges.length){ return {nodes:[], edges:[]}; }
+      // Pair mode intersects the two seeds instead of taking their union, which is
+      // what a user asking whether kinase X hits substrate Y, and where, actually wants.
+      const pairMode = document.getElementById('pairModeChk')?.checked;
+      const kinSeed = document.getElementById('kinSel').value.trim();
+      const subSeed = document.getElementById('subSel').value.trim();
+      let edges = (pairMode && kinSeed && subSeed)
+        ? data.edges.filter(e => e.source === kinSeed && e.target === subSeed)
+        : data.edges.filter(e => validSeeds.includes(e.source) || validSeeds.includes(e.target));
+      if(!edges.length){
+        // Reset rather than leave a stale banner from a previous, non-empty query --
+        // e.g. pair mode finding no direct edge between two otherwise valid seeds.
+        lastTruncation = {shown: 0, total: 0, hidden: 0};
+        return {nodes:[], edges:[]};
+      }
+
+      // Promiscuous kinases have very large neighbourhoods -- CDK1 alone has 629
+      // substrates -- and rendering all of them at once produces a hairball that
+      // cannot be read. Unless the user asks for everything, show the most strongly
+      // supported subset under an explicit, stated ordering: curated interactions
+      // first (they carry direct experimental evidence and no composite score), then
+      // predicted ones by descending confidence, ties broken alphabetically so the
+      // same seed always yields the same view.
+      const showAll = document.getElementById('showAllChk')?.checked;
+      const total = edges.length;
+      let truncated = 0;
+      if(!showAll && total > NEIGHBOURHOOD_CAP){
+        edges = edges.slice().sort(edgeRankCompare).slice(0, NEIGHBOURHOOD_CAP);
+        truncated = total - edges.length;
+      }
+      lastTruncation = {shown: edges.length, total: total, hidden: truncated};
 
       const nset = new Set(); edges.forEach(e => { nset.add(e.source); nset.add(e.target); });
       const nodes = Array.from(nset).map(id => ({
@@ -544,6 +922,7 @@ viewer_tags <- tags$div(
                      name,
                      quality: 'default',
                      randomize: true,
+                     randomSeed: 42,
                      animate: false,
                      animationDuration: 1000,
                      fit: true,
@@ -590,6 +969,17 @@ viewer_tags <- tags$div(
       currentSeeds = seeds;
 
       const elems = incidentSubgraph(seeds);
+      const note = document.getElementById('truncNote');
+      if(note){
+        const pairMode = document.getElementById('pairModeChk')?.checked;
+        note.textContent = lastTruncation.hidden > 0
+          ? 'Showing the ' + lastTruncation.shown + ' best-supported of ' +
+            lastTruncation.total + ' interactions (curated first, then by confidence). ' +
+            lastTruncation.hidden + ' hidden. Tick Show all substrates to include them.'
+          : (pairMode && elems.edges.length === 0)
+            ? 'No interaction between these two in the resource.'
+            : '';
+      }
       cy.elements().remove();
       cy.add(elems.nodes);
       cy.add(elems.edges);
@@ -611,6 +1001,20 @@ viewer_tags <- tags$div(
       applyFilters(true);
       refreshEdgesTable();
     });
+    const scoreMinEl = document.getElementById('scoreMin');
+    if(scoreMinEl){
+      scoreMinEl.addEventListener('input', () => {
+        document.getElementById('scoreMinVal').textContent =
+          (Number(scoreMinEl.value) / 100).toFixed(2);
+        applyFilters(false);
+        refreshEdgesTable();
+      });
+    }
+    const pairModeEl = document.getElementById('pairModeChk');
+    if(pairModeEl){ pairModeEl.addEventListener('change', () => render()); }
+    const showAllEl = document.getElementById('showAllChk');
+    if(showAllEl){ showAllEl.addEventListener('change', () => render()); }
+
     document.getElementById('curatedOnlyChk').addEventListener('change', () => {
       applyFilters(true);
       refreshEdgesTable();
@@ -652,35 +1056,44 @@ viewer_tags <- tags$div(
       });
     });
     document.getElementById('btnCsvEdges').addEventListener('click', () => {
-      const rows = cy.edges(':visible').map(e => [
-        e.data('source'),
-        e.data('target'),
-        e.data('evidence'),
-        e.data('Likely_functional'),
-        e.data('SiteCount'),
-        e.data('Sites'),
-        e.data('SourceList') ?? '',
-        e.data('Reference_PMID')
-      ]);
-      const blob = csvBlob(rows, ['From','To','Evidence','Functional Site?','#Sites','Sites','Sources','Reference_PMID']);
-      download('kinome_edges.csv', blob);
+      const rows = cy.edges(':visible').map(edgeRow);
+      download('kinome_edges.csv', csvBlob(rows, EDGE_COLUMNS));
     });
 
     document.getElementById('btnFullNetwork').addEventListener('click', () => {
-      // Export all edges in the network as CSV (not just visible)
+      // Export every edge in the network, not just the visible subgraph.
+      const fmt = v => (v == null || v === '') ? '' : v;
       const rows = data.edges.map(e => [
-        e.source,
-        e.target,
-        e.evidence,
-        e.Likely_functional,
-        e.SiteCount,
-        e.Sites,
-        e.SourceList ?? '',
-        e.Reference_PMID
+        e.source, e.target, fmt(e.Uniprot), e.evidence, e.Likely_functional,
+        e.SiteCount, e.Sites, fmt(e.MotifPercentile), fmt(e.MotifRank),
+        fmt(e.FunctionalScore), fmt(e.SharedCompartments), fmt(e.Score),
+        e.SourceList ?? '', e.Reference_PMID
       ]);
-      const blob = csvBlob(rows, ['From','To','Evidence','Functional Site?','#Sites','Sites','Sources','Reference_PMID']);
-      download('kinome_full_network.csv', blob);
+      download('kinome_full_network.csv', csvBlob(rows, EDGE_COLUMNS));
     });
+
+    // Site-level export: one row per kinase-substrate-site triad, with the
+    // individual evidence values behind each classification.
+    const SITE_COLUMNS = ['Kinase','Substrate','UniProt','Site','Sequence (+/-7)','Evidence',
+                          'Curated site','Likely functional','Motif percentile',
+                          'Kinase rank for site','Functional score','Shared compartments',
+                          'KinaseCanvas score'];
+    const siteBtn = document.getElementById('btnCsvSites');
+    if(siteBtn){
+      siteBtn.addEventListener('click', () => {
+        const fmt = v => (v == null || v === '') ? '' : v;
+        const visible = new Set(cy.edges(':visible').map(e => e.data('source') + '||' + e.data('target')));
+        const subset = siteData.filter(s => visible.has(s.kinase + '||' + s.substrate));
+        const rows = (subset.length ? subset : siteData).map(s => [
+          s.kinase, s.substrate, fmt(s.uniprot), s.site, fmt(s.flankingSequence), s.evidence,
+          s.curatedSite, s.likelyFunctional, fmt(s.motifPercentile), fmt(s.motifRank),
+          fmt(s.functionalScore), fmt(s.sharedCompartments), fmt(s.score)
+        ]);
+        download(subset.length ? 'kinasecanvas_sites_selection.csv'
+                               : 'kinasecanvas_sites_all.csv',
+                 csvBlob(rows, SITE_COLUMNS));
+      });
+    }
 
     setEdgeLabels(false);
     setArrows(true);

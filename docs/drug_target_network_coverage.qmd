@@ -1,0 +1,486 @@
+---
+title: "Drug-Target Coverage in Extended Kinome Network"
+author: "Chinmaya Joisa"
+date: today
+toc: true
+toc-depth: 3
+toc-title: Table of Contents
+format:
+  html:
+    page-layout: full
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+execute:
+  echo: true
+  cache: false
+  message: false
+  warning: false
+  fig-align: center
+  fig-dpi: 300
+---
+
+```{r setup, include=FALSE}
+require("knitr")
+knitr::opts_knit$set(root.dir = here::here())
+set.seed(123)
+```
+
+```{r load_libraries}
+library(tidyverse)
+library(fst)
+library(here)
+library(scales)
+library(ggpubr)
+library(patchwork)
+library(DT)
+```
+
+# Load Data
+
+```{r load_data}
+# Drug-target profiling data
+drug_targets <- read.fst(here("data/kinome_profiling_novartis_evebio_combined.fst")) %>%
+  as_tibble()
+
+# Extended kinome network (node universe)
+network <- read_csv(here("results/extended_kinome_network_summary.csv"),
+                    show_col_types = FALSE)
+
+glimpse(drug_targets)
+glimpse(network)
+```
+
+# Target Universe
+
+```{r target_universe}
+# Unique targets in the drug-target data
+unique_targets <- drug_targets %>%
+  distinct(target, target_entrez_id)
+
+cat("Unique targets in drug-target data:", nrow(unique_targets), "\n")
+
+# All unique nodes in the network (both Protein1 = kinases and Protein2 = substrates)
+network_nodes <- bind_rows(
+  network %>% transmute(gene = Protein1, entrez = as.character(Protein1_entrez), role = "Kinase/Protein1"),
+  network %>% transmute(gene = Protein2, entrez = as.character(Protein2_entrez), role = "Substrate/Protein2")
+) %>%
+  distinct(gene, entrez) %>%
+  mutate(in_network = TRUE)
+
+cat("Unique nodes in network:", nrow(network_nodes), "\n")
+cat("  As Protein1 (kinases):", n_distinct(network$Protein1), "\n")
+cat("  As Protein2 (substrates):", n_distinct(network$Protein2), "\n")
+```
+
+# Coverage Analysis
+
+```{r coverage}
+# Join drug targets against network nodes
+target_coverage <- unique_targets %>%
+  mutate(target_entrez_id = as.character(target_entrez_id)) %>%
+  left_join(network_nodes, by = c("target_entrez_id" = "entrez")) %>%
+  mutate(
+    in_network = replace_na(in_network, FALSE),
+    coverage   = if_else(in_network, "In network", "Not in network")
+  )
+
+# Also check role breakdown (kinase-only, substrate-only, both)
+as_kinase <- network %>%
+  distinct(Protein1_entrez) %>%
+  mutate(as_kinase = TRUE, Protein1_entrez = as.character(Protein1_entrez))
+
+as_substrate <- network %>%
+  distinct(Protein2_entrez) %>%
+  mutate(as_substrate = TRUE, Protein2_entrez = as.character(Protein2_entrez))
+
+target_coverage <- target_coverage %>%
+  left_join(as_kinase,   by = c("target_entrez_id" = "Protein1_entrez")) %>%
+  left_join(as_substrate, by = c("target_entrez_id" = "Protein2_entrez")) %>%
+  mutate(
+    as_kinase    = replace_na(as_kinase, FALSE),
+    as_substrate = replace_na(as_substrate, FALSE),
+    network_role = case_when(
+      as_kinase & as_substrate ~ "Both (kinase + substrate)",
+      as_kinase                ~ "Kinase only",
+      as_substrate             ~ "Substrate only",
+      TRUE                     ~ "Not in network"
+    )
+  )
+
+summary_tbl <- target_coverage %>%
+  count(coverage, network_role) %>%
+  arrange(coverage, desc(n))
+
+summary_tbl
+```
+
+```{r coverage_plot}
+# Overall coverage bar
+p_cover <- target_coverage %>%
+  count(coverage) %>%
+  mutate(pct = n / sum(n)) %>%
+  ggplot(aes(coverage, n, fill = coverage)) +
+  geom_col(color = "grey20", width = 0.6, show.legend = FALSE) +
+  geom_text(aes(label = paste0(n, "\n(", percent(pct, accuracy = 0.1), ")")),
+            vjust = -0.3, size = 3.5) +
+  scale_fill_manual(values = c("In network" = "#4C78A8", "Not in network" = "#E45756")) +
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.15))) +
+  labs(x = NULL, y = "# Unique Targets", title = "Drug-target coverage in extended kinome network") +
+  theme_pubr()
+
+# Role breakdown for in-network targets
+p_role <- target_coverage %>%
+  count(network_role) %>%
+  mutate(pct = n / sum(n),
+         network_role = fct_reorder(network_role, n, .desc = TRUE)) %>%
+  ggplot(aes(network_role, n, fill = network_role)) +
+  geom_col(color = "grey20", width = 0.65, show.legend = FALSE) +
+  geom_text(aes(label = paste0(n, "\n(", percent(pct, accuracy = 0.1), ")")),
+            vjust = -0.3, size = 3.2) +
+  scale_fill_manual(values = c(
+    "Kinase only"              = "#54A24B",
+    "Both (kinase + substrate)"= "#F58518",
+    "Substrate only"           = "#72B7B2",
+    "Not in network"           = "#E45756"
+  )) +
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.15))) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 15)) +
+  labs(x = NULL, y = "# Unique Targets", title = "Role of targets within the network") +
+  theme_pubr(x.text.angle = 30)
+
+p_cover + p_role
+```
+
+# Inhibition Distribution: In vs Out of Network
+
+How does percent inhibition compare for targets inside vs. outside the network? If highly-inhibited targets are missing from the network, those are candidates for expansion.
+
+```{r inhibition_distribution}
+drug_targets_cov <- drug_targets %>%
+  mutate(target_entrez_id = as.character(target_entrez_id)) %>%
+  left_join(target_coverage %>% select(target_entrez_id, coverage, network_role),
+            by = "target_entrez_id")
+
+# Distribution of max inhibition per target
+max_inhibition_per_target <- drug_targets_cov %>%
+  group_by(target, target_entrez_id, coverage, network_role) %>%
+  summarise(
+    max_inhibition  = max(percent_inhibition, na.rm = TRUE),
+    mean_inhibition = mean(percent_inhibition, na.rm = TRUE),
+    n_compounds     = n_distinct(compound_pubchem_cid),
+    .groups = "drop"
+  )
+
+p_inhib_dist <- ggplot(max_inhibition_per_target, aes(max_inhibition, fill = coverage)) +
+  geom_histogram(bins = 50, alpha = 0.8, color = "grey30", position = "identity") +
+  facet_wrap(~coverage, ncol = 1, scales = "free_y") +
+  scale_fill_manual(values = c("In network" = "#4C78A8", "Not in network" = "#E45756")) +
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.1))) +
+  labs(x = "Max % inhibition across all compounds", y = "# Targets") +
+  theme_pubr() +
+  theme(legend.position = "none",
+        strip.background = element_rect(fill = "grey90", color = "black"),
+        strip.text = element_text(face = "bold"))
+
+p_inhib_dist
+```
+
+# Targets Not in Network — Ranked by Inhibition
+
+```{r not_in_network}
+missing_targets <- max_inhibition_per_target %>%
+  filter(coverage == "Not in network") %>%
+  arrange(desc(max_inhibition))
+
+cat("Targets NOT in the network:", nrow(missing_targets), "\n")
+cat("With max inhibition > 50%:", sum(missing_targets$max_inhibition > 50), "\n")
+cat("With max inhibition > 80%:", sum(missing_targets$max_inhibition > 80), "\n")
+
+# Top missing by max inhibition
+datatable(
+  missing_targets %>%
+    select(Target = target, `Entrez ID` = target_entrez_id,
+           `Max Inhibition (%)` = max_inhibition,
+           `Mean Inhibition (%)` = mean_inhibition,
+           `# Compounds` = n_compounds) %>%
+    mutate(across(where(is.numeric), ~round(.x, 2))),
+  options = list(pageLength = 20, scrollX = TRUE),
+  caption = "Targets in drug-target data NOT in the extended kinome network, ranked by max inhibition"
+)
+```
+
+# Highly-Inhibited Missing Targets (> 50% max inhibition)
+
+```{r high_inhibition_missing}
+top_missing <- missing_targets %>%
+  filter(max_inhibition > 50) %>%
+  slice_max(max_inhibition, n = 30, with_ties = FALSE)
+
+if (nrow(top_missing) > 0) {
+  ggplot(top_missing, aes(max_inhibition, fct_reorder(target, max_inhibition))) +
+    geom_col(fill = "#E45756", color = "grey20") +
+    geom_vline(xintercept = 50, linetype = "dashed", color = "black") +
+    scale_x_continuous(expand = expansion(mult = c(0, 0.1))) +
+    labs(x = "Max % inhibition", y = NULL,
+         title = "Top missing targets by max inhibition (>50%)") +
+    theme_pubr()
+} else {
+  cat("No missing targets with max inhibition > 50%.\n")
+}
+```
+
+# Per-Compound Coverage
+
+What fraction of each compound's targets are covered in the network?
+
+```{r per_compound_coverage}
+compound_coverage <- drug_targets_cov %>%
+  group_by(compound_pubchem_name, compound_pubchem_cid) %>%
+  summarise(
+    n_targets       = n_distinct(target),
+    n_in_network    = n_distinct(target[coverage == "In network"]),
+    frac_covered    = n_in_network / n_targets,
+    max_inhibition  = max(percent_inhibition, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(frac_covered)
+
+cat("Compounds with <50% target coverage:", sum(compound_coverage$frac_covered < 0.5), "\n")
+cat("Compounds with 100% target coverage:", sum(compound_coverage$frac_covered == 1.0), "\n")
+
+p_cmpd_cov <- ggplot(compound_coverage, aes(frac_covered)) +
+  geom_histogram(bins = 40, fill = "#4C78A8", color = "grey20") +
+  geom_vline(xintercept = median(compound_coverage$frac_covered),
+             linetype = "dashed", color = "black") +
+  annotate("text",
+           x = median(compound_coverage$frac_covered), y = Inf,
+           label = paste0("Median = ", percent(median(compound_coverage$frac_covered), accuracy = 0.1)),
+           vjust = 1.5, hjust = -0.1, size = 3.2) +
+  scale_x_continuous(labels = percent, expand = expansion(mult = c(0, 0.02))) +
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.1))) +
+  labs(x = "Fraction of compound's targets in network", y = "# Compounds") +
+  theme_pubr()
+
+p_cmpd_cov
+```
+
+# Diagnostic: HPA Filter Impact
+
+**What if we relaxed the HPA co-localization requirement?**
+
+The current network applies a stringent HPA co-localization filter: kinase-substrate pairs are only retained if both proteins have HPA annotation data AND they share at least one subcellular compartment. This is conservative but can inadvertently filter out valid predictions for under-annotated proteins. 
+
+Here we quantify the recovery potential: how many of the currently missing drug targets appear in the *unfiltered* Cantley predictions (before the HPA filter is applied)?
+
+```{r hpa_filter_impact}
+# Quick assessment using set operations
+cat("=== HPA FILTER RECOVERY POTENTIAL ===\n\n")
+
+# All nodes currently in network
+all_nodes_in_net <- c(network$Protein1_entrez, network$Protein2_entrez) %>% as.character() %>% unique()
+
+# Drug target IDs
+drug_target_ids <- unique_targets$target_entrez_id %>% as.character()
+
+# Missing
+missing_ids <- setdiff(drug_target_ids, all_nodes_in_net)
+total_missing <- length(missing_ids)
+
+# Load Cantley unfiltered to check how many missing targets appear there
+cantley_unfiltered <- read_csv(here("results/unfiltered_cantley_dataset.csv"), show_col_types = FALSE)
+cantley_subs <- as.character(unique(cantley_unfiltered$Substrate_entrez))
+
+# How many missing drug targets are in Cantley?
+recoverable <- sum(missing_ids %in% cantley_subs)
+recovery_pct <- 100 * recoverable / total_missing
+
+cat("Currently missing drug targets:", total_missing, "\n")
+cat("Found in unfiltered Cantley:   ", recoverable, sprintf("(%.1f%% of missing)\n", recovery_pct))
+cat("Would still be missing:        ", total_missing - recoverable, sprintf("(%.1f%% of missing)\n", 100 - recovery_pct))
+
+cat("\n=== IMPACT ON OVERALL COVERAGE ===\n")
+in_net_before <- sum(target_coverage$in_network)
+in_net_after <- in_net_before + recoverable
+total_unique <- nrow(unique_targets)
+
+cat("Before relaxing HPA filter:", in_net_before, "/", total_unique, sprintf("(%.1f%%)\n", 100*in_net_before/total_unique))
+cat("After relaxing HPA filter: ", in_net_after, "/", total_unique, sprintf("(%.1f%%)\n", 100*in_net_after/total_unique))
+cat("Coverage improvement:      ", sprintf("+%d targets (+%.1f ppts)\n", recoverable, 100*recoverable/total_unique))
+```
+
+```{r hpa_recovery_viz}
+# Visualize the impact
+recovery_data <- tibble(
+  scenario = c("Current\n(HPA filter ON)", "Relaxed HPA\n(filter OFF)"),
+  in_network = c(in_net_before, in_net_after),
+  missing = c(total_missing, total_missing - recoverable)
+) %>%
+  mutate(
+    in_network_pct = 100 * in_network / total_unique,
+    missing_pct = 100 * missing / total_unique
+  )
+
+ggplot(recovery_data, aes(x = scenario)) +
+  geom_col(aes(y = in_network_pct, fill = "In network"), color = "grey20", width = 0.6) +
+  geom_col(aes(y = missing_pct, fill = "Missing"), color = "grey20", width = 0.6) +
+  geom_text(aes(y = in_network_pct/2, label = paste0(in_network, "\n(", round(in_network_pct,1), "%)")),
+            size = 3.5, fontface = "bold", color = "white") +
+  geom_text(aes(y = in_network_pct + missing_pct/2, label = paste0(missing, "\n(", round(missing_pct,1), "%)")),
+            size = 3.5, fontface = "bold") +
+  scale_fill_manual(values = c("In network" = "#4C78A8", "Missing" = "#E45756")) +
+  scale_y_continuous(labels = function(x) paste0(x, "%"), limits = c(0, 100), expand = expansion(mult = c(0, 0.02))) +
+  labs(x = NULL, y = "% of drug targets", 
+       title = "Coverage improvement from relaxing HPA co-localization filter",
+       fill = NULL) +
+  theme_pubr() +
+  theme(legend.position = "top")
+```
+
+**Key finding:** Relaxing the HPA co-localization filter could recover **~60% of currently missing targets**, improving overall coverage from **74.6% → 89.8%**. However, this comes at a tradeoff: false-positive predictions may increase for proteins lacking reliable HPA localization data.
+
+# Expansion Strategy Comparison: Full Pipeline (HPA + OmniPath + HIPPIE)
+
+Beyond HPA relaxation, what if we also leverage OmniPath (enzyme-substrate layer) and HIPPIE (protein-protein interactions) to capture remaining missing targets?
+
+```{r expansion_strategy_full}
+cat("=== MULTI-LAYER EXPANSION STRATEGY ===\n\n")
+
+# Load HIPPIE network
+hippie <- read_tsv(here("data/hippie_current.txt"), 
+                   col_names = c("Gene1", "Entrez1", "Gene2", "Entrez2", "Score", "Metadata"),
+                   show_col_types = FALSE) %>%
+  mutate(Entrez1 = as.character(Entrez1), Entrez2 = as.character(Entrez2))
+
+cat("HIPPIE network: ", nrow(hippie), "PPI edges\n")
+cat("Unique proteins: ", n_distinct(c(hippie$Entrez1, hippie$Entrez2)), "\n\n")
+
+# Scenario 1: Current
+nodes_current <- all_nodes_in_net
+targets_current <- sum(drug_target_ids %in% nodes_current)
+
+# Scenario 2: HPA relaxation
+nodes_hpa <- unique(c(all_nodes_in_net, as.character(cantley_subs)))
+targets_hpa <- sum(drug_target_ids %in% nodes_hpa)
+
+# Scenario 3: HPA + OmniPath
+library(OmnipathR)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+
+omnipath_es <- enzyme_substrate(organism = 9606, 
+                                resources = c("PhosphoSite", "SIGNOR"), 
+                                genesymbols = TRUE, 
+                                silent = TRUE)
+
+curated_kinases <- unique(network$Protein1)
+omnipath_phos <- omnipath_es %>%
+  filter(enzyme_genesymbol %in% curated_kinases) %>%
+  filter(residue_type %in% c("S", "T", "Y")) %>%
+  distinct(substrate_genesymbol)
+
+omnipath_entrez <- bitr(omnipath_phos$substrate_genesymbol, 
+                        fromType="SYMBOL", toType="ENTREZID", 
+                        OrgDb=org.Hs.eg.db, drop=TRUE) %>%
+  pull(ENTREZID) %>% as.character() %>% unique()
+
+nodes_omnipath <- unique(c(nodes_hpa, omnipath_entrez))
+targets_omnipath <- sum(drug_target_ids %in% nodes_omnipath)
+
+# Scenario 4: HPA + OmniPath + HIPPIE
+still_missing <- setdiff(drug_target_ids, nodes_omnipath)
+
+hippie_missing_tbl <- hippie %>%
+  filter(Entrez1 %in% still_missing | Entrez2 %in% still_missing) %>%
+  mutate(
+    interaction_partner = case_when(
+      Entrez1 %in% still_missing ~ Entrez2,
+      Entrez2 %in% still_missing ~ Entrez1,
+      TRUE ~ NA_character_
+    ),
+    missing_target = case_when(
+      Entrez1 %in% still_missing ~ Entrez1,
+      Entrez2 %in% still_missing ~ Entrez2,
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(interaction_partner), !is.na(missing_target))
+
+connectable_via_hippie <- hippie_missing_tbl %>%
+  filter(interaction_partner %in% nodes_omnipath) %>%
+  distinct(missing_target) %>%
+  pull(missing_target)
+
+nodes_hippie <- unique(c(nodes_omnipath, connectable_via_hippie))
+targets_hippie <- sum(drug_target_ids %in% nodes_hippie)
+unmappable <- length(still_missing) - length(connectable_via_hippie)
+
+cat("Missing after HPA + OmniPath:", length(still_missing), "\n")
+cat("Connectable via HIPPIE:      ", length(connectable_via_hippie), 
+    sprintf("(%.1f%%)\n", 100*length(connectable_via_hippie)/length(still_missing)))
+cat("Remain unmappable:           ", unmappable, "\n\n")
+```
+
+```{r expansion_comparison_viz}
+# Comprehensive summary table
+expansion_summary <- tibble(
+  strategy = c("Current", "HPA Relaxed", "HPA + OmniPath", "HPA + OmniPath + HIPPIE"),
+  targets_covered = c(targets_current, targets_hpa, targets_omnipath, targets_hippie),
+  total = nrow(unique_targets),
+  coverage_pct = 100 * targets_covered / total,
+  gain_targets = targets_covered - targets_current,
+  gain_ppts = coverage_pct - (100 * targets_current / total)
+) %>%
+  mutate(across(where(is.numeric) & !contains("pct"), as.integer))
+
+cat("=== EXPANSION STRATEGY COMPARISON ===\n")
+print(expansion_summary)
+
+# Visualization
+p_expansion <- expansion_summary %>%
+  pivot_longer(cols = c(targets_covered, unmappable := total - targets_covered),
+               names_to = "status", values_to = "count") %>%
+  mutate(
+    strategy = fct_inorder(strategy),
+    status = fct_recode(status, "In network" = "targets_covered", "Missing" = "unmappable")
+  ) %>%
+  ggplot(aes(x = strategy, y = count, fill = status)) +
+  geom_col(color = "grey20", width = 0.65) +
+  geom_text(aes(label = paste0(count, "\n(", round(100*count/total, 1), "%)")),
+            position = position_stack(vjust = 0.5),
+            size = 3.2, fontface = "bold") +
+  scale_fill_manual(values = c("In network" = "#4C78A8", "Missing" = "#E45756")) +
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.05))) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 12)) +
+  labs(x = NULL, y = "# Drug Targets", 
+       title = "Multi-layer expansion strategy: comprehensive coverage comparison",
+       fill = NULL) +
+  theme_pubr() +
+  theme(legend.position = "top", axis.text.x = element_text(size = 9))
+
+p_expansion
+```
+
+**Key insights:**
+
+- **HPA relaxation alone**: Strong gain (+15.1 ppts) with moderate implementation effort
+- **OmniPath addition**: Minimal incremental benefit (+0.2 ppts) over HPA alone
+- **HIPPIE brute-force**: Dramatic gain (+24.4 ppts total), recovering 90.6% of remaining targets
+- **Fully unmappable**: Only **6 targets (0.9%)** lack HIPPIE interactions entirely
+
+**Recommendation**: Implement HPA relaxation + HIPPIE PPI layer for near-complete coverage (99.1%). OmniPath can be deferred or used as a separate validation resource.
+
+# Summary
+
+```{r summary_printout}
+total_targets   <- nrow(unique_targets)
+in_net          <- sum(target_coverage$in_network)
+not_in_net      <- total_targets - in_net
+high_inh_miss   <- sum(missing_targets$max_inhibition > 50)
+
+cat("=== Drug-Target / Network Coverage Summary ===\n")
+cat("Total unique targets in drug-target data:", total_targets, "\n")
+cat("In extended kinome network:              ", in_net,      sprintf("(%.1f%%)\n", 100*in_net/total_targets))
+cat("NOT in network:                          ", not_in_net,  sprintf("(%.1f%%)\n", 100*not_in_net/total_targets))
+cat("Not-in-network with >50% max inhibition: ", high_inh_miss, "\n")
+```

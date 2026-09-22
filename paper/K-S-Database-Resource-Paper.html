@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.38">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Chinmaya U. Joisa">
+<meta name="author" content="Ian C McCabe">
+<meta name="author" content="Michael P. East">
+<meta name="author" content="Xianlu L. Peng">
+<meta name="author" content="Shawn M. Gomez">
+<meta name="author" content="Jen Jen Yeh">
+
+<title>KinaseCanvas: An Integrated Resource for Curated and Novel Kinase-Substrate Interactions</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+  margin-bottom: 0em;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
+
+
+<script src="K-S-Database-Resource-Paper_files/libs/clipboard/clipboard.min.js"></script>
+<script src="K-S-Database-Resource-Paper_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="K-S-Database-Resource-Paper_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="K-S-Database-Resource-Paper_files/libs/quarto-html/popper.min.js"></script>
+<script src="K-S-Database-Resource-Paper_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="K-S-Database-Resource-Paper_files/libs/quarto-html/anchor.min.js"></script>
+<link href="K-S-Database-Resource-Paper_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="K-S-Database-Resource-Paper_files/libs/quarto-html/quarto-syntax-highlighting-15634bcf2e68342d4ad2dfa704d543f6.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="K-S-Database-Resource-Paper_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="K-S-Database-Resource-Paper_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="K-S-Database-Resource-Paper_files/libs/bootstrap/bootstrap-138a6193a3bd40baf1e627da441a4734.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="K-S-Database-Resource-Paper.pdf"><i class="bi bi-file-pdf"></i>PDF (elsevier)</a></li><li><a href="K-S-Database-Resource-Paper.docx"><i class="bi bi-file-word"></i>MS Word (elsevier)</a></li></ul></div></div>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">KinaseCanvas: An Integrated Resource for Curated and Novel Kinase-Substrate Interactions</h1>
+</div>
+
+
+<div class="quarto-title-meta-author">
+  <div class="quarto-title-meta-heading">Authors</div>
+  <div class="quarto-title-meta-heading">Affiliations</div>
+  
+    <div class="quarto-title-meta-contents">
+    <p class="author">Chinmaya U. Joisa </p>
+  </div>
+  <div class="quarto-title-meta-contents">
+        <p class="affiliation">
+            Lineberger Comprehensive Cancer Center, University of North Carolina at Chapel Hill
+          </p>
+      </div>
+    <div class="quarto-title-meta-contents">
+    <p class="author">Ian C McCabe </p>
+  </div>
+  <div class="quarto-title-meta-contents">
+        <p class="affiliation">
+            Lineberger Comprehensive Cancer Center, University of North Carolina at Chapel Hill
+          </p>
+        <p class="affiliation">
+            Department of Cell Biology and Physiology, University of North Carolina at Chapel Hill
+          </p>
+      </div>
+    <div class="quarto-title-meta-contents">
+    <p class="author">Michael P. East </p>
+  </div>
+  <div class="quarto-title-meta-contents">
+        <p class="affiliation">
+            Department of Pharmacology, University of North Carolina at Chapel Hill
+          </p>
+      </div>
+    <div class="quarto-title-meta-contents">
+    <p class="author">Xianlu L. Peng </p>
+  </div>
+  <div class="quarto-title-meta-contents">
+        <p class="affiliation">
+            Lineberger Comprehensive Cancer Center, University of North Carolina at Chapel Hill
+          </p>
+        <p class="affiliation">
+            Department of Pharmacology, University of North Carolina at Chapel Hill
+          </p>
+      </div>
+    <div class="quarto-title-meta-contents">
+    <p class="author">Shawn M. Gomez </p>
+  </div>
+  <div class="quarto-title-meta-contents">
+        <p class="affiliation">
+            Department of Pharmacology, University of North Carolina at Chapel Hill
+          </p>
+        <p class="affiliation">
+            Joint Department of Biomedical Engineering, University of North Carolina at Chapel Hill and North Carolina State University
+          </p>
+      </div>
+    <div class="quarto-title-meta-contents">
+    <p class="author">Jen Jen Yeh </p>
+  </div>
+  <div class="quarto-title-meta-contents">
+        <p class="affiliation">
+            Lineberger Comprehensive Cancer Center, University of North Carolina at Chapel Hill
+          </p>
+        <p class="affiliation">
+            Department of Pharmacology, University of North Carolina at Chapel Hill
+          </p>
+        <p class="affiliation">
+            Department of Surgery, University of North Carolina at Chapel Hill
+          </p>
+      </div>
+  </div>
+
+<div class="quarto-title-meta">
+
+      
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">Thursday, February 19, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="abstract" class="level1">
+<h1>Abstract</h1>
+<p>Protein phosphorylation is a cornerstone of human physiology, regulating pathways critical for development, metabolism, and disease. While curated databases like PhosphoSitePlus and iPTMnet provide high-confidence kinase-substrate interactions (KSIs), they remain biased toward well-studied signaling nodes, leaving the vast majority of the “dark” kinome unconnected. Recent specificity atlases have begun to fill this gap by profiling motif specificities for nearly all human kinases, yet these raw predictions are often too dense and noisy for direct biological interpretation. Here, we present KinaseCanvas, an integrated resource that places these cutting-edge motif predictions within the context of high-confidence curated data. By applying stringent biological filters for subcellular co-localization and phosphosite functional importance, we distill tens of millions of raw predictions into 21,916 high-confidence novel interactions and integrate them with 8,364 curated interactions, yielding 30,280 distinct kinase-substrate pairs. This integration increases the share of interactions involving understudied kinases roughly 4.6-fold, from 3.4% to 15.7%, and provides a context-aware framework for hypothesis generation, illuminating poorly characterized regions of the human kinome.</p>
+<p>Database URL: https://cujoisa.github.io/KinaseCanvas/</p>
+</section>
+<section id="introduction" class="level1">
+<h1>Introduction</h1>
+<p>Protein phosphorylation is a pervasive regulatory mechanism that controls virtually every major cellular process. Public repositories now catalogue well over 200,000 human phosphosites distributed across the large majority of the human proteome <span class="citation" data-cites="Hornbeck2019-psp Vlastaridis2017-hz">(<a href="#ref-Hornbeck2019-psp" role="doc-biblioref">1</a>,<a href="#ref-Vlastaridis2017-hz" role="doc-biblioref">2</a>)</span>, and modelling that accounts for the incomplete and biased coverage of tryptic phosphoproteomics places the true totals higher still <span class="citation" data-cites="Vlastaridis2017-hz Sharma2014-ud">(<a href="#ref-Vlastaridis2017-hz" role="doc-biblioref">2</a>,<a href="#ref-Sharma2014-ud" role="doc-biblioref">3</a>)</span>. Estimates of how many of these sites are individually functional are considerably lower <span class="citation" data-cites="Landry2009-wf Ochoa2020-og Kalyuzhnyy2022-ph">(<a href="#ref-Landry2009-wf" role="doc-biblioref">4</a>–<a href="#ref-Kalyuzhnyy2022-ph" role="doc-biblioref">6</a>)</span>, so the operative problem is not enumeration but prioritization. Mapping which phosphorylation enzyme (kinase) modifies which protein (substrate) is therefore essential for understanding signal transduction, drug response and disease mechanisms, but this map remains far from complete. Over the past two decades, substantial effort has been put into building reference resources for kinase-substrate interactions (KSIs). Databases such as PhosphoSitePlus, EPSD and iPTMnet curate experimentally observed phosphosites and, where possible, annotate the upstream kinases based on low-throughput biochemistry, targeted phosphoproteomics and manual literature curation <span class="citation" data-cites="Hornbeck2019-psp Chen2025-bt Huang2018-bq">(<a href="#ref-Hornbeck2019-psp" role="doc-biblioref">1</a>,<a href="#ref-Chen2025-bt" role="doc-biblioref">7</a>,<a href="#ref-Huang2018-bq" role="doc-biblioref">8</a>)</span>. Additional resources including Phospho.ELM, PhosphoNetworks and SIGNOR provide complementary KSI annotations derived from both focused and high-throughput studies <span class="citation" data-cites="Dinkel2011-pp Hu2014-dp Licata2020-fm">(<a href="#ref-Dinkel2011-pp" role="doc-biblioref">9</a>–<a href="#ref-Licata2020-fm" role="doc-biblioref">11</a>)</span>, although these differ substantially in scope and currency: Phospho.ELM has not been updated since 2010, and PhosphoNetworks reports kinase-substrate relationships measured on protein microarrays without resolving the modified residue <span class="citation" data-cites="Newman2013-pn Hu2014-dp">(<a href="#ref-Hu2014-dp" role="doc-biblioref">10</a>,<a href="#ref-Newman2013-pn" role="doc-biblioref">12</a>)</span>. PhosphoNET additionally provides sequence-based predictions of kinase-phosphosite pairings for 486 human protein kinases, using scoring matrices that span the -7 to +7 positions around the phosphoacceptor, alongside curated sites <span class="citation" data-cites="Safaei2011-pn">(<a href="#ref-Safaei2011-pn" role="doc-biblioref">13</a>)</span>; the companion KiNECTOR resource (<a href="http://www.kinector.ca" class="uri">http://www.kinector.ca</a>) aggregates over 25,000 human kinase-substrate-phosphosite relationships into navigable pathway maps. However, these curated datasets are heavily skewed towards a small subset of well-studied kinases, substrates and pathways, leaving large regions of the human kinome (including understudied “dark” kinases) sparsely connected or completely unmapped <span class="citation" data-cites="Berginski2021-so">(<a href="#ref-Berginski2021-so" role="doc-biblioref">14</a>)</span>.</p>
+<p>In parallel, unbiased experimental and computational approaches have recently produced near-comprehensive “specificity atlases” for the human kinome. Using peptide-library based specificity profiling, Johnson et al.&nbsp;systematically determined optimal substrate motifs for most human serine/threonine kinases and used these motifs to score reported human phosphosites <span class="citation" data-cites="Johnson2023-ai">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>)</span>. More recently, Yaron-Barir et al.&nbsp;generated an analogous atlas for the human tyrosine kinome <span class="citation" data-cites="Yaron-Barir2024-lv">(<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>. Together, these resources greatly expand the theoretical kinase-phosphosite search space: for each phosphosite, nearly all known kinases receive a motif-based compatibility score, yielding tens of millions of candidate KSIs. While these atlases have already been shown to recover known signaling relationships and highlight kinase dysregulation in disease contexts <span class="citation" data-cites="Johnson2023-ai Yaron-Barir2024-lv">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>, their full potential as a systems-level KSI prior remains underexploited. Current visualization tools, such as the Kinase Library <span class="citation" data-cites="Johnson2023-ai">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>)</span> and earlier motif scanners such as Scansite <span class="citation" data-cites="Obenauer2003-fc">(<a href="#ref-Obenauer2003-fc" role="doc-biblioref">17</a>)</span>, focus on site-level scoring and lack interactive network visualization of kinase-substrate relationships. Furthermore, while methods like Kinase-Substrate Enrichment Analysis (KSEA) are widely used to infer kinase activity, they typically rely on curated databases or require manual integration of specificity matrices.</p>
+<p>Moreover, profiling thousands of phosphosites against hundreds of kinases generates an enormous combinatorial prediction space: most sites have multiple plausible motif matches, and naïve motif scanning across the phosphoproteome leads to high false-positive rates and spurious kinase-substrate couplings <span class="citation" data-cites="Miller2008-ey Linding2007-rk">(<a href="#ref-Miller2008-ey" role="doc-biblioref">18</a>,<a href="#ref-Linding2007-rk" role="doc-biblioref">19</a>)</span>. A major challenge is therefore that motif-based scores alone do not ensure that a kinase-substrate pair is physically or functionally plausible. Kinases and substrate pairs must co-localize in the cell, be expressed in the same tissues or conditions, and the modified site itself must be known or predicted to have some functional consequence. To address this, recent studies have demonstrated the value of integrating orthogonal data layers. In particular, Ochoa et al.&nbsp;developed a machine-learning approach that aggregates features ranging from evolutionary conservation and structural constraints to regulation across thousands of phosphoproteomics experiments. Their functional score effectively discriminates regulatory sites from non-functional ‘noise,’ substantially improving the biological interpretability of phosphoproteomic datasets <span class="citation" data-cites="Ochoa2020-og Higgins2023-jf">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>,<a href="#ref-Higgins2023-jf" role="doc-biblioref">20</a>)</span>. When combined with orthogonal constraints such as subcellular localization, these functional indicators could provide a powerful filter for identifying physiologically relevant kinase-substrate relationships.</p>
+<p>Here, we build on these advances to construct an integrated resource of human kinase-substrate relationships that combines literature-curated KSIs with motif-based predictions from the serine/threonine and tyrosine kinome specificity atlases. We apply a set of simple but stringent biological filters based on (i) motif rank, (ii) subcellular co-localization using the Human Protein Atlas (HPA), and (iii) a data-driven phosphosite functional score <span class="citation" data-cites="Ochoa2020-og Invergo2020-kl Johnson2023-ai Thul2017-cl">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>,<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Invergo2020-kl" role="doc-biblioref">21</a>,<a href="#ref-Thul2017-cl" role="doc-biblioref">22</a>)</span>. An overview of the data integration and filtering strategy is shown in <a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(A), including an example TRAF2 and NCK-interacting protein kinase (TNIK)-centred subnetwork. The resulting network is accessible through the KinaseCanvas Explorer, an interactive web application that allows users to query specific kinases or substrates, visualize their local interaction neighbourhoods, and seamlessly filter connections based on curation status or functional evidence. This unified framework enables researchers to distinguish novel from previously reported interactions and to systematically assess coverage of both well-studied and dark kinases.</p>
+<div id="fig-1" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../figures/paper_figures/fig1.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: <strong>Construction of the integrated kinase-substrate network.</strong> A) Overview of the integration strategy. Motif-based predictions from the specificity atlas are filtered by site-level and co-localization criteria and merged with curated KSIs from PhosphoSitePlus, EPSD and iPTMnet to generate an integrated kinase-substrate network. An example TNIK-centred neighbourhood from the KinaseCanvas Explorer illustrates how curated (dark) and predicted (light) interactions are combined. B) Numbers of kinases (left) and substrates (right) contributed by each source and in the integrated total. C) Alluvial diagram tracking substrates through successive filters. Note that this diagram is conditioned on substrates that have already passed the motif and promiscuity filters and whose sites are present in curated phosphoproteomics databases; it is not a sample of the human phosphoproteome, and the proportions should not be read as such. Substrates are first classified as known vs.&nbsp;novel relative to curated databases (2,697 known, 6,078 novel), then by the kind of site-level support they carry (800 with both curated and functional-score support, 929 curated only, 1,578 functional score only, 5,468 with neither), then by whether the kinase-substrate pair is co-localized according to the HPA (2,675 co-localized, 632 not), leaving 2,675 substrates in the high-confidence set (1,704 known, 971 novel). Per-stage counts are also provided as a supplementary table. D) UpSet plot showing overlap of substrates across the four main KSI sources, highlighting both unique and shared substrate sets. E) Distribution of kinases (left) and substrates (right) across major kinase families in the integrated network.
+</figcaption>
+</figure>
+</div>
+<p>Alt text: Workflow diagram showing integration of curated Kinase-Substrate sets with motif predictions, co-localization filters, and functional scores.</p>
+</section>
+<section id="materials-and-methods" class="level1">
+<h1>Materials and Methods</h1>
+<section id="curated-kinase-substrate-interactions" class="level2">
+<h2 class="anchored" data-anchor-id="curated-kinase-substrate-interactions">Curated kinase-substrate interactions</h2>
+<p>We first assembled a non-redundant reference set of human kinase-substrate-site relationships (“curated KSIs”) from multiple databases. Primary sources included PhosphoSitePlus (PSP), the Eukaryotic Phosphorylation Site Database (EPSD) and iPTMnet, which catalogue experimentally observed phosphosites and often annotate upstream kinases based on low-throughput experiments or kinase assays <span class="citation" data-cites="Hornbeck2015-dg Chen2025-bt Huang2018-bq">(<a href="#ref-Chen2025-bt" role="doc-biblioref">7</a>,<a href="#ref-Huang2018-bq" role="doc-biblioref">8</a>,<a href="#ref-Hornbeck2015-dg" role="doc-biblioref">23</a>)</span>.</p>
+<p>As a starting point, we downloaded the pre-assembled curated KSI table from the KiNet web portal, which aggregates KSIs from PhosphoSitePlus, EPSD and iPTMnet and provides kinase annotations <span class="citation" data-cites="Sekar2024-nx">(<a href="#ref-Sekar2024-nx" role="doc-biblioref">24</a>)</span>. We then re-processed this table to harmonize identifiers and used available site-level functional annotations needed for our analyses. Briefly, we extracted the kinase gene symbol, substrate protein, phosphosite (modified residue and position), source database and/or PMID. Gene and protein identifiers were harmonized by mapping to official HGNC gene symbols and UniProt accessions (current versions as of January 10, 2026). When multiple isoforms existed, phosphosites were mapped to the reviewed (Swiss-Prot) sequence based on the human proteome when possible. Phosphosite notation was standardized to a single-letter residue code plus position (e.g.&nbsp;“S123”). Redundant entries arising from overlap across databases were collapsed, while preserving provenance information (all contributing databases and PMIDs).</p>
+<p>Across PhosphoSitePlus, EPSD, iPTMnet and the specificity atlas we ultimately obtained 13,448 unique phosphosites, with PhosphoSitePlus contributing the largest number (9,339 sites) and EPSD (7,525 sites) and the specificity atlas (5,308 sites) contributing substantial additional coverage (<a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(A)). The overlap structure of these site sets, including sites unique to individual resources and those shared across multiple databases, is summarized in <a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(B). The resulting curated KSI set serves as a reference baseline for all subsequent analyses, and coverage of kinases and substrates contributed by each source is shown in <a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(B).</p>
+</section>
+<section id="kinome-wide-motif-based-substrate-predictions" class="level2">
+<h2 class="anchored" data-anchor-id="kinome-wide-motif-based-substrate-predictions">Kinome-wide motif-based substrate predictions</h2>
+<p>To substantially expand beyond known KSIs, we integrated motif-based predictions from the human kinome specificity atlases for serine/threonine and tyrosine kinases. Johnson et al.&nbsp;used position-specific scoring matrices derived from peptide library screens to define optimal substrate motifs for the vast majority of human serine/threonine kinases and subsequently scored reported human phosphosites against each kinase-specific motif <span class="citation" data-cites="Johnson2023-ai">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>)</span>. These matrix-based approaches have been complemented by more recent deep-learning architectures for phosphorylation site prediction <span class="citation" data-cites="Wang2020-nl">(<a href="#ref-Wang2020-nl" role="doc-biblioref">25</a>)</span>. More recently, Yaron-Barir et al.&nbsp;generated an analogous atlas for the human tyrosine kinome <span class="citation" data-cites="Yaron-Barir2024-lv">(<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>. We and others collectively refer to these resources as the “specificity atlas”.</p>
+<p>We obtained the per-kinase, per-phosphosite prediction scores from the supplementary materials. For each phosphosite (UniProt accession + position), the atlases provide a quantitative score or percentile rank reflecting how well the local sequence matches the optimal motif for each kinase <span class="citation" data-cites="Johnson2023-ai Yaron-Barir2024-lv">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>. The complete, unfiltered specificity dataset—containing motif ranks, percentiles, and promiscuity indices for nearly 28 million kinase-substrate-site combinations—is provided as a supplemental resource (<a href="#stab-1" class="quarto-xref">Supp. Table&nbsp;1</a>). From this prediction matrix, we extracted high-confidence motif-based KSIs using a percentile threshold. Following the original studies, we focused on phosphosite-kinase pairs in which the site ranked within the top 10% of all phosphosites scored for that kinase (<span class="math inline">\(\ge\)</span> 90th percentile) <span class="citation" data-cites="Johnson2023-ai Yaron-Barir2024-lv">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>. This conservative cutoff retains sites that are strongly preferred by the kinase’s motif and reduces the inclusion of weak, low-specificity matches. Because a single stringent tier structurally excludes kinases whose specificity is dominated by docking interactions rather than by the catalytic cleft (see Discussion), we additionally release a relaxed tier comprising kinase-site pairs between the 75th and 90th motif percentiles that satisfy the same contextual criteria. This layer is provided as a separately labelled supplementary table and is not part of the high-confidence set.</p>
+<p>To further mitigate the problem of phosphosites that match the motifs of many kinases, we utilized the “promiscuity index” provided for each scored phosphosite, defined as the number of kinases for which that site ranks at or above the 90th percentile. Sites at or above the median promiscuity index (21 kinases) were excluded from the motif-based prediction set, as a site compatible with many kinases’ motifs carries little information about which of them acts on it. The remaining set of motif-supported KSIs was then passed to contextual filters described below.</p>
+</section>
+<section id="contextual-filtering" class="level2">
+<h2 class="anchored" data-anchor-id="contextual-filtering">Contextual filtering</h2>
+<section id="subcellular-co-localization" class="level3">
+<h3 class="anchored" data-anchor-id="subcellular-co-localization">Subcellular co-localization</h3>
+<p>Since kinase activity is constrained by spatiotemporal co-localization with substrates, we filtered motif-based KSIs based on subcellular localization. We used the HPA subcellular annotations, which provide antibody- and imaging-based localization calls for thousands of human proteins across 30 subcellular structures <span class="citation" data-cites="Thul2017-cl">(<a href="#ref-Thul2017-cl" role="doc-biblioref">22</a>)</span> (HPA subcellular location dataset, downloaded 10 January 2026). The mapping of gene-level subcellular compartmentalization used in this study is provided as a supplemental table (<a href="#stab-2" class="quarto-xref">Supp. Table&nbsp;2</a>). For each kinase and substrate, we retrieved all reported compartments annotated at the “Enhanced”, “Supported” or “Approved” reliability levels, excluding “Uncertain” calls. For every predicted kinase-substrate pair, we then computed the intersection of kinase and substrate localization sets and recorded the number of shared compartments, which is released as a continuous column rather than only as a binary flag. Pairs with at least one shared compartment were considered co-localized and retained; pairs with no compartmental overlap were flagged as unlikely to occur in vivo and removed from the high-confidence set. Proteins absent from HPA necessarily have no shared compartment and are therefore treated as non-co-localized, so missing annotation and genuine spatial separation are not distinguished by this filter. The distribution of the fraction of motif-predicted substrates that co-localize with each kinase is shown in <a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(A); the median kinase retains 37.2% of its predicted substrates after applying this co-localization filter. We note that HPA localizations are neither exhaustive nor condition-specific, so some genuine context-dependent interactions may be lost. However, requiring at least one documented shared localization substantially increases the plausibility of retained KSIs.</p>
+</section>
+<section id="phosphosite-functional-score" class="level3">
+<h3 class="anchored" data-anchor-id="phosphosite-functional-score">Phosphosite functional score</h3>
+<p>To prioritize phosphosites with higher likelihood of regulatory impact, we integrated the phosphosite functional score developed by Ochoa et al., who re-analysed thousands of phosphoproteomics experiments to build a reference human phosphoproteome and then trained a gradient boosting model on sites of known function to integrate 59 features, grouped as mass-spectrometry evidence, phosphosite regulation, structural environment and evolutionary conservation, into a single score of functional relevance <span class="citation" data-cites="Ochoa2020-og">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>)</span>. The resulting score ranges from 0 to 1, with higher values indicating a greater probability that a site is functionally important.</p>
+<p>We downloaded the pre-computed human phosphosite functional scores and mapped them to our phosphosite identifiers (provided as <a href="#stab-3" class="quarto-xref">Supp. Table&nbsp;3</a>). For each predicted KSI, we annotated the substrate site with its functional score and designated a site as “likely functional” if its score was <span class="math inline">\(\ge\)</span> 0.5. This is the threshold recommended by the authors of the score, who report that at a 0.5 cut-off approximately 10% of the phosphoproteome is retained while 50% of true-positive functional sites are recovered, making it a useful cut-off for initial prioritization <span class="citation" data-cites="Ochoa2020-og">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>)</span>; comparable thresholds have been applied in subsequent work <span class="citation" data-cites="Yaron-Barir2024-lv">(<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>. Because any fixed threshold is arbitrary at its boundary, we additionally report a sensitivity analysis across the range 0.3-0.7 and release a continuous confidence score (see below). As expected, tyrosine sites were markedly enriched for site-level support compared to serine or threonine sites (36.1% vs.&nbsp;12.8% and 15.0% of unique sites, respectively; <a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(B)). Here, as in <a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(B), a site counts as supported if it is either already curated or carries a functional score above the cutoff; restricting to functional-score support alone among sites that carry a score gives 26.5%, 7.7% and 8.6%. The difference between residue classes is highly significant (<span class="math inline">\(\chi^2\)</span> = 1848.1, df = 2, <span class="math inline">\(p &lt; 2 \times 10^{-16}\)</span>; n = 5,132 tyrosine, 34,754 serine and 7,844 threonine sites). When stratified by source database, the proportion of scored sites classified as likely functional ranges from 45.4% (specificity atlas layer) and 47.4% (PhosphoSitePlus) through 50.1% (EPSD) to 62.2% (iPTMnet) (<a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(C) and <a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(C)). The atlas-derived layer is not enriched relative to the curated sources because, under the disjunctive site-level criterion described below, a site can enter it on the strength of curation alone; the comparison is therefore most informative for the curated sources, which are not filtered on this score. Unless otherwise noted, analyses focusing on functional sites consider only motif-based KSIs whose substrate sites passed this functional score threshold.</p>
+<div id="fig-2" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../figures/paper_figures/fig2.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;2: <strong>Specificity Atlas Filtering Results</strong>. A) Distribution of subcellular co-localization percentages for predicted kinase-substrate pairs per kinase. Co-localization was determined using HPA subcellular location data, requiring at least one shared compartment between the kinase and substrate; percentages are computed over each kinase’s predicted substrates, counting those without HPA annotation as non-co-localized, as the filter does. The dashed line indicates the median co-localization (37.2%). B) Percentage of predicted sites passing filtering criteria across residue classes (Serine, Threonine, and Tyrosine). “Pass” is defined as a site being either previously curated in primary databases (PhosphoSitePlus, EPSD, iPTMNet) or possessing a high functional score (Ochoa score <span class="math inline">\(\ge\)</span> 0.5). C) Comparative analysis of the percentage of functional sites across different data sources, highlighting the functional density of the predicted atlas relative to curated repositories.
+</figcaption>
+</figure>
+</div>
+<p>Alt text: Statistical distribution of phosphosite functional scores across different residue types (Y, S, T) and source databases.(A) shows co-localization fraction by kinase;(B) shows functional score enrichment for tyrosine sites.</p>
+</section>
+</section>
+<section id="integration-of-motif-localization-and-function" class="level2">
+<h2 class="anchored" data-anchor-id="integration-of-motif-localization-and-function">Integration of motif, localization and function</h2>
+<p>Combining the motif, promiscuity, localization and functional filters, we defined a high-confidence predicted KSI set as those kinase-substrate-site triplets that satisfy all of:</p>
+<ol type="1">
+<li>Motif support: the substrate site ranks in the top 10% of all phosphosites scored for that kinase (<span class="math inline">\(\ge\)</span> 90th percentile) in the relevant serine/threonine or tyrosine atlas.</li>
+<li>Specificity: the site falls below the median promiscuity index, excluding sites that are top-ranked by many kinases.</li>
+<li>Co-localization: kinase and substrate share at least one HPA-annotated subcellular compartment.</li>
+<li>Site-level support: the substrate site either has a phosphosite functional score <span class="math inline">\(\ge\)</span> 0.5 <strong>or</strong> is already curated in PhosphoSitePlus, EPSD or iPTMnet.</li>
+</ol>
+<p>Criterion 4 is deliberately a disjunction rather than a conjunction. A site that has already been curated from the primary literature carries direct experimental evidence of relevance, so requiring it to additionally clear a machine-learned functional-score threshold would discard well-established sites on the basis of a predictor. Curated and functional-score support are reported as separate columns so that either can be required independently.</p>
+<p>The effect of these filters on the substrate set is visualized as an alluvial diagram in <a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(C). This representation tracks substrates as they transition from known vs.&nbsp;novel, through known vs.&nbsp;novel sites, to likely functional vs.&nbsp;other sites, and finally to co-localized vs.&nbsp;non-co-localized predictions. Although some true interactions will undoubtedly be excluded (e.g.&nbsp;transient co-localization not captured by HPA, functional sites below the threshold, or kinases with context-dependent specificity), we deliberately favour specificity over sensitivity to generate a conservative, high-confidence prediction set. Each predicted KSI is also cross-referenced to the curated KSI list; interactions present in curated databases are flagged as “known”, whereas motif-only interactions with no curated evidence are classified as novel predictions contributed by this resource.</p>
+</section>
+<section id="species-and-isoform-handling" class="level2">
+<h2 class="anchored" data-anchor-id="species-and-isoform-handling">Species and isoform handling</h2>
+<p>The resource is restricted to human proteins (NCBI taxonomy 9606). Every protein in the curated KiNet table is a reviewed (Swiss-Prot) human UniProt entry, and we performed no cross-species orthologue mapping of our own, so a site enters the resource only if a contributing database reports it on the human protein. All phosphosite positions refer to the canonical UniProt sequence of the substrate: neither the curated table nor the specificity atlases use isoform-specific accessions. Every site is checked against that canonical sequence (see below), and the UniProt accession is released alongside every site so that positions can be verified independently.</p>
+</section>
+<section id="substrate-and-kinase-identity-resolution" class="level2">
+<h2 class="anchored" data-anchor-id="substrate-and-kinase-identity-resolution">Substrate and kinase identity resolution</h2>
+<p>Resolving protein identity from gene symbols alone is unreliable for this application, because many legacy protein names are aliases of several distinct genes. We therefore resolve substrate identity from the UniProt accession supplied by the specificity atlases, falling back to the gene symbol only where it maps unambiguously to a single gene. Kinase identity is resolved from the atlas column names (which use Manning/CORAL-style short names such as <code>P38A</code>, <code>CK1D</code> and <code>MEK1</code> rather than HGNC symbols) against a curated kinome reference table, then against unambiguous aliases, with a small explicit override list for names that neither source covers; the pipeline halts if any atlas kinase name remains unresolved rather than silently discarding it. Every released kinase-substrate-site triplet is checked automatically against the source atlas to confirm that the site belongs to the accession it is reported under. Every site is additionally checked against its canonical UniProt sequence, which also yields the -7/+7 flanking sequence shown for each site (verified for 95.4% of sites; unverified sites are left without one rather than shown an unverified guess).</p>
+</section>
+<section id="confidence-scoring" class="level2">
+<h2 class="anchored" data-anchor-id="confidence-scoring">Confidence scoring</h2>
+<p>Alongside the binary criteria above, each predicted interaction carries a continuous confidence score. Motif percentile and functional score are each passed through a monotonic, continuously differentiable logistic transform centred on the corresponding threshold, and localization evidence is expressed as a saturating function of the number of shared HPA compartments rather than a binary flag. The composite score is the unweighted mean of the three components, and all three components are released as separate columns so that users can reweight or threshold them independently. This is a transparent re-weighting rather than a calibrated probability: a fully probabilistic treatment would require labelled negative examples, which do not exist at kinome scale <span class="citation" data-cites="Invergo2022-iv Horn2014-kx">(<a href="#ref-Invergo2022-iv" role="doc-biblioref">26</a>,<a href="#ref-Horn2014-kx" role="doc-biblioref">27</a>)</span>.</p>
+</section>
+<section id="information-content-of-the-evidence-layers" class="level2">
+<h2 class="anchored" data-anchor-id="information-content-of-the-evidence-layers">Information content of the evidence layers</h2>
+<p>To quantify how much each evidence layer contributes and how far the layers overlap, we recorded the full joint contingency table of the three indicators (co-localization, curated-site status and functional-score support) over all motif-passing kinase-site pairs, before any of them had been applied. From this table we computed marginal Shannon entropies, pairwise mutual information, normalised redundancy (mutual information divided by the smaller of the two marginal entropies) and conditional mutual information, together with a leave-one-filter-out analysis quantifying how many pairs each layer uniquely removes.</p>
+</section>
+<section id="annotation-of-dark-kinases" class="level2">
+<h2 class="anchored" data-anchor-id="annotation-of-dark-kinases">Annotation of dark kinases</h2>
+<p>To assess how the integrated network covers dark kinases, we used the DarkKinaseTools R package from the NIH Illuminating the Druggable Genome (IDG) programme to classify kinases as “understudied (dark)” or “well-studied (light)” based on publication counts, functional annotations and available reagents <span class="citation" data-cites="Berginski2021-so">(<a href="#ref-Berginski2021-so" role="doc-biblioref">14</a>)</span>. This classification was mapped onto our KSI network, enabling summary statistics on the proportion of curated vs.&nbsp;predicted substrates assigned to dark kinases. We also summarised the fraction of substrates that are novel (predicted only) for each kinase family (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(A)) and quantified the fraction of kinase–substrate pairs involving dark kinases in the curated set versus the curated-plus-specificity atlas integrated network (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(B)).</p>
+</section>
+<section id="implementation" class="level2">
+<h2 class="anchored" data-anchor-id="implementation">Implementation</h2>
+<p>All data integration, filtering and visualisation were performed in R using the tidyverse ecosystem for data manipulation and plotting. Kinome annotations and dark/light classifications were obtained via DarkKinaseTools and associated IDG resources <span class="citation" data-cites="Berginski2021-so">(<a href="#ref-Berginski2021-so" role="doc-biblioref">14</a>)</span>. Upset plots showing overlap between resources (for phosphosites and substrates) were generated using the ggupset package (<a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(B); <a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(D)). Scripts used to download source datasets, perform identifier harmonisation, apply filters and generate figures are provided in GitHub to facilitate reproducibility and reuse.</p>
+</section>
+</section>
+<section id="results" class="level1">
+<h1>Results</h1>
+<section id="structure-and-coverage-of-the-integrated-resource" class="level2">
+<h2 class="anchored" data-anchor-id="structure-and-coverage-of-the-integrated-resource">Structure and coverage of the integrated resource</h2>
+<p>The final resource is organised into two primary tables:</p>
+<ol type="1">
+<li><strong>Kinase-substrate pair table.</strong> This table lists each unique kinase–substrate pair (gene symbols), with columns indicating:
+<ul>
+<li>whether the pair is supported by curated databases, motif-based predictions, or both;</li>
+<li>the number, identity and directionality of phosphosites linking the kinase and substrate;</li>
+<li>source databases and PMIDs for curated evidence;</li>
+<li>motif-related annotations (serine/threonine vs.&nbsp;tyrosine atlas);</li>
+<li>contextual evidence flags (co-localization, functional score above threshold); and</li>
+<li>dark/light status of the kinase.</li>
+</ul></li>
+<li><strong>Phosphosite table.</strong> This table lists each unique substrate site (UniProt accession, residue, position) together with its assigned kinases and annotations, including:
+<ul>
+<li>motif-based scores and ranks for all compatible kinases;</li>
+<li>flags for high-confidence motif assignments (top 10%);</li>
+<li>phosphosite functional score (continuous) and functional classification (<span class="math inline">\(\ge\)</span> 0.5 vs.&nbsp;<span class="math inline">\(&lt;\)</span> 0.5);</li>
+<li>curated vs.&nbsp;predicted status;</li>
+<li>the -7/+7 flanking sequence, verified against the canonical sequence; and</li>
+<li>basic protein metadata.</li>
+</ul></li>
+</ol>
+<p>Across all sources, the integrated resource covers 426 kinases and 3,901 substrate proteins (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(B)). PhosphoSitePlus and EPSD contribute the largest numbers of substrates, while the specificity atlas brings in additional substrates not present in curated databases (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(B)). At the site level, we catalogue 13,448 unique phosphosites across PhosphoSitePlus, EPSD, iPTMnet and the specificity atlas (<a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(A)), with substantial but incomplete overlap between resources (<a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(B)).</p>
+<p>In terms of kinase-substrate pairs, the curated KSI set contains 8,364 distinct pairs, while the high-confidence motif-based predictions add 21,916 novel pairs not present in curated databases, for a total of 30,280 distinct pairs (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(C)). Most kinases gain dozens of novel substrates: the distribution of novel substrates per kinase is right-skewed, with a median of 48 novel substrates and some kinases gaining more than 350 (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(D)).</p>
+<div id="fig-3" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../figures/paper_figures/fig3.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3: <strong>Expansion of the known kinase-substrate network.</strong> A) Fraction of novel substrates across major kinase families. Bars are colored by the number of dark kinases within each family, as defined by the IDG (Illuminating the Druggable Genome) classification. B) Impact of the specificity atlas on the representation of dark kinases. The bar plot shows the percentage of KS pairs involving “Dark” kinases in curated databases versus the combined “Curated + specificity atlas” dataset, demonstrating a substantial increase in the inclusion of dark signaling components. C) Global expansion of the kinase-substrate (KS) network. The bar plot compares the total number of curated pairs against novel pairs introduced by the specificity atlas, showing a 3.6-fold increase in network coverage (+262.0%). D) Histogram showing the distribution of novel substrates per kinase for kinases overlapping between curated sources and the specificity atlas. The dashed line indicates a median of 48 novel substrates per kinase.
+</figcaption>
+</figure>
+</div>
+<p>Alt text: Comparison of kinase coverage and substrate counts between curated databases and the integrated resource. Shows a 3.6-fold increase in KSI pairs and highlights expansion for dark kinases across different families.</p>
+</section>
+<section id="functional-and-family-level-properties" class="level2">
+<h2 class="anchored" data-anchor-id="functional-and-family-level-properties">Functional and family-level properties</h2>
+<p>Application of the phosphosite functional score retains a large fraction of sites as likely functional, particularly for tyrosine residues and for sites drawn from iPTMnet (<a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(B) and <a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(C)). Of the 3,307 substrates with site-level support, 2,675 (81%) are co-localized with at least one of their predicted kinases and are retained (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(C)).</p>
+<p>Kinase and substrate coverage varies across kinase families (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(E)). TK and CMGC kinases are most numerous, whereas AGC, CAMK and “other” families contribute comparable numbers of kinases but differ in substrate counts (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(E)). When focusing on novel substrates, dark kinase families show particularly high fractions of predicted-only substrates: “other” and atypical kinases have 66.6% and 62.0% of their substrates classified as novel, respectively, while CAMK and CMGC kinases have 50.7% and 37.5% (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(A)). Incorporating the specificity atlas increases the fraction of kinase–substrate pairs involving dark kinases roughly 4.6-fold, from 3.4% in curated databases alone to 15.7% in the integrated network (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(B)), underscoring the value of motif-based predictions for illuminating poorly studied regions of the kinome.</p>
+</section>
+<section id="robustness-of-the-filtering-criteria" class="level2">
+<h2 class="anchored" data-anchor-id="robustness-of-the-filtering-criteria">Robustness of the filtering criteria</h2>
+<p>Because both the motif and functional-score criteria are applied as thresholds, we asked how sensitive the resource is to where those thresholds are placed. Sweeping the functional-score cut-off from 0.3 to 0.7 and the motif percentile from the 80th to the 99th (<a href="#sfig-2" class="quarto-xref">Supp. Figure&nbsp;2</a>) changes the size of the high-confidence set substantially – at the 90th motif percentile, the number of retained pairs falls from 58,319 to 13,815 across the functional-score range – but leaves the qualitative conclusions intact. The proportion of retained predicted pairs involving a dark kinase varies only between 19.1% and 20.8% across that same range, and the number of kinases represented varies between 318 and 325. At the operating point used throughout (90th percentile, functional score 0.5) this independent re-implementation retains 22,804 pairs, against 22,797 in the released resource. In other words, the absolute counts depend on the operating point, as they must, while the coverage and dark-kinome conclusions the resource is used for do not.</p>
+<p>We also asked how much information each evidence layer actually contributes, and how far the layers overlap. Across all motif-passing kinase-site pairs, subcellular co-localization carries the highest marginal entropy (0.896 bits, versus 0.418 bits for curated-site status and 0.430 bits for functional-score support). Pairwise mutual information between the three layers is very small: 0.0008 bits between co-localization and curated status, 0.0007 bits between co-localization and functional-score support, and 0.0082 bits between curated status and functional-score support, giving normalised redundancies of 0.19%, 0.16% and 1.95% respectively. The layers are therefore close to orthogonal, and each is doing distinct work: in a leave-one-out analysis, co-localization uniquely removes 47,029 kinase-site pairs that satisfy every other criterion, and omitting it would inflate the high-confidence set by 182%. This filter is not trivially satisfied: the median gene has HPA annotations for two compartments and only 2.6% of annotated genes are assigned to five or more.</p>
+<p>The specificity atlases score only phosphosites that have already been observed in phosphoproteomics experiments, and because that literature is dominated by immortalized and cancer cell lines, we expected coverage to be uneven with respect to tissue-restricted proteins. It is. Classifying substrates by HPA RNA tissue specificity, 70.4% of substrates with low tissue specificity gain at least one novel predicted interaction, falling monotonically to 57.8% for tissue-enhanced, 46.9% for group-enriched and 40.6% for tissue-enriched proteins. Conversely, the proportion of substrates for which we contribute nothing beyond existing curation rises from 29.6% to 59.4% across the same gradient. Predictions are therefore systematically sparser for specialized proteins that define differentiated cell types, and users working on tissue-restricted biology should expect the resource to be less complete for their proteins of interest.</p>
+</section>
+<section id="interactive-exploration-and-visualization" class="level2">
+<h2 class="anchored" data-anchor-id="interactive-exploration-and-visualization">Interactive exploration and visualization</h2>
+<p>To make these integrated data accessible to the broader community, we developed KinaseCanvas Explorer, an interactive web application that enables users to query, filter, and visualize the kinase-substrate network. The explorer provides a unified interface where users can seed the graph with a kinase or substrate of interest to generate a local interaction neighbourhood (see interface in <a href="#fig-4" class="quarto-xref">Figure&nbsp;4</a>(A, B) and a representative network in <a href="#fig-4" class="quarto-xref">Figure&nbsp;4</a>(C)). Key features include:</p>
+<ul>
+<li><strong>Kinase- or substrate-first querying:</strong> The graph can be seeded from either a kinase or a substrate, with autocomplete on both fields. Seeding with a substrate returns all upstream kinases, curated and predicted, so the resource can be used to ask which kinases might act on a protein of interest as readily as the reverse.</li>
+<li><strong>Site-level interrogation of a specific pair:</strong> A pair mode restricts the view to a single kinase-substrate link and ranks the candidate sites on that substrate. This addresses the common experimental situation in which a kinase is known to phosphorylate a protein (e.g., from a band shift on a Phos-tag gel or a pan-phosphotyrosine blot) but the modified residue is unidentified.</li>
+<li><strong>Site sequence context:</strong> Each site’s -7/+7 flanking sequence is shown with the phosphoacceptor highlighted, verified against the canonical UniProt sequence for every site in the resource.</li>
+<li><strong>Quantitative evidence on every interaction:</strong> The motif percentile, the kinase’s rank for that site among all kinases, the phosphosite functional score, the number of shared subcellular compartments and the composite confidence score are all displayed in a filterable table of the interactions in view and carried into every table export. A minimum-confidence slider filters predicted edges on the composite score.</li>
+<li><strong>Explicit evidence provenance:</strong> Curated-site status and functional-score support are reported as separate fields, so a site known to be functional from the primary literature is distinguishable from one predicted to be functional, and the view can be restricted to curated pairs or to functional sites.</li>
+<li><strong>Visual encoding:</strong> Node shape and colour encode role (kinase, substrate, or both), and for predicted edges the line thickness and opacity scale with the composite confidence score, so relative support is visible and not merely filterable.</li>
+<li><strong>Legible neighbourhoods for promiscuous kinases:</strong> Highly connected kinases would otherwise render as unreadable hairballs; the most connected, CDK1, has 629 substrates. A seeded neighbourhood is therefore capped at 75 interactions by default, chosen under a stated ordering (curated first, then by descending composite confidence, ties broken alphabetically), with the count shown and the cap removable in one click. The cap does not affect the 63% of kinases, and 96% of all proteins in the resource, whose neighbourhoods contain 75 or fewer interactions.</li>
+<li><strong>Click-to-inspect detail panel:</strong> Selecting a protein shows its role, UniProt link, numbers of substrates and upstream kinases, and its highest-ranked interactions. Selecting an interaction shows its evidence, sources and PMIDs, together with a per-site table giving each site’s flanking sequence, curation status, functional score, motif percentile, kinase rank and shared compartments, with curated sites listed first and the rest ranked by motif percentile.</li>
+<li><strong>Display options:</strong> Five layout algorithms (fCoSE, CoSE, CoSE-Bilkent, Concentric and Breadthfirst) are available, together with adjustable label size and optional edge labels and arrows.</li>
+<li><strong>Export options:</strong> Network images can be exported as PNG or PDF, and both edge-level and site-level tables can be downloaded as CSV for either the current selection or the complete network.</li>
+</ul>
+<div id="fig-4" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../figures/paper_figures/fig4.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;4: <strong>The KinaseCanvas Explorer.</strong> A) Header bar, reporting summary statistics for the released resource. B) Sidebar: kinase- and substrate-first search with autocomplete and a pair mode, filters for curated pairs, functional sites and minimum composite confidence, display options, legend and export buttons. C) Network view seeded with TNIK (TRAF2 and NCK-interacting kinase). Node shape and colour encode role (hexagon, kinase; rectangle, substrate; diamond, both); edge colour distinguishes curated (dark) from predicted (light) interactions; solid lines mark sites with functional support and dotted lines sites without; and the thickness and opacity of predicted edges scale with the composite confidence score. D) Detail panel for a selected interaction (TNIK to ORC2), giving the evidence behind it and a per-site table with the flanking sequence, curation status, functional score, motif percentile, kinase rank and number of shared compartments. E) Filterable table of the interactions currently in view, which can be exported as CSV together with the site-level table.
+</figcaption>
+</figure>
+</div>
+<p>Alt text: The KinaseCanvas Explorer interface, showing the header statistics, the search and filter sidebar, a TNIK-seeded network, the detail panel for a selected interaction with its per-site evidence, and the filterable table of interactions in view.</p>
+<p>By combining intuitive visualization with robust filtering, the KinaseCanvas Explorer empowers researchers to rapidly generate hypotheses about kinase function and substrate regulation in a context-aware manner.</p>
+</section>
+</section>
+<section id="discussion" class="level1">
+<h1>Discussion</h1>
+<p>We have developed a comprehensive resource that combines literature-curated phosphorylation data with empirically measured, kinome-wide substrate specificity profiles to chart the human kinase–substrate network. This addresses a major gap in cell-signalling knowledge: despite decades of study, substrates are still unknown or poorly defined for most human kinases <span class="citation" data-cites="Dinkel2011-pp Hu2014-dp Berginski2021-so">(<a href="#ref-Dinkel2011-pp" role="doc-biblioref">9</a>,<a href="#ref-Hu2014-dp" role="doc-biblioref">10</a>,<a href="#ref-Berginski2021-so" role="doc-biblioref">14</a>)</span>. By leveraging recent motif profiles for ~90% of the human kinome <span class="citation" data-cites="Johnson2023-ai Yaron-Barir2024-lv">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>, we systematically expand substrate lists for hundreds of kinases and then constrain these predictions with biologically motivated filters for co-localization and phosphosite functionality. The result is a collection of KSI hypotheses that is both broad—increasing the number of candidate KSIs 3.6-fold relative to curated databases alone (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(C))—and enriched for plausible, potentially regulatory interactions (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(A); <a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(A); <a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(A)).</p>
+<section id="relationship-to-existing-resources" class="level2">
+<h2 class="anchored" data-anchor-id="relationship-to-existing-resources">Relationship to existing resources</h2>
+<p>Traditional resources such as PhosphoSitePlus, EPSD and iPTMnet grow as new experimental data and curated literature are added <span class="citation" data-cites="Hornbeck2015-dg Chen2025-bt Huang2018-bq">(<a href="#ref-Chen2025-bt" role="doc-biblioref">7</a>,<a href="#ref-Huang2018-bq" role="doc-biblioref">8</a>,<a href="#ref-Hornbeck2015-dg" role="doc-biblioref">23</a>)</span>. These databases provide high-confidence KSIs, but their coverage is limited by experimental throughput and publication bias towards a small set of kinases and pathways <span class="citation" data-cites="Berginski2021-so">(<a href="#ref-Berginski2021-so" role="doc-biblioref">14</a>)</span>. The recently introduced KiNet web portal builds directly on these curated datasets by aggregating interactions from PhosphoSitePlus, EPSD and iPTMnet, annotating kinases with group membership and pathway/domain context, and providing interactive network visualisations for user-selected protein sets <span class="citation" data-cites="Sekar2024-nx">(<a href="#ref-Sekar2024-nx" role="doc-biblioref">24</a>)</span>.</p>
+<p>Our work is complementary to, and explicitly builds on, KiNet. We use the KiNet-integrated KSI network as the starting curated set, but then extend it in three major ways. First, we overlay kinome-wide, empirically measured substrate specificity atlases for serine/threonine and tyrosine kinases <span class="citation" data-cites="Johnson2023-ai Yaron-Barir2024-lv">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span> to infer motif-supported kinase–phosphosite edges that are not yet observed experimentally (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(C)). Second, we integrate orthogonal contextual information: subcellular localization from HPA <span class="citation" data-cites="Thul2017-cl">(<a href="#ref-Thul2017-cl" role="doc-biblioref">22</a>)</span> and phosphosite functional scores from Ochoa et al. <span class="citation" data-cites="Ochoa2020-og">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>)</span> to filter and prioritize predicted interactions (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(A); <a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(A); <a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(A)). Third, we systematically quantify how these additions expand coverage for dark kinases and for different kinase families (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a> (A, B)). In practical terms, whereas KiNet focuses on exploring known KSIs across pathways and protein sets, our resource aims to “fill in” missing edges by providing a ranked, context-aware set of candidate interactions centred on phosphosite-level properties.</p>
+<p>The Kinase Library web portal <span class="citation" data-cites="Johnson2023-ai">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>)</span> serves as the primary interface for the Johnson et al.&nbsp;and Yaron-Barir et al.&nbsp;atlases, allowing users to score specific peptide sequences against kinase motifs. However, it is designed for sequence-level queries rather than network exploration. Similarly, tools like the KSEA App enable kinase-substrate enrichment analysis but often rely on curated databases or require users to upload custom specificity matrices, and do not provide a browsable network of high-confidence predictions.</p>
+<p>Earlier motif-based tools such as NetPhorest, Scansite and GPS used consensus sequence motifs and position-specific scoring matrices compiled from smaller sets of peptide library experiments or literature-derived substrates <span class="citation" data-cites="Miller2008-ey Obenauer2003-fc Wang2020-hj">(<a href="#ref-Obenauer2003-fc" role="doc-biblioref">17</a>,<a href="#ref-Miller2008-ey" role="doc-biblioref">18</a>,<a href="#ref-Wang2020-hj" role="doc-biblioref">28</a>)</span>. These resources proved useful for hypothesis generation but were limited in kinase coverage and often relied on consensus motifs shared across related kinases. The specificity atlases used here are broader in scope, profiling hundreds of human kinases with oriented peptide libraries and scoring essentially the entire known human phosphoproteome <span class="citation" data-cites="Johnson2023-ai Yaron-Barir2024-lv">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>. By intersecting these empirically derived motif scores with orthogonal features we substantially improve the signal-to-noise ratio relative to motif scores alone. This multi-layer integration is aligned with a broader trend in systems biology toward combining complementary datasets and prior knowledge to infer more accurate signalling networks <span class="citation" data-cites="Ochoa2020-og Yaron-Barir2024-lv Licata2020-fm">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>,<a href="#ref-Licata2020-fm" role="doc-biblioref">11</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>.</p>
+</section>
+<section id="motif-models-derived-from-peptide-libraries-and-from-in-vitro-phosphoproteomics" class="level2">
+<h2 class="anchored" data-anchor-id="motif-models-derived-from-peptide-libraries-and-from-in-vitro-phosphoproteomics">Motif models derived from peptide libraries and from in vitro phosphoproteomics</h2>
+<p>The motif layer of this resource is built on positional-scanning peptide library data <span class="citation" data-cites="Johnson2023-ai Yaron-Barir2024-lv">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>, which has inherent limitations. Peptide libraries measure the intrinsic preference of the catalytic cleft against a degenerate synthetic background, which gives uniform coverage across the kinome but can have modest signal-to-noise for individual kinases and, by construction, reports only what the active site sees. An orthogonal strategy is to phosphorylate dephosphorylated proteome extracts with individual recombinant kinases and read out the products by mass spectrometry, as done by Sugiyama et al.&nbsp;for 385 kinases <span class="citation" data-cites="Sugiyama2019-ki">(<a href="#ref-Sugiyama2019-ki" role="doc-biblioref">29</a>)</span>. This design presents kinases with protein substrates in native sequence context, and several groups have since converted the resulting data into position-specific matrices suitable for scoring. Poll et al.&nbsp;derived position-dependent Shannon information matrices for 384 kinases <span class="citation" data-cites="Poll2024-km">(<a href="#ref-Poll2024-km" role="doc-biblioref">30</a>)</span>, and Invergo et al.&nbsp;built position-specific scoring matrices and naive Bayes classifiers from the same source <span class="citation" data-cites="Invergo2022-iv">(<a href="#ref-Invergo2022-iv" role="doc-biblioref">26</a>)</span>.</p>
+<p>These two experimental designs are complementary rather than competing. Poll et al.&nbsp;compared their mass-spectrometry-derived “logos” directly against the peptide-library motifs used here and reported a high degree of concordance, concluding that the best predictions are likely to come from combining both data types <span class="citation" data-cites="Poll2024-km">(<a href="#ref-Poll2024-km" role="doc-biblioref">30</a>)</span>. A systematic head-to-head comparison of peptide-library and in vitro phosphoproteomic specificity models is an important future direction as an independent benchmarking enterprise. In the meantime, users should understand the motif layer of KinaseCanvas as one particular, uniformly measured view of intrinsic specificity rather than as a complete model of substrate recognition.</p>
+</section>
+<section id="orthogonality-and-information-content-of-the-evidence-layers" class="level2">
+<h2 class="anchored" data-anchor-id="orthogonality-and-information-content-of-the-evidence-layers">Orthogonality and information content of the evidence layers</h2>
+<p>A reasonable concern about any resource that stacks filters is whether the layers are actually independent, or whether they largely re-encode the same signal. We addressed this directly by computing the joint distribution of the three indicators across all motif-passing kinase-site pairs. Subcellular co-localization carries by far the most entropy of the three layers (0.90 bits, versus 0.42 bits for curated-site status and 0.43 bits for functional-score support), simply because it partitions the candidate set more evenly. More importantly, the layers are close to orthogonal: pairwise mutual information is 0.0008 bits between co-localization and curated status, 0.0007 bits between co-localization and functional score, and 0.0082 bits between curated status and functional score, corresponding to normalised redundancies of 0.2%, 0.2% and 2.0% respectively. Conditioning on the third indicator does not change this picture.</p>
+<p>It is worth noting where the residual redundancy actually lies. The functional score of Ochoa et al.&nbsp;is trained on 59 features spanning mass-spectrometry evidence, phosphosite regulation, structural environment and evolutionary conservation <span class="citation" data-cites="Ochoa2020-og">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>)</span>. The small but largest observed redundancy – between curated status and functional score – is consistent with both depending on how thoroughly a site has been observed. Subcellular localization, by contrast, is not among the features of the functional score, and the measured redundancy confirms that it contributes essentially independent evidence. In practical terms the co-localization filter is doing substantial work rather than rubber-stamping decisions already made: it uniquely removes 47,029 kinase-site pairs that pass the site-level criteria, and omitting it would inflate the high-confidence set by 182%.</p>
+</section>
+<section id="biological-insights-from-the-integrated-network" class="level2">
+<h2 class="anchored" data-anchor-id="biological-insights-from-the-integrated-network">Biological insights from the integrated network</h2>
+<p>The integrated network reveals several notable features of kinase-substrate annotation. First, the distribution of novel substrates across kinases is highly non-uniform (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(D)). Many kinases with already rich substrate annotations gain additional predicted substrates but do not dominate the novel interaction set, partly because of our promiscuity and functional filters. In contrast, a large number of kinases with few or no curated substrates acquire predicted substrates, often with strong motif support, high phosphosite functional scores and clear co-localization with substrates (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(A); <a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(A); <a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(C)). This pattern is particularly evident among dark kinases, for which more than half of substrates are novel predictions in several kinase families (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(A)). The fraction of KSI pairs involving dark kinases increases from 3.4% in curated databases alone to 15.7% in the integrated network (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(B)), highlighting the potential of motif-informed approaches to illuminate poorly characterised parts of the kinome <span class="citation" data-cites="Berginski2021-so">(<a href="#ref-Berginski2021-so" role="doc-biblioref">14</a>)</span>.</p>
+<p>Second, our residue-level analyses show that tyrosine sites are both less frequent and more strongly enriched for site-level support than serine or threonine sites: 36.1% of tyrosine sites in our resource are either already curated or carry a functional score above the threshold, compared with 12.8% of serine and 15.0% of threonine sites (<a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(B)); the corresponding functional-score-only figures, among sites carrying a score, are 26.5%, 7.7% and 8.6%. We report this as a property of the assembled resource rather than as a claim about the phosphoproteome, because several factors plausibly contribute to it and we cannot separate them here. Much of the available phosphotyrosine data was generated using anti-phosphotyrosine immunoaffinity enrichment <span class="citation" data-cites="Rush2005-py">(<a href="#ref-Rush2005-py" role="doc-biblioref">31</a>)</span>, a targeted design that both concentrates on sites of prior biological interest and differs systematically from the untargeted enrichment used for serine and threonine sites. Phosphotyrosine is also the smallest and best-studied of the three classes, so its coverage is comparatively closer to saturation, and a substantial share of well-characterised tyrosine sites are receptor tyrosine kinase autophosphorylation sites whose documented function is to recruit SH2- and PTB-domain effectors <span class="citation" data-cites="Miller2018-hi">(<a href="#ref-Miller2018-hi" role="doc-biblioref">32</a>)</span>. Any of these would raise the apparent functional-score enrichment of tyrosine sites independently of underlying regulatory importance. Published analyses likewise report that tyrosine and serine/threonine phosphorylation differ in their regulatory character and in the depth to which each has been sampled <span class="citation" data-cites="Sharma2014-ud Ochoa2020-og">(<a href="#ref-Sharma2014-ud" role="doc-biblioref">3</a>,<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>)</span>, and the relative evolutionary conservation of phosphothreonine and phosphotyrosine sites remains an area of active disagreement <span class="citation" data-cites="Landry2009-wf Ochoa2020-og">(<a href="#ref-Landry2009-wf" role="doc-biblioref">4</a>,<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>)</span>. We therefore draw no evolutionary inference from this observation.</p>
+<p>The value of layering orthogonal evidence is illustrated by RANGAP1 S442, an experimentally observed mitotic phosphosite that lies in a cyclin-dependent kinase (Cdk) consensus motif but has no assigned upstream kinase in the curated databases we integrated <span class="citation" data-cites="Swaminathan2004-rg">(<a href="#ref-Swaminathan2004-rg" role="doc-biblioref">33</a>)</span>. In the serine/threonine specificity atlas <span class="citation" data-cites="Johnson2023-ai">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>)</span>, five kinases score at or above the 90th percentile for this site: CDK2 (rank 1, 98.8th percentile), CDK3 (rank 2, 98.1st), CDK1 (rank 3, 94.8th), MARK3 (rank 4, 90.6th) and GSK3B (rank 5, 90.2nd) – kinases with overlapping motif preferences that sequence information alone cannot separate. Localization does separate them: CDK1 and CDK3 share the cytosol with RANGAP1 (CDK1 also shares the flagellar centriole), whereas CDK2 and GSK3B are annotated only to compartments that RANGAP1 does not occupy and MARK3 has no HPA annotation. The site also carries a high functional score (0.92). The pipeline therefore retains CDK1 and CDK3, and its preference for CDK1 over CDK2 agrees with the original report, which proposed on the basis of the timing and location of RanGAP1’s mitotic phosphorylation that Cdk1, rather than the G1/S kinase Cdk2, is the likely in vivo kinase, although in that study recombinant Cdks phosphorylated T409 far more efficiently than S442 in vitro <span class="citation" data-cites="Swaminathan2004-rg">(<a href="#ref-Swaminathan2004-rg" role="doc-biblioref">33</a>)</span>. Because CDK1 is already curated as a RANGAP1 kinase at the neighbouring site T409 (EPSD, iPTMnet and PhosphoSitePlus), this prediction is best read as a site-level extension of an established kinase-substrate relationship, of the kind the pair mode of the Explorer is designed to support. Localization is nevertheless a static, annotation-based filter, and here it removes a kinase that is capable of the reaction: recombinant cyclin A/Cdk2 also phosphorylates RanGAP1 in vitro <span class="citation" data-cites="Swaminathan2004-rg">(<a href="#ref-Swaminathan2004-rg" role="doc-biblioref">33</a>)</span>.</p>
+<p>Similarly, our resource illuminates potential regulatory roles for dark kinases. MAPK15 (ERK8) is classified as understudied by the IDG programme <span class="citation" data-cites="Berginski2021-so">(<a href="#ref-Berginski2021-so" role="doc-biblioref">14</a>)</span> and has few annotated substrates despite belonging to a well-characterised, proline-directed kinase family. Our pipeline nominates RING1, the E3 ubiquitin ligase subunit of the Polycomb repressive complex 1, as a candidate substrate at S38. The prediction satisfies every criterion in the pipeline and is internally coherent with what is known about the kinase: MAPK15 is the top-ranked kinase of the entire kinome for this site (rank 1, 99.0th percentile), the site carries a high functional score (0.89), MAPK15 and RING1 share two annotated compartments (cytosol and nucleoplasm), and the local sequence (DGTEIAV-<strong>S</strong>-PRSLHSE) is a canonical serine-proline motif of the kind MAPK-family kinases require. Six of the seven kinases that score at or above the 90th percentile for this site are retained (PINK1, ranked third, shares no compartment with RING1), and MAPK15 ranks first among them, well ahead of ERK1 (MAPK3; rank 2, 93.5th percentile). S38 is an experimentally observed phosphosite that currently has no assigned upstream kinase in the curated databases we integrated, which is precisely the gap this resource is intended to fill. We present it as a prioritised hypothesis for experimental testing rather than as an established mechanism.</p>
+<p>Third, the family-wise patterns in <a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(E) and <a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(A) imply that certain kinase groups such as atypical and “other” kinases may be systematically under-annotated at the substrate level. For these groups, more than half of substrates in our resource are novel, motif-supported predictions (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(A)). This suggests that a substantial fraction of phosphorylation events currently attributed to generic “proline-directed” or “acidic” kinases could, in fact, be mediated by less-characterised kinases with similar motifs but distinct biological roles. Experimental testing of these candidates using targeted kinase perturbation combined with phosphoproteomics or substrate-trapping mutants could reveal new pathways and cross-talk among kinase families <span class="citation" data-cites="Miller2008-ey Linding2007-rk Gerritsen2021-cr Liu2023-re">(<a href="#ref-Miller2008-ey" role="doc-biblioref">18</a>,<a href="#ref-Linding2007-rk" role="doc-biblioref">19</a>,<a href="#ref-Gerritsen2021-cr" role="doc-biblioref">34</a>,<a href="#ref-Liu2023-re" role="doc-biblioref">35</a>)</span>.</p>
+</section>
+<section id="limitations-and-caveats" class="level2">
+<h2 class="anchored" data-anchor-id="limitations-and-caveats">Limitations and caveats</h2>
+<p>Despite the stringent filtering, our predictions remain hypotheses and not confirmed in vivo interactions. Several limitations merit consideration. First, kinases with highly similar motifs (e.g., AKT vs.&nbsp;SGK, or different MAPKs) will often share predicted substrates <span class="citation" data-cites="Johnson2023-ai Miller2018-hi Muller-Dott2025-yf">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Miller2018-hi" role="doc-biblioref">32</a>,<a href="#ref-Muller-Dott2025-yf" role="doc-biblioref">36</a>)</span>. Sequence-based motif scoring alone cannot always discriminate which kinase is responsible for a given phosphosite in a particular cell type or condition. Our co-localization filter removes obvious mismatches (e.g., a mostly cytosolic kinase and an exclusively nuclear substrate), but does not capture dynamic relocalization, scaffold-mediated proximity or compartment-specific isoforms. As a consequence, some true interactions may be excluded, while some retained interactions may occur only in specific contexts not captured by current localization data <span class="citation" data-cites="Thul2017-cl">(<a href="#ref-Thul2017-cl" role="doc-biblioref">22</a>)</span>. Users should therefore treat the predicted kinase list for each phosphosite as a set of candidates to be prioritised rather than a definitive assignment.</p>
+<p>Second, we consider each phosphosite largely in isolation, whereas substrate recognition in vivo depends on determinants that lie outside the +/-7 residue window a position-specific matrix can see <span class="citation" data-cites="Miller2018-hi">(<a href="#ref-Miller2018-hi" role="doc-biblioref">32</a>)</span>. Kinases are recruited to substrates through docking interactions distinct from the catalytic cleft, including the D- and DEF-motifs used by MAP kinases and the SH2- and PTB-domain interactions that bring receptor tyrosine kinase substrates to high effective local concentration <span class="citation" data-cites="Miller2018-hi">(<a href="#ref-Miller2018-hi" role="doc-biblioref">32</a>)</span>. A peptide that scores poorly against a kinase’s linear motif can therefore still be an efficient substrate once bound. Recognition is also frequently hierarchical: casein kinase 1 requires a phosphorylated residue at n-3, GSK3 at n+4, and casein kinase 2 can use either canonical or phospho-determinants, so a site’s suitability depends on prior modification events that a static motif score does not represent <span class="citation" data-cites="Miller2018-hi">(<a href="#ref-Miller2018-hi" role="doc-biblioref">32</a>)</span>. A site that matches a kinase motif may equally remain unphosphorylated if it is buried in the folded protein or if an upstream priming event is absent. Conversely, kinases can act on multiple sites within the same substrate, and combinatorial patterns of phosphorylation may be required for functional output. Our use of a phosphosite functional score partially accounts for evolutionary conservation, structural features and regulatory behaviour <span class="citation" data-cites="Ochoa2020-og">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>)</span>, but cannot fully model three-dimensional accessibility or cooperative phosphorylation events. Taken together, these mechanisms bias a top-percentile motif tier against precisely those kinases for which docking, rather than the catalytic cleft, dominates substrate selection – which is one reason we also release a continuous confidence score and a relaxed motif tier. Incorporating structural information, as done in 3D-aware prediction tools, and explicit modelling of docking and priming determinants would improve specificity for kinases with overlapping linear motifs <span class="citation" data-cites="Miller2018-hi Liu2023-re">(<a href="#ref-Miller2018-hi" role="doc-biblioref">32</a>,<a href="#ref-Liu2023-re" role="doc-biblioref">35</a>)</span>.</p>
+<p>Third, every criterion in the pipeline is applied as a threshold, and thresholds are arbitrary at their boundaries. A site scoring 0.4999 on the functional score is excluded while one scoring 0.5001 is retained, and once retained the two are treated identically even though a site scoring 0.99 is far better supported. We have taken three steps to mitigate this rather than defend it. The cut-offs themselves are not arbitrary in origin – 0.5 is the value the authors of the functional score recommend for initial prioritization <span class="citation" data-cites="Ochoa2020-og">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>)</span> and the 90th motif percentile follows the specificity atlases <span class="citation" data-cites="Johnson2023-ai Yaron-Barir2024-lv">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>. We report a sensitivity analysis across functional-score cut-offs from 0.3 to 0.7 and motif percentiles from the 80th to the 99th, so readers can see which conclusions depend on the operating point and which do not. And every released interaction now carries a continuous confidence score built from smooth, monotonic transforms of the underlying quantities, so users who prefer ranking to filtering are not forced into our binary decisions. A fully probabilistic treatment – in which each evidence layer contributes a calibrated likelihood and predictions carry posterior probabilities – would be preferable still, but it requires labelled negative examples that do not exist at kinome scale; approaches of this kind have so far been built either on curated positives with sampled decoys or on in vitro assay data <span class="citation" data-cites="Invergo2022-iv Horn2014-kx">(<a href="#ref-Invergo2022-iv" role="doc-biblioref">26</a>,<a href="#ref-Horn2014-kx" role="doc-biblioref">27</a>)</span>, and extending them across the whole kinome is a substantial methods problem in its own right.</p>
+<p>Fourth, our filters are spatial but not temporal. Requiring a kinase and substrate to share a subcellular compartment is a necessary condition for a genuine interaction, not a sufficient one: a real kinase-substrate pair should additionally show coordinated behaviour over time, with substrate phosphorylation tracking kinase activity across stimuli, inhibitor treatments or genetic perturbation. Compendia of perturbation phosphoproteomics now make this tractable in principle <span class="citation" data-cites="Ochoa2016-kr Muller-Dott2025-yf">(<a href="#ref-Muller-Dott2025-yf" role="doc-biblioref">36</a>,<a href="#ref-Ochoa2016-kr" role="doc-biblioref">37</a>)</span>, and adding a co-regulation layer – either as an additional evidence component or as a filter in its own right – is the most obvious way to improve the resource.</p>
+<p>Fifth, coverage is systematically uneven with respect to cell-type-specific biology: novel predictions reach 70.4% of substrates with low tissue specificity but only 40.6% of tissue-enriched substrates. Three mechanisms contribute to this result. The specificity atlases score only phosphosites already reported in phosphoproteomics experiments, a literature dominated by immortalized and cancer cell lines, so a site never observed in those systems cannot enter the resource however good its motif match <span class="citation" data-cites="Huttlin2010-ts">(<a href="#ref-Huttlin2010-ts" role="doc-biblioref">38</a>)</span>. Tissue-restricted proteins have sparser HPA annotation, so co-localization can fail for missing-data rather than biological reasons <span class="citation" data-cites="Thul2017-cl Uhlen2015-sd">(<a href="#ref-Thul2017-cl" role="doc-biblioref">22</a>,<a href="#ref-Uhlen2015-sd" role="doc-biblioref">39</a>)</span>. Lastly, functional scores depend on depth of mass-spectrometry sampling, which is likewise uneven. The practical consequence is that specialized proteins that give differentiated cells their identity contribute the least beyond existing curation. However, by the same logic, the resource is at its most useful in settings where differentiated programs are lost: cancer being the clearest case, and one where large phosphoproteomic cohorts already exist to test predictions against. Deeper phosphoproteomics of primary tissues and expansion of localization resources to have better coverage of restricted proteins are needed to improve the tissue-specificity aspect of our resource.</p>
+<p>Finally, we focus on the presence of potential kinase-substrate relationships rather than their quantitative strength or regulatory sign (activating vs.&nbsp;inhibitory). Integrating quantitative phosphoproteomic time series with prior KSI networks has been shown to enable inference of causal directionality and sign <span class="citation" data-cites="Invergo2020-kl">(<a href="#ref-Invergo2020-kl" role="doc-biblioref">21</a>)</span>. Extending our resource with such information is a promising direction but beyond the scope of the current study.</p>
+</section>
+<section id="future-directions" class="level2">
+<h2 class="anchored" data-anchor-id="future-directions">Future directions</h2>
+<p>Several extensions could further enhance the resource. First, incremental updates can incorporate new phosphosites, additional motif profiling experiments and improved functional annotations. As kinase specificity profiling is completed for remaining kinases and refined under different conditions <span class="citation" data-cites="Johnson2023-ai Yaron-Barir2024-lv">(<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>)</span>, our pipeline can be rerun to refresh motif-based predictions and coverage. Second, dynamic data could be used to refine or reweigh predicted interactions. Condition-specific phosphoproteomics, kinase inhibition or knockdown experiments, and proximity-labelling assays can provide direct evidence for or against particular KSIs <span class="citation" data-cites="Ochoa2020-og Miller2008-ey Gerritsen2021-cr">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>,<a href="#ref-Miller2008-ey" role="doc-biblioref">18</a>,<a href="#ref-Gerritsen2021-cr" role="doc-biblioref">34</a>)</span>. Such data could be integrated into probabilistic or machine-learning models that jointly consider motif score, co-localization, co-expression, network proximity and experimental perturbation response to yield an overall confidence score, as done in other kinase–substrate prediction frameworks <span class="citation" data-cites="Ochoa2020-og Yaron-Barir2024-lv Miller2008-ey Obenauer2003-fc Licata2020-fm">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>,<a href="#ref-Licata2020-fm" role="doc-biblioref">11</a>,<a href="#ref-Yaron-Barir2024-lv" role="doc-biblioref">16</a>–<a href="#ref-Miller2008-ey" role="doc-biblioref">18</a>)</span>. Our current filtering scheme could thus serve as a transparent baseline on top of which more sophisticated predictive models are trained. Third, tighter integration with existing resources would increase usability. For example, predicted KSIs could be deposited into PhosphoSitePlus, SIGNOR or related databases as “computationally inferred” interactions with explicit evidence codes (motif-based, co-localization-supported, functional-site-supported) <span class="citation" data-cites="Hornbeck2015-dg Huang2018-bq Licata2020-fm">(<a href="#ref-Huang2018-bq" role="doc-biblioref">8</a>,<a href="#ref-Licata2020-fm" role="doc-biblioref">11</a>,<a href="#ref-Hornbeck2015-dg" role="doc-biblioref">23</a>)</span>. This would allow researchers querying a protein of interest to view predicted kinases alongside curated ones. Similarly, linking our predictions with the Dark Kinase Knowledgebase and other IDG tools <span class="citation" data-cites="Berginski2021-so">(<a href="#ref-Berginski2021-so" role="doc-biblioref">14</a>)</span> could help experimental groups prioritize substrates for poorly studied kinases, accelerating efforts to “de-orphanise” dark kinases.</p>
+<p>Finally, there is an opportunity to exploit the resource in disease-focused studies. Many of the substrates and sites in our network overlap with proteins mutated or dysregulated in cancer and other diseases <span class="citation" data-cites="Hornbeck2015-dg Ochoa2020-og Invergo2020-kl Johnson2023-ai Obenauer2003-fc">(<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>,<a href="#ref-Johnson2023-ai" role="doc-biblioref">15</a>,<a href="#ref-Obenauer2003-fc" role="doc-biblioref">17</a>,<a href="#ref-Invergo2020-kl" role="doc-biblioref">21</a>,<a href="#ref-Hornbeck2015-dg" role="doc-biblioref">23</a>)</span>. Combining our KSI predictions with genomic or proteomic alterations from patient cohorts could reveal candidate kinase-substrate axes driving pathology, and suggest biomarkers or therapeutic targets whose activity might be inferred from phosphosite status.</p>
+</section>
+</section>
+<section id="conclusion" class="level1">
+<h1>Conclusion</h1>
+<p>In summary, we present a resource that substantially broadens the current landscape of human kinase–substrate relationships by integrating empirical specificity atlases with curated phosphorylation databases, subcellular localization and phosphosite functional scores. The integrated network increases the number of candidate KSIs 3.6-fold, markedly increases coverage for dark kinases, and enriches for sites with features indicative of regulatory function (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(A); <a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(A); <a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(C); <a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(A)). By design, the predicted interactions are hypotheses that require experimental validation, but they provide a focused and context-aware starting point for dissecting signalling pathways, particularly in areas of the kinome that have received little prior attention. Bridging the gap between large-scale phosphoproteomic data and specific kinase assignments is essential for mechanistic understanding and for translating signalling knowledge into therapeutic strategies <span class="citation" data-cites="Hornbeck2019-psp Chen2025-bt Ochoa2020-og Wang2020-hj Sekar2024-nx">(<a href="#ref-Hornbeck2019-psp" role="doc-biblioref">1</a>,<a href="#ref-Ochoa2020-og" role="doc-biblioref">5</a>,<a href="#ref-Chen2025-bt" role="doc-biblioref">7</a>,<a href="#ref-Sekar2024-nx" role="doc-biblioref">24</a>,<a href="#ref-Wang2020-hj" role="doc-biblioref">28</a>)</span>; our work represents a step toward that goal.</p>
+</section>
+<section id="funding" class="level1">
+<h1>Funding</h1>
+<p>This work was supported by the National Institutes of Health [R01 CA288145 to J.J.Y.; U01 CA274298 to J.J.Y. and X.L.P.; P50 CA257911 to J.J.Y. and X.L.P.; U24 CA211000 to X.L.P. and J.J.Y.].</p>
+</section>
+<section id="conflict-of-interest" class="level1">
+<h1>Conflict of Interest</h1>
+<p>The authors declare no competing interests.</p>
+</section>
+<section id="acknowledgements" class="level1">
+<h1>Acknowledgements</h1>
+<p>We thank the contributors to the PhosphoSitePlus, EPSD, iPTMnet, and Human Protein Atlas databases for providing the primary data that underlies this integrated resource.</p>
+</section>
+<section id="data-availability-statement" class="level1">
+<h1>Data Availability Statement</h1>
+<p>The KinaseCanvas interactive resource is available at https://cujoisa.github.io/KinaseCanvas/, where the integrated network can be browsed and the edge-level and site-level tables downloaded in full. Each released kinase-substrate-site triplet carries the individual evidence values behind its classification (motif percentile, the kinase’s rank for that site, promiscuity index, phosphosite functional score, number of shared subcellular compartments and the composite confidence score), so the inclusion criteria can be checked case by case. All code used for data integration, filtering and analysis is available at https://github.com/cujoisa/KinaseCanvas. Supplementary Tables S1-S3, the relaxed motif tier and the complete unfiltered prediction matrix are deposited in a public archive with a persistent DOI (TKTK_ARCHIVE_DOI); source datasets are redistributed under the terms of their original licences.</p>
+</section>
+<section id="supplementary-data" class="level1">
+<h1>Supplementary Data</h1>
+<div id="stab-1" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-stab figure">
+<div aria-describedby="stab-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<p><strong>Unfiltered specificity atlas.</strong> Motif ranks, percentiles, and promiscuity indices for the human kinome specificity atlases. Provided as <code>unfiltered_cantley_dataset.csv</code>.</p>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-stab quarto-uncaptioned" id="stab-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Supp. Table&nbsp;1
+</figcaption>
+</figure>
+</div>
+<div id="stab-2" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-stab figure">
+<div aria-describedby="stab-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<p><strong>Subcellular localization mapping.</strong> Protein compartmentalization data derived from the Human Protein Atlas (HPA). Provided as <code>subcellular_localization_mapping.csv</code>.</p>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-stab quarto-uncaptioned" id="stab-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Supp. Table&nbsp;2
+</figcaption>
+</figure>
+</div>
+<div id="stab-3" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-stab figure">
+<div aria-describedby="stab-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<p><strong>Phosphosite functional scores.</strong> Pre-computed functional scores for each reported phosphosite in the human phosphoproteome. Provided as <code>ochoa_functional_scores.csv</code>.</p>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-stab quarto-uncaptioned" id="stab-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Supp. Table&nbsp;3
+</figcaption>
+</figure>
+</div>
+<div id="sfig-1" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-sfig figure">
+<div aria-describedby="sfig-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../figures/paper_figures/figS1.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-sfig" id="sfig-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Supp. Figure&nbsp;1: <strong>Comprehensive landscape and functional density of integrated phosphosites.</strong> A) Distribution of unique phosphosite counts across individual database sources (PhosphoSitePlus, EPSD, iPTMnet) and the predicted specificity atlas, alongside the non-redundant integrated total. B) UpSet plot showing the intersection of unique phosphosites across the four primary sources. While many sites are unique to specific repositories, KinaseCanvas provides a unified framework that highlights the substantial expansion provided by integrating motif-based predictions. C) Percentage of phosphosites within each source designated as ‘likely functional’ (Ochoa functional score <span class="math inline">\(\ge\)</span> 0.5), demonstrating high functional density across both curated and predicted datasets.
+</figcaption>
+</figure>
+</div>
+<p>Alt text: Three-panel figure showing phosphosite counts per database, the percentage of functional sites across sources, and an UpSet plot visualizing source overlaps.</p>
+<div id="sfig-2" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-sfig figure">
+<div aria-describedby="sfig-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="../figures/paper_figures/figS2_threshold_sensitivity.png" class="img-fluid figure-img">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-sfig" id="sfig-2-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Supp. Figure&nbsp;2: <strong>Threshold sensitivity of the high-confidence interaction set.</strong> A) Number of retained kinase-substrate pairs as a function of the phosphosite functional-score cut-off, at motif percentile thresholds from the 80th to the 99th. Note the logarithmic y-axis. B) Percentage of retained pairs involving a kinase classified as understudied (dark) by the IDG programme, over the same grid. The operating point used throughout the manuscript (90th motif percentile, functional score 0.5) is circled in red in both panels. The absolute size of the resource depends strongly on the thresholds chosen, whereas the dark-kinase enrichment does not.
+</figcaption>
+</figure>
+</div>
+</section>
+<section id="references" class="level1 unnumbered">
+
+
+</section>
+
+<div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography" id="quarto-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body" data-entry-spacing="0" role="list">
+<div id="ref-Hornbeck2019-psp" class="csl-entry" role="listitem">
+<div class="csl-left-margin">1. </div><div class="csl-right-inline">Hornbeck, P.V., Kornhauser, J.M., Latham, V., et al. (2019) <a href="https://doi.org/10.1093/nar/gky1159">15 years of <span>PhosphoSitePlus</span>: Integrating post-translationally modified sites, disease variants and isoforms</a>. <em>Nucleic Acids Research</em>, <strong>47</strong>, D433–D441.</div>
+</div>
+<div id="ref-Vlastaridis2017-hz" class="csl-entry" role="listitem">
+<div class="csl-left-margin">2. </div><div class="csl-right-inline">Vlastaridis, P., Kyriakidou, P., Chaliotis, A., et al. (2017) <a href="https://doi.org/10.1093/gigascience/giw015">Estimating the total number of phosphoproteins and phosphorylation sites in eukaryotic proteomes</a>. <em>GigaScience</em>, <strong>6</strong>, 1–11.</div>
+</div>
+<div id="ref-Sharma2014-ud" class="csl-entry" role="listitem">
+<div class="csl-left-margin">3. </div><div class="csl-right-inline">Sharma, K., D’Souza, R.C.J., Tyanova, S., et al. (2014) <a href="https://doi.org/10.1016/j.celrep.2014.07.036">Ultradeep human phosphoproteome reveals a distinct regulatory nature of <span>Tyr</span> and <span>Ser</span>/<span>Thr</span>-based signaling</a>. <em>Cell Reports</em>, <strong>8</strong>, 1583–1594.</div>
+</div>
+<div id="ref-Landry2009-wf" class="csl-entry" role="listitem">
+<div class="csl-left-margin">4. </div><div class="csl-right-inline">Landry, C.R., Levy, E.D. and Michnick, S.W. (2009) <a href="https://doi.org/10.1016/j.tig.2009.03.003">Weak functional constraints on phosphoproteomes</a>. <em>Trends in Genetics</em>, <strong>25</strong>, 193–197.</div>
+</div>
+<div id="ref-Ochoa2020-og" class="csl-entry" role="listitem">
+<div class="csl-left-margin">5. </div><div class="csl-right-inline"><span class="nocase">Ochoa, D., Jarnuczak, A.F., Viéitez, C., et al.</span> (2020) <a href="https://doi.org/10.1038/s41587-019-0344-3">The functional landscape of the human phosphoproteome</a>. <em>Nature Biotechnology</em>, <strong>38</strong>, 365–373.</div>
+</div>
+<div id="ref-Kalyuzhnyy2022-ph" class="csl-entry" role="listitem">
+<div class="csl-left-margin">6. </div><div class="csl-right-inline">Kalyuzhnyy, A., Eyers, P.A., Eyers, C.E., et al. (2022) <a href="https://doi.org/10.1021/acs.jproteome.2c00131">Profiling the human phosphoproteome to estimate the true extent of protein phosphorylation</a>. <em>Journal of Proteome Research</em>, <strong>21</strong>, 1510–1524.</div>
+</div>
+<div id="ref-Chen2025-bt" class="csl-entry" role="listitem">
+<div class="csl-left-margin">7. </div><div class="csl-right-inline">Chen, M., Gou, Y., Lei, M., et al. (2025) <a href="https://doi.org/10.1093/gpbjnl/qzaf057"><span>EPSD</span> 2.0: An updated database of protein phosphorylation sites across eukaryotic species</a>. <em>Genomics, proteomics &amp; bioinformatics</em>, <strong>23</strong>.</div>
+</div>
+<div id="ref-Huang2018-bq" class="csl-entry" role="listitem">
+<div class="csl-left-margin">8. </div><div class="csl-right-inline">Huang, H., Arighi, C.N., Ross, K.E., et al. (2018) <a href="https://doi.org/10.1093/nar/gkx1104"><span class="nocase">iPTMnet</span>: An integrated resource for protein post-translational modification network discovery</a>. <em>Nucleic acids research</em>, <strong>46</strong>, D542–D550.</div>
+</div>
+<div id="ref-Dinkel2011-pp" class="csl-entry" role="listitem">
+<div class="csl-left-margin">9. </div><div class="csl-right-inline">Dinkel, H., Chica, C., Via, A., et al. (2011) <a href="https://doi.org/10.1093/nar/gkq1104">Phospho.<span>ELM</span>: A database of phosphorylation sites–update 2011</a>. <em>Nucleic acids research</em>, <strong>39</strong>, D261–7.</div>
+</div>
+<div id="ref-Hu2014-dp" class="csl-entry" role="listitem">
+<div class="csl-left-margin">10. </div><div class="csl-right-inline">Hu, J., Rho, H.-S., Newman, R.H., et al. (2014) <a href="https://doi.org/10.1093/bioinformatics/btt627"><span>PhosphoNetworks</span>: A database for human phosphorylation networks</a>. <em>Bioinformatics (Oxford, England)</em>, <strong>30</strong>, 141–142.</div>
+</div>
+<div id="ref-Licata2020-fm" class="csl-entry" role="listitem">
+<div class="csl-left-margin">11. </div><div class="csl-right-inline">Licata, L., Lo Surdo, P., Iannuccelli, M., et al. (2020) <a href="https://doi.org/10.1093/nar/gkz949"><span>SIGNOR</span> 2.0, the <span>SIGnaling</span> network open resource 2.0: 2019 update</a>. <em>Nucleic acids research</em>, <strong>48</strong>, D504–D510.</div>
+</div>
+<div id="ref-Newman2013-pn" class="csl-entry" role="listitem">
+<div class="csl-left-margin">12. </div><div class="csl-right-inline"><span class="nocase">Newman, R.H., Hu, J., Rho, H.-S., et al.</span> (2013) <a href="https://doi.org/10.1038/msb.2013.12">Construction of human activity-based phosphorylation networks</a>. <em>Molecular Systems Biology</em>, <strong>9</strong>, 655.</div>
+</div>
+<div id="ref-Safaei2011-pn" class="csl-entry" role="listitem">
+<div class="csl-left-margin">13. </div><div class="csl-right-inline">Safaei, J., Maňuch, J., Gupta, A., et al. (2011) <a href="https://doi.org/10.1186/1477-5956-9-S1-S6">Prediction of 492 human protein kinase substrate specificities</a>. <em>Proteome Science</em>, <strong>9</strong>, S6.</div>
+</div>
+<div id="ref-Berginski2021-so" class="csl-entry" role="listitem">
+<div class="csl-left-margin">14. </div><div class="csl-right-inline">Berginski, M.E., Moret, N., Liu, C., et al. (2021) <a href="https://doi.org/10.1093/nar/gkaa853">The dark kinase knowledgebase: An online compendium of knowledge and experimental results of understudied kinases</a>. <em>Nucleic acids research</em>, <strong>49</strong>, D529–D535.</div>
+</div>
+<div id="ref-Johnson2023-ai" class="csl-entry" role="listitem">
+<div class="csl-left-margin">15. </div><div class="csl-right-inline">Johnson, J.L., Yaron, T.M., Huntsman, E.M., et al. (2023) <a href="https://doi.org/10.1038/s41586-022-05575-3">An atlas of substrate specificities for the human serine/threonine kinome</a>. <em>Nature</em>, <strong>613</strong>, 759–766.</div>
+</div>
+<div id="ref-Yaron-Barir2024-lv" class="csl-entry" role="listitem">
+<div class="csl-left-margin">16. </div><div class="csl-right-inline">Yaron-Barir, T.M., Joughin, B.A., Huntsman, E.M., et al. (2024) <a href="https://doi.org/10.1038/s41586-024-07407-y">The intrinsic substrate specificity of the human tyrosine kinome</a>. <em>Nature</em>, <strong>629</strong>, 1174–1181.</div>
+</div>
+<div id="ref-Obenauer2003-fc" class="csl-entry" role="listitem">
+<div class="csl-left-margin">17. </div><div class="csl-right-inline">Obenauer, J.C., Cantley, L.C. and Yaffe, M.B. (2003) <a href="https://doi.org/10.1093/nar/gkg584">Scansite 2.0: Proteome-wide prediction of cell signaling interactions using short sequence motifs</a>. <em>Nucleic acids research</em>, <strong>31</strong>, 3635–3641.</div>
+</div>
+<div id="ref-Miller2008-ey" class="csl-entry" role="listitem">
+<div class="csl-left-margin">18. </div><div class="csl-right-inline">Miller, M.L., Jensen, L.J., Diella, F., et al. (2008) <a href="https://doi.org/10.1126/scisignal.1159433">Linear motif atlas for phosphorylation-dependent signaling</a>. <em>Science signaling</em>, <strong>1</strong>, ra2.</div>
+</div>
+<div id="ref-Linding2007-rk" class="csl-entry" role="listitem">
+<div class="csl-left-margin">19. </div><div class="csl-right-inline"><span class="nocase">Linding, R., Jensen, L.J., Ostheimer, G.J., et al.</span> (2007) <a href="https://doi.org/10.1016/j.cell.2007.05.052">Systematic discovery of in vivo phosphorylation networks</a>. <em>Cell</em>, <strong>129</strong>, 1415–1426.</div>
+</div>
+<div id="ref-Higgins2023-jf" class="csl-entry" role="listitem">
+<div class="csl-left-margin">20. </div><div class="csl-right-inline">Higgins, L., Gerdes, H. and Cutillas, P.R. (2023) <a href="https://doi.org/10.1042/BCJ20220220">Principles of phosphoproteomics and applications in cancer research</a>. <em>The Biochemical Journal</em>, <strong>480</strong>, 403–420.</div>
+</div>
+<div id="ref-Invergo2020-kl" class="csl-entry" role="listitem">
+<div class="csl-left-margin">21. </div><div class="csl-right-inline">Invergo, B.M., Petursson, B., Akhtar, N., et al. (2020) <a href="https://doi.org/10.1016/j.cels.2020.04.005">Prediction of signed protein kinase regulatory circuits</a>. <em>Cell systems</em>, <strong>10</strong>, 384–396.e9.</div>
+</div>
+<div id="ref-Thul2017-cl" class="csl-entry" role="listitem">
+<div class="csl-left-margin">22. </div><div class="csl-right-inline">Thul, P.J., Åkesson, L., Wiking, M., et al. (2017) <a href="https://doi.org/10.1126/science.aal3321">A subcellular map of the human proteome</a>. <em>Science (New York, N.Y.)</em>, <strong>356</strong>.</div>
+</div>
+<div id="ref-Hornbeck2015-dg" class="csl-entry" role="listitem">
+<div class="csl-left-margin">23. </div><div class="csl-right-inline">Hornbeck, P.V., Zhang, B., Murray, B., et al. (2015) <a href="https://doi.org/10.1093/nar/gku1267"><span>PhosphoSitePlus</span>, 2014: Mutations, <span>PTMs</span> and recalibrations</a>. <em>Nucleic acids research</em>, <strong>43</strong>, D512–20.</div>
+</div>
+<div id="ref-Sekar2024-nx" class="csl-entry" role="listitem">
+<div class="csl-left-margin">24. </div><div class="csl-right-inline">Sekar, J.A.P., Li, Y.C., Schlessinger, A., et al. (2024) <a href="https://doi.org/10.1038/s41540-024-00442-5">A web portal for exploring kinase-substrate interactions</a>. <em>npj systems biology and applications</em>, <strong>10</strong>, 113.</div>
+</div>
+<div id="ref-Wang2020-nl" class="csl-entry" role="listitem">
+<div class="csl-left-margin">25. </div><div class="csl-right-inline">Wang, D., Liu, D., Yuchi, J., et al. (2020) <a href="https://doi.org/10.1093/nar/gkaa275"><span>MusiteDeep</span>: A deep-learning based webserver for protein post-translational modification site prediction and visualization</a>. <em>Nucleic Acids Research</em>, <strong>48</strong>, W140–W146.</div>
+</div>
+<div id="ref-Invergo2022-iv" class="csl-entry" role="listitem">
+<div class="csl-left-margin">26. </div><div class="csl-right-inline">Invergo, B.M. (2022) <a href="https://doi.org/10.1371/journal.pcbi.1010110">Accurate, high-coverage assignment of in vivo protein kinases to phosphosites from in vitro phosphoproteomic specificity data</a>. <em>PLOS Computational Biology</em>, <strong>18</strong>, e1010110.</div>
+</div>
+<div id="ref-Horn2014-kx" class="csl-entry" role="listitem">
+<div class="csl-left-margin">27. </div><div class="csl-right-inline">Horn, H., Schoof, E.M., Kim, J., et al. (2014) <a href="https://doi.org/10.1038/nmeth.2968"><span>KinomeXplorer</span>: An integrated platform for kinome biology studies</a>. <em>Nature Methods</em>, <strong>11</strong>, 603–604.</div>
+</div>
+<div id="ref-Wang2020-hj" class="csl-entry" role="listitem">
+<div class="csl-left-margin">28. </div><div class="csl-right-inline">Wang, C., Xu, H., Lin, S., et al. (2020) <a href="https://doi.org/10.1016/j.gpb.2020.01.001"><span>GPS</span> 5.0: An update on the prediction of kinase-specific phosphorylation sites in proteins</a>. <em>Genomics, Proteomics &amp; Bioinformatics</em>, <strong>18</strong>, 72–80.</div>
+</div>
+<div id="ref-Sugiyama2019-ki" class="csl-entry" role="listitem">
+<div class="csl-left-margin">29. </div><div class="csl-right-inline">Sugiyama, N., Imamura, H. and Ishihama, Y. (2019) <a href="https://doi.org/10.1038/s41598-019-46385-4">Large-scale discovery of substrates of the human kinome</a>. <em>Scientific Reports</em>, <strong>9</strong>, 10503.</div>
+</div>
+<div id="ref-Poll2024-km" class="csl-entry" role="listitem">
+<div class="csl-left-margin">30. </div><div class="csl-right-inline">Poll, B.G., Leo, K.T., Deshpande, V., et al. (2024) <a href="https://doi.org/10.1186/s12964-023-01436-2">A resource database for protein kinase substrate sequence-preference motifs based on large-scale mass spectrometry data</a>. <em>Cell Communication and Signaling</em>, <strong>22</strong>, 137.</div>
+</div>
+<div id="ref-Rush2005-py" class="csl-entry" role="listitem">
+<div class="csl-left-margin">31. </div><div class="csl-right-inline">Rush, J., Moritz, A., Lee, K.A., et al. (2005) <a href="https://doi.org/10.1038/nbt1046">Immunoaffinity profiling of tyrosine phosphorylation in cancer cells</a>. <em>Nature Biotechnology</em>, <strong>23</strong>, 94–101.</div>
+</div>
+<div id="ref-Miller2018-hi" class="csl-entry" role="listitem">
+<div class="csl-left-margin">32. </div><div class="csl-right-inline">Miller, C.J. and Turk, B.E. (2018) <a href="https://doi.org/10.1016/j.tibs.2018.02.009">Homing in: Mechanisms of substrate targeting by protein kinases</a>. <em>Trends in Biochemical Sciences</em>, <strong>43</strong>, 380–394.</div>
+</div>
+<div id="ref-Swaminathan2004-rg" class="csl-entry" role="listitem">
+<div class="csl-left-margin">33. </div><div class="csl-right-inline">Swaminathan, S., Kiendl, F., Körner, R., et al. (2004) <a href="https://doi.org/10.1083/jcb.200309126"><span>RanGAP1*SUMO1</span> is phosphorylated at the onset of mitosis and remains associated with <span>RanBP2</span> upon <span>NPC</span> disassembly</a>. <em>The Journal of Cell Biology</em>, <strong>164</strong>, 965–971.</div>
+</div>
+<div id="ref-Gerritsen2021-cr" class="csl-entry" role="listitem">
+<div class="csl-left-margin">34. </div><div class="csl-right-inline">Gerritsen, J.S. and White, F.M. (2021) <a href="https://doi.org/10.1080/14789450.2021.1976152">Phosphoproteomics: A valuable tool for uncovering molecular signaling in cancer cells</a>. <em>Expert review of proteomics</em>, <strong>18</strong>, 661–674.</div>
+</div>
+<div id="ref-Liu2023-re" class="csl-entry" role="listitem">
+<div class="csl-left-margin">35. </div><div class="csl-right-inline">Liu, C., Kutchukian, P., Nguyen, N.D., et al. (2023) <a href="https://doi.org/10.1021/acs.jcim.3c00347">A hybrid structure-based machine learning approach for predicting kinase inhibition by small molecules</a>. <em>Journal of chemical information and modeling</em>, <strong>63</strong>, 5457–5472.</div>
+</div>
+<div id="ref-Muller-Dott2025-yf" class="csl-entry" role="listitem">
+<div class="csl-left-margin">36. </div><div class="csl-right-inline">Müller-Dott, S., Jaehnig, E.J., Munchic, K.P., et al. (2025) <a href="https://doi.org/10.1038/s41467-025-59779-y">Comprehensive evaluation of phosphoproteomic-based kinase activity inference</a>. <em>Nature communications</em>, <strong>16</strong>, 4771.</div>
+</div>
+<div id="ref-Ochoa2016-kr" class="csl-entry" role="listitem">
+<div class="csl-left-margin">37. </div><div class="csl-right-inline">Ochoa, D., Jonikas, M., Lawrence, R.T., et al. (2016) <a href="https://doi.org/10.15252/msb.20167295">An atlas of human kinase regulation</a>. <em>Molecular Systems Biology</em>, <strong>12</strong>, 888.</div>
+</div>
+<div id="ref-Huttlin2010-ts" class="csl-entry" role="listitem">
+<div class="csl-left-margin">38. </div><div class="csl-right-inline">Huttlin, E.L., Jedrychowski, M.P., Elias, J.E., et al. (2010) <a href="https://doi.org/10.1016/j.cell.2010.12.001">A tissue-specific atlas of mouse protein phosphorylation and expression</a>. <em>Cell</em>, <strong>143</strong>, 1174–1189.</div>
+</div>
+<div id="ref-Uhlen2015-sd" class="csl-entry" role="listitem">
+<div class="csl-left-margin">39. </div><div class="csl-right-inline">Uhlén, M., Fagerberg, L., Hallström, B.M., et al. (2015) <a href="https://doi.org/10.1126/science.1260419">Proteomics. Tissue-based map of the human proteome</a>. <em>Science (New York, N.Y.)</em>, <strong>347</strong>, 1260419.</div>
+</div>
+</div></section></div></main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

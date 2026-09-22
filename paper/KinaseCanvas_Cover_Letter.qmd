@@ -25,9 +25,9 @@ Currently, curated kinase databases are heavily skewed toward well-studied signa
 
 **Key Impacts and Discoveries:**
 
-* **Large Network Expansion:** We generate **13,048 novel kinase-substrate pairs** not present in existing databases, representing a 56% expansion of coverage (428 kinases and 4,614 substrates).
+* **Large Network Expansion:** We generate **22,613 novel kinase-substrate pairs** not present in existing databases, for a total of 30,977 distinct pairs spanning 429 kinases and 3,927 substrates.
 
-* **Illuminating the Dark Kinome:** We triple the representation of understudied "dark" kinase interactions (from 3.4% to 11.2%), addressing a major priority in kinase biology.
+* **Illuminating the Dark Kinome:** We increase the representation of understudied "dark" kinase interactions roughly five-fold (from 3.3% to 16.9%), addressing a major priority in kinase biology.
 
 * **Biological Utility:** KinaseCanvas enables rapid hypothesis generation. For example, our integration highlights a novel ABL1→ARID1A phosphorylation event with actionable implications for cancer biology.
 

@@ -1,0 +1,602 @@
+---
+title: "Non-KS Drug Target Integration: Strategy Exploration"
+subtitle: "Connecting GPCRs, NRs, and orphan kinases to the KS network"
+author: "Chinmaya Joisa"
+date: today
+toc: true
+toc-depth: 3
+toc-title: Table of Contents
+format:
+  html:
+    page-layout: full
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+execute:
+  echo: true
+  cache: false
+  message: false
+  warning: false
+  fig-align: center
+  fig-dpi: 300
+---
+
+```{r setup, include=FALSE}
+require("knitr")
+knitr::opts_knit$set(root.dir = here::here())
+set.seed(123)
+```
+
+```{r libraries}
+suppressPackageStartupMessages({
+  library(data.table)
+  library(tidyverse)
+  library(fst)
+  library(here)
+  library(scales)
+  library(ggpubr)
+  library(patchwork)
+  library(igraph)
+  library(DT)
+  library(clusterProfiler)
+  library(org.Hs.eg.db)
+  library(OmnipathR)
+})
+```
+
+# Background
+
+The KinaseCanvas v2 conservative network achieves **74.6% drug-target coverage** from the
+kinase-substrate (KS) backbone, rising to **93.2%** after HIPPIE expansion. However, the
+current HIPPIE "brute-force" approach (1 best edge per missing target) creates **114 completely
+isolated nodes** (degree = 1). These targets are never reached by network propagation methods.
+
+The 114 missing targets represent a distinct biology: GPCRs, nuclear receptors, receptor kinases,
+and metabolic off-targets. This document explores **three smarter integration strategies**:
+
+| Strategy | Approach | Mechanism | Expected Coverage |
+|---|---|---|---|
+| **A** | HIPPIE 1-hop full expansion | All high-confidence PPI edges to KS network | Most targets → degree ≥ 2 |
+| **B** | OmniPath directed signaling | Curated stimulation/inhibition edges | Subset with high biological fidelity |
+| **C** | OmniPath + HIPPIE fallback | B first, A for remainder | Maximum coverage + quality |
+
+# Load Data
+
+```{r load_data}
+# v2 network (with old brute-force HIPPIE layer)
+network_v2 <- read_csv(here("results/extended_kinome_network_summary_v2.csv"),
+                       show_col_types = FALSE) %>%
+  mutate(Protein1_entrez = as.character(Protein1_entrez),
+         Protein2_entrez = as.character(Protein2_entrez))
+
+# KS backbone (excluding old brute-force layer)
+ks_backbone <- network_v2 %>%
+  dplyr::filter(Sources != "HIPPIE_DrugTarget")
+
+all_ks_nodes_sym   <- union(ks_backbone$Protein1, ks_backbone$Protein2)
+all_ks_nodes_entrez <- union(ks_backbone$Protein1_entrez, ks_backbone$Protein2_entrez)
+
+# Drug target panel
+drug_targets <- read.fst(here("data/kinome_profiling_novartis_evebio_combined.fst")) %>%
+  as_tibble() %>%
+  distinct(target, target_entrez_id) %>%
+  mutate(target_entrez_id = as.character(target_entrez_id))
+
+# Isolated 114 targets (old brute-force)
+hippie_dt_old <- network_v2 %>% dplyr::filter(Sources == "HIPPIE_DrugTarget")
+isolated_entrez <- unique(hippie_dt_old$Protein2_entrez)
+isolated_genes  <- unique(hippie_dt_old$Protein2)
+
+cat("KS backbone edges:       ", nrow(ks_backbone), "\n")
+cat("KS backbone nodes:       ", length(all_ks_nodes_sym), "\n")
+cat("Total drug targets:      ", nrow(drug_targets), "\n")
+cat("Isolated targets (old):  ", length(isolated_entrez), "\n")
+
+# Drug targets not in KS backbone (excluding HIPPIE BF layer)
+missing_from_ks <- drug_targets %>%
+  dplyr::filter(!target_entrez_id %in% all_ks_nodes_entrez)
+
+cat("Missing from KS backbone:", nrow(missing_from_ks), "\n")
+```
+
+# Who Are the 114 Missing Targets?
+
+```{r target_characterization}
+# GO Molecular Function
+go_mf <- enrichGO(gene = isolated_entrez,
+                  OrgDb = org.Hs.eg.db, ont = "MF",
+                  pAdjustMethod = "BH", pvalueCutoff = 0.1,
+                  readable = TRUE)
+
+go_df <- as.data.frame(go_mf) %>%
+  dplyr::select(Description, Count, GeneRatio, p.adjust) %>%
+  head(20)
+
+cat("=== GO Molecular Function ===\n")
+print(go_df)
+
+# KEGG pathways
+kegg <- enrichKEGG(gene = isolated_entrez, organism = 'hsa', pvalueCutoff = 0.1)
+kegg_df <- as.data.frame(kegg) %>%
+  dplyr::select(Description, Count, GeneRatio, p.adjust)
+cat("\n=== KEGG Pathways ===\n")
+print(kegg_df)
+
+# Classify targets by functional category
+sym_map <- bitr(isolated_entrez,
+                fromType = "ENTREZID", toType = c("SYMBOL", "GENENAME"),
+                OrgDb = org.Hs.eg.db, drop = TRUE)
+
+target_class <- sym_map %>%
+  dplyr::mutate(
+    category = case_when(
+      grepl("G protein-coupled receptor|adrenergic|serotonin|dopamine|histamine|muscarinic|opioid|neuropeptide|adenosine|cannabinoid|chemokine|galanin|GPCR|purinergic|formyl|melanocortin|orexin|angiotensin|melatonin", GENENAME, ignore.case=TRUE) ~ "GPCR",
+      grepl("nuclear receptor|retinoid|steroid|thyroid|peroxisome|retinoic", GENENAME, ignore.case=TRUE) ~ "Nuclear Receptor",
+      grepl("kinase", GENENAME, ignore.case=TRUE) ~ "Kinase/Kinase-like",
+      grepl("transporter|channel|pump|exchanger|ATPase|solute carrier", GENENAME, ignore.case=TRUE) ~ "Transporter/Channel",
+      grepl("dehydrogenase|oxidase|synthetase|transferase|isomerase|reductase", GENENAME, ignore.case=TRUE) ~ "Metabolic Enzyme",
+      TRUE ~ "Other"
+    )
+  )
+
+cat("\n=== Target classification ===\n")
+target_class %>% count(category, sort = TRUE) %>% print()
+```
+
+```{r target_class_viz}
+target_class_counts <- target_class %>% count(category) %>%
+  mutate(category = fct_reorder(category, n))
+
+p_target_class <- ggplot(target_class_counts, aes(x = category, y = n, fill = category)) +
+  geom_col(color = "grey20", width = 0.7, show.legend = FALSE) +
+  geom_text(aes(label = n), hjust = -0.3, size = 4) +
+  scale_fill_manual(values = c(
+    "GPCR"              = "#4C78A8",
+    "Nuclear Receptor"  = "#F58518",
+    "Kinase/Kinase-like" = "#54A24B",
+    "Transporter/Channel" = "#72B7B2",
+    "Metabolic Enzyme"  = "#B279A2",
+    "Other"             = "#BAB0AC"
+  )) +
+  scale_x_discrete(expand = expansion(mult = c(0.05, 0.15))) +
+  coord_flip() +
+  labs(x = NULL, y = "Count",
+       title = "Functional categories of the 114 isolated drug targets") +
+  theme_pubr()
+
+p_target_class
+```
+
+# Load HIPPIE
+
+```{r load_hippie}
+hippie <- fread(
+  here("data/hippie_current.txt"),
+  col.names = c("Gene1", "Entrez1", "Gene2", "Entrez2", "Score", "Metadata"),
+  colClasses = list(character = c("Entrez1", "Entrez2"))
+)
+
+confidence_cutoff <- quantile(hippie$Score, 0.75, na.rm = TRUE)
+hippie_hc <- hippie[Score > confidence_cutoff]
+
+cat("HIPPIE high-confidence edges:", nrow(hippie_hc), "\n")
+cat("Confidence cutoff (75th pctile):", round(confidence_cutoff, 3), "\n")
+```
+
+# Strategy A: HIPPIE 1-Hop Full Expansion
+
+**Rationale:** Instead of the single best-scoring HIPPIE edge, add ALL high-confidence HIPPIE
+edges connecting each missing target to proteins already in the KS network. This transforms
+degree-1 isolated nodes into locally clustered subgraphs.
+
+```{r strategy_a}
+# Find ALL high-confidence HIPPIE edges from isolated targets to KS network nodes
+hippie_a <- hippie_hc %>%
+  dplyr::filter(
+    (Entrez1 %in% isolated_entrez & Entrez2 %in% all_ks_nodes_entrez) |
+    (Entrez2 %in% isolated_entrez & Entrez1 %in% all_ks_nodes_entrez)
+  ) %>%
+  dplyr::mutate(
+    isolated_node  = if_else(Entrez1 %in% isolated_entrez, Entrez1, Entrez2),
+    ks_node_entrez = if_else(Entrez1 %in% isolated_entrez, Entrez2, Entrez1),
+    ks_node_gene   = if_else(Entrez1 %in% isolated_entrez, Gene2, Gene1),
+    iso_gene       = if_else(Entrez1 %in% isolated_entrez, Gene1, Gene2)
+  ) %>%
+  distinct(isolated_node, ks_node_entrez, ks_node_gene, iso_gene, Score)
+
+cat("=== Strategy A: HIPPIE 1-hop full expansion ===\n\n")
+cat("Total edges (to KS network):", nrow(hippie_a), "\n")
+cat("Isolated targets covered:   ", n_distinct(hippie_a$isolated_node), "/ 114\n\n")
+
+# Degree distribution per target
+strat_a_degree <- hippie_a %>%
+  count(isolated_node, iso_gene) %>%
+  dplyr::rename(degree = n)
+
+cat("Degree distribution (# KS-connected edges per target):\n")
+summary(strat_a_degree$degree) %>% print()
+
+cat("\nTargets with degree 1 (still isolated):  ", sum(strat_a_degree$degree == 1), "\n")
+cat("Targets with degree 2-5:                 ", sum(strat_a_degree$degree >= 2 & strat_a_degree$degree <= 5), "\n")
+cat("Targets with degree 6+:                  ", sum(strat_a_degree$degree >= 6), "\n")
+cat("Targets with NO HIPPIE-KS edge:          ", 114 - n_distinct(hippie_a$isolated_node), "\n")
+```
+
+```{r strategy_a_viz}
+p_strat_a <- ggplot(strat_a_degree, aes(x = degree)) +
+  geom_histogram(bins = 20, fill = "#4C78A8", color = "grey20", alpha = 0.8) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
+  annotate("text", x = 1, y = Inf, label = "Old brute-force\n(degree 1)",
+           vjust = 1.3, hjust = -0.1, color = "red", size = 3.5) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(x = "Number of connections to KS network",
+       y = "Count of isolated drug targets",
+       title = "Strategy A: HIPPIE 1-hop full expansion",
+       subtitle = "Each target gets ALL its HIPPIE edges to in-network proteins (not just the best 1)") +
+  theme_pubr()
+
+p_strat_a
+```
+
+# Strategy B: OmniPath Directed Signaling Network
+
+**Rationale:** OmniPath aggregates 85K+ curated directed interactions (from SIGNOR, HPRD, SPIKE,
+PathwayCommons). This captures biologically meaningful signaling relationships:
+GPCR → G-protein → kinase activation chains; NR → downstream regulation. These edges represent
+**causal mechanistic relationships** rather than generic PPIs.
+
+```{r strategy_b}
+cat("Querying OmniPath directed interactions...\n")
+op_net <- omnipath_interactions(organism = 9606, datasets = "omnipath")
+
+cat("Total OmniPath interactions:", nrow(op_net), "\n")
+
+# Filter to directed signaling edges FROM isolated targets TO KS network
+op_b <- op_net %>%
+  dplyr::filter(source_genesymbol %in% isolated_genes,
+                target_genesymbol %in% all_ks_nodes_sym) %>%
+  dplyr::filter(is_stimulation | is_inhibition)
+
+cat("\n=== Strategy B: OmniPath directed signaling ===\n\n")
+cat("Directed edges (isolated → KS network):", nrow(op_b), "\n")
+cat("Isolated targets covered: ", n_distinct(op_b$source_genesymbol), "/ 114\n\n")
+
+# Degree distribution
+strat_b_degree <- op_b %>%
+  count(source_genesymbol) %>%
+  dplyr::rename(gene = source_genesymbol, degree = n)
+
+cat("Degree distribution:\n")
+summary(strat_b_degree$degree) %>% print()
+
+# What relationship types?
+cat("\nEdge type breakdown:\n")
+op_b %>%
+  dplyr::mutate(type = case_when(
+    is_stimulation & !is_inhibition ~ "Stimulation",
+    !is_stimulation & is_inhibition ~ "Inhibition",
+    is_stimulation & is_inhibition  ~ "Both",
+    TRUE ~ "Undirected"
+  )) %>%
+  count(type) %>% print()
+
+# Sources breakdown
+cat("\nTop supporting databases:\n")
+op_b %>% separate_rows(sources, sep = ";") %>% count(sources, sort = TRUE) %>% head(10) %>% print()
+```
+
+```{r strategy_b_sample}
+cat("Sample OmniPath directed signaling edges:\n")
+op_b %>%
+  dplyr::select(source_genesymbol, target_genesymbol,
+                is_stimulation, is_inhibition, sources) %>%
+  head(30) %>% print()
+```
+
+```{r strategy_b_viz}
+# Degree distribution for strategy B
+p_strat_b_degree <- ggplot(strat_b_degree, aes(x = degree)) +
+  geom_histogram(bins = 15, fill = "#F58518", color = "grey20", alpha = 0.8) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(x = "Number of directed signaling edges to KS network",
+       y = "Count of isolated drug targets",
+       title = "Strategy B: OmniPath directed signaling coverage",
+       subtitle = "Only 56/114 targets have OmniPath edges; but each is biologically curated") +
+  theme_pubr()
+
+# Coverage comparison A vs B
+coverage_compare <- tibble(
+  strategy = c("Old brute-force\n(1 HIPPIE edge)", 
+               "Strategy A\n(HIPPIE 1-hop full)", 
+               "Strategy B\n(OmniPath signaling)"),
+  targets_covered = c(114, n_distinct(hippie_a$isolated_node), n_distinct(op_b$source_genesymbol)),
+  mean_degree = c(1.0, 
+                  mean(strat_a_degree$degree),
+                  mean(strat_b_degree$degree))
+)
+
+p_coverage <- coverage_compare %>%
+  ggplot(aes(x = strategy, y = targets_covered, fill = strategy)) +
+  geom_col(color = "grey20", width = 0.6, show.legend = FALSE) +
+  geom_text(aes(label = paste0(targets_covered, "/114\n(", 
+                               round(100*targets_covered/114, 0), "%)")),
+            vjust = -0.3, size = 3.5) +
+  geom_label(aes(y = targets_covered/2, 
+                 label = paste0("Avg degree\n= ", round(mean_degree, 1))),
+             fill = "white", size = 3, label.size = 0.3) +
+  scale_fill_manual(values = c(
+    "Old brute-force\n(1 HIPPIE edge)" = "#E45756",
+    "Strategy A\n(HIPPIE 1-hop full)" = "#4C78A8",
+    "Strategy B\n(OmniPath signaling)" = "#F58518"
+  )) +
+  scale_y_continuous(limits = c(0, 135), expand = expansion(mult = c(0, 0.05))) +
+  labs(x = NULL, y = "Isolated targets connected (with degree ≥ 1)",
+       title = "Coverage and connectivity by expansion strategy") +
+  theme_pubr(x.text.angle = 20)
+
+p_strat_b_degree + p_coverage
+```
+
+# Strategy C: OmniPath First, HIPPIE Fallback
+
+**Rationale:** Use the highest-quality curated directed edges (OmniPath) where available, and
+fall back to HIPPIE multi-hop for targets without OmniPath coverage. This maximizes both
+biological specificity and total coverage.
+
+```{r strategy_c}
+# Targets covered by OmniPath
+op_covered <- unique(op_b$source_genesymbol)
+
+# Targets NOT covered by OmniPath → get HIPPIE 1-hop
+remaining_iso_genes   <- setdiff(isolated_genes, op_covered)
+remaining_iso_entrez  <- isolated_entrez[
+  isolated_genes[match(isolated_entrez, isolated_genes)] %in% remaining_iso_genes
+]
+
+# More directly: get entrez IDs of OmniPath-uncovered targets
+op_uncovered_genes   <- setdiff(isolated_genes, op_covered)
+op_uncovered_entrez  <- hippie_dt_old %>%
+  dplyr::filter(Protein2 %in% op_uncovered_genes) %>%
+  pull(Protein2_entrez) %>% unique()
+
+hippie_c <- hippie_hc %>%
+  dplyr::filter(
+    (Entrez1 %in% op_uncovered_entrez & Entrez2 %in% all_ks_nodes_entrez) |
+    (Entrez2 %in% op_uncovered_entrez & Entrez1 %in% all_ks_nodes_entrez)
+  ) %>%
+  dplyr::mutate(
+    iso_entrez = if_else(Entrez1 %in% op_uncovered_entrez, Entrez1, Entrez2),
+    iso_gene   = if_else(Entrez1 %in% op_uncovered_entrez, Gene1, Gene2),
+    ks_entrez  = if_else(Entrez1 %in% op_uncovered_entrez, Entrez2, Entrez1),
+    ks_gene    = if_else(Entrez1 %in% op_uncovered_entrez, Gene2, Gene1)
+  ) %>%
+  distinct(iso_entrez, iso_gene, ks_entrez, ks_gene, Score)
+
+cat("=== Strategy C: OmniPath + HIPPIE fallback ===\n\n")
+cat("Phase 1 - OmniPath signaling:\n")
+cat("  Targets covered: ", length(op_covered), "/ 114\n")
+cat("  Edges:           ", nrow(op_b), "\n\n")
+
+cat("Phase 2 - HIPPIE 1-hop for remaining", length(op_uncovered_genes), "targets:\n")
+cat("  Targets covered: ", n_distinct(hippie_c$iso_gene), "/", length(op_uncovered_genes), "\n")
+cat("  Edges:           ", nrow(hippie_c), "\n\n")
+
+total_covered_c <- length(op_covered) + n_distinct(hippie_c$iso_gene)
+total_edges_c   <- nrow(op_b) + nrow(hippie_c)
+
+cat("TOTAL Strategy C:\n")
+cat("  Targets connected: ", total_covered_c, "/ 114\n")
+cat("  Total edges added: ", total_edges_c, "\n\n")
+
+# Degree for HIPPIE fallback portion
+strat_c_hippie_degree <- hippie_c %>%
+  count(iso_gene) %>% dplyr::rename(degree = n)
+
+cat("HIPPIE fallback degree distribution:\n")
+summary(strat_c_hippie_degree$degree) %>% print()
+
+cat("\nTargets still completely unreachable after Strategy C:\n")
+uncovered_by_c <- setdiff(isolated_genes, c(op_covered, unique(hippie_c$iso_gene)))
+cat(length(uncovered_by_c), "targets:", paste(uncovered_by_c, collapse=", "), "\n")
+```
+
+# Head-to-Head Comparison
+
+```{r comparison_summary}
+# Build comparison table
+strat_a_stats <- strat_a_degree %>%
+  summarise(
+    covered = n(),
+    edges = nrow(hippie_a),
+    mean_degree = round(mean(degree), 1),
+    pct_multi_connected = round(100 * mean(degree >= 2), 1)
+  )
+
+strat_b_stats <- strat_b_degree %>%
+  summarise(
+    covered = n(),
+    edges = nrow(op_b),
+    mean_degree = round(mean(degree), 1),
+    pct_multi_connected = round(100 * mean(degree >= 2), 1)
+  )
+
+strat_c_stats <- tibble(
+  covered = total_covered_c,
+  edges = total_edges_c,
+  mean_degree = round((sum(strat_b_degree$degree) + sum(strat_c_hippie_degree$degree)) / total_covered_c, 1),
+  pct_multi_connected = round(100 * (sum(strat_b_degree$degree >= 2) + sum(strat_c_hippie_degree$degree >= 2)) / total_covered_c, 1)
+)
+
+comparison_df <- bind_rows(
+  tibble(strategy = "Old brute-force", covered = 114, edges = 114, mean_degree = 1.0, pct_multi_connected = 0),
+  tibble(strategy = "A: HIPPIE 1-hop full", covered = strat_a_stats$covered, edges = strat_a_stats$edges,
+         mean_degree = strat_a_stats$mean_degree, pct_multi_connected = strat_a_stats$pct_multi_connected),
+  tibble(strategy = "B: OmniPath signaling", covered = strat_b_stats$covered, edges = strat_b_stats$edges,
+         mean_degree = strat_b_stats$mean_degree, pct_multi_connected = strat_b_stats$pct_multi_connected),
+  tibble(strategy = "C: OmniPath + HIPPIE fallback", covered = strat_c_stats$covered,
+         edges = strat_c_stats$edges, mean_degree = strat_c_stats$mean_degree,
+         pct_multi_connected = strat_c_stats$pct_multi_connected)
+) %>%
+  dplyr::mutate(
+    pct_covered = round(100 * covered / 114, 1),
+    edge_quality = c("PPI (single)", "PPI (multi)", "Curated signaling", "Curated + PPI"),
+    overall_drug_coverage = round(
+      100 * (sum(drug_targets$target_entrez_id %in% all_ks_nodes_entrez) + covered) / nrow(drug_targets), 1
+    )
+  )
+
+cat("=== HEAD-TO-HEAD STRATEGY COMPARISON ===\n\n")
+comparison_df %>%
+  dplyr::select(strategy, covered, pct_covered, edges, mean_degree, pct_multi_connected, edge_quality, overall_drug_coverage) %>%
+  print()
+```
+
+```{r comparison_viz}
+comparison_long <- comparison_df %>%
+  dplyr::select(strategy, pct_covered, mean_degree, pct_multi_connected) %>%
+  pivot_longer(-strategy, names_to = "metric", values_to = "value") %>%
+  dplyr::mutate(
+    metric_label = case_when(
+      metric == "pct_covered"        ~ "% of 114 targets\ncovered (≥1 edge)",
+      metric == "mean_degree"        ~ "Mean degree\n(edges per target)",
+      metric == "pct_multi_connected" ~ "% targets with\n≥2 connections"
+    ),
+    strategy = fct_inorder(strategy)
+  )
+
+ggplot(comparison_long, aes(x = strategy, y = value, fill = strategy)) +
+  geom_col(color = "grey20", width = 0.7, show.legend = FALSE) +
+  geom_text(aes(label = round(value, 1)), vjust = -0.3, size = 3.5) +
+  scale_fill_manual(values = c(
+    "Old brute-force" = "#E45756",
+    "A: HIPPIE 1-hop full" = "#4C78A8",
+    "B: OmniPath signaling" = "#F58518",
+    "C: OmniPath + HIPPIE fallback" = "#54A24B"
+  )) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  facet_wrap(~metric_label, scales = "free_y", nrow = 1) +
+  labs(x = NULL, y = NULL, title = "Expansion strategy comparison") +
+  theme_pubr(x.text.angle = 45) +
+  theme(axis.text.x = element_text(size = 8))
+```
+
+# What Do the OmniPath Connections Look Like?
+
+The OmniPath directed edges are qualitatively different from PPIs. They represent
+curated signaling relationships from databases like SIGNOR, HPRD, and SPIKE.
+
+```{r omnipath_detail}
+# Annotate with functional category
+op_b_annotated <- op_b %>%
+  left_join(target_class %>% dplyr::select(SYMBOL, category),
+            by = c("source_genesymbol" = "SYMBOL")) %>%
+  dplyr::mutate(
+    edge_type = case_when(
+      is_stimulation & !is_inhibition ~ "Activates",
+      !is_stimulation & is_inhibition ~ "Inhibits",
+      is_stimulation & is_inhibition  ~ "Dual effect",
+      TRUE ~ "Undirected"
+    )
+  )
+
+cat("OmniPath edges by target category and edge type:\n")
+op_b_annotated %>%
+  count(category, edge_type) %>%
+  pivot_wider(names_from = edge_type, values_from = n, values_fill = 0) %>%
+  print()
+
+# Show some GPCR → kinase examples
+cat("\nGPCR signaling to KS network nodes (sample):\n")
+op_b_annotated %>%
+  dplyr::filter(category == "GPCR") %>%
+  dplyr::select(source_genesymbol, target_genesymbol, edge_type, sources) %>%
+  distinct() %>%
+  head(20) %>%
+  print()
+
+cat("\nNuclear receptor → KS network (all):\n")
+op_b_annotated %>%
+  dplyr::filter(category == "Nuclear Receptor") %>%
+  dplyr::select(source_genesymbol, target_genesymbol, edge_type, sources) %>%
+  distinct() %>%
+  print()
+```
+
+# Recommendation: Target-Class Specific Integration
+
+```{r recommendation}
+cat("====================================================================\n")
+cat("RECOMMENDATION: CLASS-SPECIFIC INTEGRATION STRATEGY\n")
+cat("====================================================================\n\n")
+
+cat("The 114 isolated drug targets fall into 3 biologically distinct groups:\n\n")
+
+cat("1. GPCRs (~40 targets): GPCR → G-protein → second messenger → kinase pathways\n")
+cat("   Best approach: OmniPath directed signaling (curated stimulation/inhibition)\n")
+cat("   Databases: SIGNOR, HPRD, SPIKE (already available in OmniPath)\n")
+cat("   Coverage: ", n_distinct(op_b_annotated %>% filter(category == "GPCR") %>% pull(source_genesymbol)),
+    "GPCRs get curated signaling edges\n\n")
+
+cat("2. Nuclear Receptors (~7 targets): TF activity → downstream gene regulation\n")
+cat("   Best approach: OmniPath TF-target (DoRothEA) + OmniPath signaling\n")
+cat("   Databases: DoRothEA, TRRUST (available via collectri in OmniPath)\n")
+cat("   Coverage: ", n_distinct(op_b_annotated %>% filter(category == "Nuclear Receptor") %>% pull(source_genesymbol)),
+    "NRs get OmniPath signaling edges\n\n")
+
+cat("3. Receptor kinases (~20 targets, already have kinase activity)\n")
+cat("   Best approach: Mine their substrates from PhosphoSitePlus/OmniPath\n")
+cat("   These SHOULD be in the KS network; they're being missed by KS filtering\n")
+cat("   Databases: PhosphoSitePlus direct query, OmniPath enzyme_substrate\n\n")
+
+cat("4. Remaining (~47 targets): metabolic enzymes, transporters, off-targets\n")
+cat("   Best approach: HIPPIE 1-hop full (all KS-connected edges, not just 1)\n")
+cat("   Covers: ", n_distinct(hippie_a$isolated_node), "/ 114 targets\n\n")
+
+cat("OPTIMAL IMPLEMENTATION ORDER:\n")
+cat("  Step 1: OmniPath directed signaling  → covers ~56/114 with curated edges\n")
+cat("  Step 2: HIPPIE 1-hop for remainder  → covers ~98-56=42+ more targets\n")
+cat("  Step 3: Receptor kinase substrate mining → adds kinases as kinase nodes\n\n")
+
+cat("NET EXPECTED OUTCOME:\n")
+cat("  Total targets connected (≥1 edge): ~", total_covered_c, "/ 114\n")
+cat("  Targets with ≥2 connections:       ~", 
+    sum(strat_b_degree$degree >= 2) + sum(strat_c_hippie_degree$degree >= 2), 
+    "/ ", total_covered_c, "\n")
+cat("  Mean degree across all recovered:  ~", strat_c_stats$mean_degree, "\n\n")
+
+cat("vs. OLD brute-force:\n")
+cat("  All 114 degree=1 (isolated); none work with network propagation\n\n")
+
+cat("====================================================================\n")
+```
+
+# Implementation Plan for v3 Network
+
+```{r impl_plan}
+# Sketch the new approach
+cat("====================================================================\n")
+cat("v3 NETWORK BUILD PLAN\n")
+cat("====================================================================\n\n")
+
+cat("Layer 1 (keep from v2 conservative):\n")
+cat("  • Curated KS pairs (PSP/EPSD/iPTMNet): ~8,365 pairs\n")
+cat("  • Cantley (HPA-filtered): ~13,846 pairs\n")
+cat("  • OmniPath enzyme-substrate (PhosphoSite+SIGNOR): ~8,055 pairs\n")
+cat("  • HIPPIE substrate-substrate PPIs: ~38,527 edges\n\n")
+
+cat("Layer 2 (REPLACE brute-force with smarter expansion):\n")
+cat("  • Step 1: OmniPath directed signaling network\n")
+cat("    - Query: omnipath_interactions(datasets='omnipath')\n")
+cat("    - Filter: isolated target (source) → KS network (target), directed\n")
+cat("    - Result: ~177 curated signaling edges for ~56/114 targets\n\n")
+cat("  • Step 2: HIPPIE 1-hop for OmniPath-uncovered targets\n")
+cat("    - Filter: ALL HIPPIE edges (not just best 1) from remaining targets to KS nodes\n")
+cat("    - Result: many edges for ~", n_distinct(hippie_c$iso_gene), "more targets\n\n")
+cat("  • Step 3: Receptor kinase substrate expansion\n")
+cat("    - Identify isolated targets with kinase GO terms\n")
+cat("    - Query OmniPath enzyme_substrate for these as kinases\n")
+cat("    - Add them to the KS layer proper (not as peripheral nodes)\n\n")
+
+cat("Expected v3 coverage: ~", total_covered_c + length(op_uncovered_genes) - n_distinct(hippie_c$iso_gene) + length(op_covered), 
+    "+/114 isolated targets recovered\n")
+```

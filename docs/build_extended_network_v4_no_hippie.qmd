@@ -1,0 +1,159 @@
+---
+title: "Extended Kinome Network v4 — No HIPPIE"
+subtitle: "Curated kinase-substrate + OmniPath signaling, without protein-protein interactions"
+author: "Chinmaya Joisa"
+date: today
+format:
+  html:
+    page-layout: full
+    embed-resources: true
+    code-fold: true
+execute:
+  echo: true
+  cache: false
+  message: false
+  warning: false
+---
+
+```{r setup, include=FALSE}
+require("knitr")
+knitr::opts_knit$set(root.dir = here::here())
+set.seed(123)
+```
+
+```{r libraries}
+library(tidyverse)
+library(fst)
+library(here)
+library(data.table)
+library(igraph)
+invisible(gc())
+```
+
+# v4 Extended Kinome Network: Curated KS Only (No HIPPIE)
+
+**Network architecture (v4):**
+- Layer 1: Curated kinase-substrate pairs (PSP + EPSD + iPTMNet + PhosphoELM + PhosphoNetworks, experimental)
+- Layer 2: Cantley predicted kinase-substrate (with HPA co-localization filtering)
+- Layer 3: OmniPath enzyme-substrate (PhosphoSite + SIGNOR curated, S/T/Y only)
+- ~~Layer 4: HIPPIE substrate-substrate PPIs~~ **REMOVED**
+- Layer 4: OmniPath directed signaling (for non-KS drug targets)
+- ~~Layer 5: HIPPIE 1-hop drug-target expansion~~ **REMOVED**
+
+**Key differences from v3:**
+- v3 uses HIPPIE PPIs (68.5% of edges) to connect substrates and to bridge non-kinase drug targets
+- v4 removes all HIPPIE, keeping only **curated kinase-substrate** and **curated signaling**
+- v4 is smaller and more conservative, with reduced drug-target coverage
+- v4 focus: mechanistically grounded interactions only (phosphorylation + directed signaling)
+
+
+## Load Data
+
+```{r load_data}
+# Drug targets
+drug_targets <- read.fst(here("data/kinome_profiling_novartis_evebio_combined.fst")) %>%
+  as_tibble() %>%
+  distinct(target, target_entrez_id) %>%
+  mutate(target_entrez_id = as.character(target_entrez_id))
+
+# Load v3 network (to get backbone structure)
+v3_summary <- read_csv(here("results/extended_kinome_network_summary_v3.csv"),
+                       show_col_types = FALSE) %>%
+  dplyr::filter(!is.na(Protein1), !is.na(Protein2)) %>%
+  mutate(
+    Protein1_entrez = as.character(Protein1_entrez),
+    Protein2_entrez = as.character(Protein2_entrez)
+  )
+
+v3_full <- read_csv(here("results/extended_kinome_network_v3.csv"),
+                    show_col_types = FALSE) %>%
+  dplyr::filter(!is.na(Protein1), !is.na(Protein2)) %>%
+  mutate(
+    Protein1_entrez = as.character(Protein1_entrez),
+    Protein2_entrez = as.character(Protein2_entrez)
+  )
+
+cat("Data loaded.\n")
+cat("  Drug targets:  ", nrow(drug_targets), "\n")
+cat("  v3 full edges: ", nrow(v3_full), "\n")
+cat("  v3 pairs:      ", nrow(v3_summary), "\n")
+```
+
+## Build v4: Remove HIPPIE Layers from v3
+
+```{r build_v4}
+# v4 = v3 without HIPPIE edges (both general PPIs and drug-target 1-hop)
+v4_full <- v3_full %>%
+  dplyr::filter(Source != "HIPPIE", Source != "HIPPIE_DrugTarget")
+
+v4_summary <- v3_summary %>%
+  dplyr::filter(Sources != "HIPPIE", !grepl("HIPPIE", Sources))
+
+# Recompute summary (deduplicated pairs with aggregated sources)
+v4_summary_recomputed <- v4_full %>%
+  group_by(Protein1, Protein2, Protein1_entrez, Protein2_entrez) %>%
+  summarise(
+    Sources = paste(unique(Source), collapse = "; "),
+    Evidence = NA_character_,
+    n_sources = n(),
+    .groups = "drop"
+  )
+
+cat("=== v4 Network (No HIPPIE) ===\n")
+cat("Full edges:        ", nrow(v4_full), "\n")
+cat("Unique pairs:      ", nrow(v4_summary_recomputed), "\n")
+
+# Nodes and coverage
+nodes_v4 <- union(v4_summary_recomputed$Protein1_entrez, 
+                  v4_summary_recomputed$Protein2_entrez)
+cat("Total nodes:       ", length(nodes_v4), "\n")
+
+drug_targets_in_v4 <- sum(drug_targets$target_entrez_id %in% nodes_v4)
+pct_v4 <- 100 * drug_targets_in_v4 / nrow(drug_targets)
+cat("Drug targets:      ", drug_targets_in_v4, "/", nrow(drug_targets), 
+    sprintf("(%.1f%%)\n", pct_v4))
+```
+
+## Export v4 Results
+
+```{r export_v4}
+write_csv(v4_full, here("results/extended_kinome_network_v4.csv"))
+write_csv(v4_summary_recomputed, here("results/extended_kinome_network_summary_v4.csv"))
+
+cat("\nExported:\n")
+cat("  results/extended_kinome_network_v4.csv (", nrow(v4_full), " edges)\n")
+cat("  results/extended_kinome_network_summary_v4.csv (", nrow(v4_summary_recomputed), " pairs)\n")
+```
+
+## v3 vs v4 Comparison
+
+```{r comparison}
+v3_nodes <- union(v3_summary$Protein1_entrez, v3_summary$Protein2_entrez)
+v3_drug_targets <- sum(drug_targets$target_entrez_id %in% v3_nodes)
+
+cat("\n=== v3 vs v4 Comparison ===\n\n")
+
+cat("Network size:\n")
+cat("  v3: ", nrow(v3_summary), " edges, ", length(v3_nodes), " nodes\n")
+cat("  v4: ", nrow(v4_summary_recomputed), " edges, ", length(nodes_v4), " nodes\n")
+cat("  Difference: ", nrow(v3_summary) - nrow(v4_summary_recomputed), " edges (HIPPIE removed)\n\n")
+
+cat("Drug-target coverage:\n")
+cat("  v3: ", v3_drug_targets, "/", nrow(drug_targets), 
+    sprintf(" (%.1f%%)\n", 100 * v3_drug_targets / nrow(drug_targets)))
+cat("  v4: ", drug_targets_in_v4, "/", nrow(drug_targets), 
+    sprintf(" (%.1f%%)\n", pct_v4))
+cat("  Coverage loss: ", v3_drug_targets - drug_targets_in_v4, " targets\n\n")
+
+# Show which drug targets are missing in v4 (only in HIPPIE)
+missing_in_v4_drug_targets <- drug_targets %>%
+  dplyr::filter(target_entrez_id %in% v3_nodes,
+                !target_entrez_id %in% nodes_v4) %>%
+  pull(target)
+
+cat("Drug targets lost in v4 (only connected via HIPPIE):\n")
+cat("  Count: ", length(missing_in_v4_drug_targets), "\n")
+if (length(missing_in_v4_drug_targets) > 0) {
+  cat("  Examples:", paste(head(missing_in_v4_drug_targets, 10), collapse = ", "), "\n")
+}
+```

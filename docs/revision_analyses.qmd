@@ -1,0 +1,326 @@
+---
+title: "KinaseCanvas revision analyses"
+subtitle: "Threshold sensitivity, evidence orthogonality, and tissue-specificity coverage"
+author: "Chinmaya U. Joisa"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: true
+    embed-resources: true
+execute:
+  freeze: auto
+  warning: false
+  message: false
+---
+
+Analyses added in response to peer review. Each section states the reviewer point it
+addresses. All inputs are the outputs of
+`docs/generate_kinase_substrate_graph_tyrosine_updated.Rmd`.
+
+```{r}
+#| label: setup
+library(tidyverse)
+library(here)
+library(conflicted)
+library(ggpubr)
+library(patchwork)
+library(data.table)
+library(DarkKinaseTools)
+
+conflicts_prefer(dplyr::filter, dplyr::select, dplyr::lag, .quiet = TRUE)
+set.seed(20260821)
+
+motif_percentile_cutoff <- 90
+functional_score_cutoff <- 0.5
+
+fig_dir <- here("figures", "paper_figures")
+```
+
+## Threshold sensitivity
+
+*Addresses Reviewer 1, comment 2: discrete cut-offs make a site scoring 0.4999 "out"
+and one scoring 0.5001 "in".* We sweep both thresholds and report how the headline
+conclusions move.
+
+```{r}
+#| label: load-matrix
+cantley <- fread(
+  here("results", "unfiltered_cantley_dataset.csv"),
+  select = c("Substrate_Uniprot_ID", "Substrate", "Substrate_entrez",
+             "Kinase", "Kinase_entrez", "Percentile", "promiscuity_index",
+             "Site", "residue", "position"),
+  colClasses = list(character = c("Substrate_entrez", "Kinase_entrez"))
+)
+cantley <- cantley[!is.na(Kinase) & !is.na(Percentile)]
+
+ochoa <- fread(here("results", "ochoa_functional_scores.csv"))
+setnames(ochoa, c("Substrate_Uniprot_ID", "position", "functional_score"))
+
+hpa <- read_tsv(here("data", "CantleyData", "subcellular_location.tsv"),
+                show_col_types = FALSE)
+```
+
+```{r}
+#| label: coloc-map
+hpa_long <- hpa %>%
+  select(-Gene) %>%
+  rename(Gene = `Gene name`) %>%
+  pivot_longer(cols = c(contains("Approved"), contains("Supported"), contains("Enhanced")),
+               names_to = "tier", values_to = "locs") %>%
+  filter(!is.na(locs)) %>%
+  separate_rows(locs, sep = ";") %>%
+  mutate(locs = str_trim(locs)) %>%
+  filter(locs != "") %>%
+  distinct(Gene, locs)
+
+# Key on Entrez IDs, exactly as the pipeline does: gene symbols are not stable
+# across HPA, the atlases and the curated databases. HPA genes with no Entrez ID
+# are dropped, because an NA key would match any other NA key.
+hpa_entrez <- suppressMessages(
+  clusterProfiler::bitr(unique(hpa_long$Gene), fromType = "SYMBOL", toType = "ENTREZID",
+                        OrgDb = org.Hs.eg.db::org.Hs.eg.db))
+hpa_long <- hpa_long %>%
+  inner_join(hpa_entrez, by = c("Gene" = "SYMBOL")) %>%
+  filter(!is.na(ENTREZID)) %>%
+  distinct(Gene_entrez = ENTREZID, locs)
+
+coloc_ok_pairs <- {
+  kin <- hpa_long %>% rename(Kinase_entrez = Gene_entrez)
+  sub <- hpa_long %>% rename(Substrate_entrez = Gene_entrez)
+  inner_join(kin, sub, by = "locs", relationship = "many-to-many") %>%
+    distinct(Kinase_entrez, Substrate_entrez)
+}
+```
+
+```{r}
+#| label: sweep
+promiscuity_cutoff <- quantile(cantley$promiscuity_index, 0.5, na.rm = TRUE)
+
+# Curated-site status, so the sweep applies the same rule as the pipeline:
+# co-localized AND (curated site OR functional score above cut-off).
+kinet <- read_csv(here("data", "kinet_data", "ksi_source_full_dataset.csv"),
+                  show_col_types = FALSE)
+curated_site_keys <- kinet %>%
+  transmute(Substrate_Uniprot_ID = str_remove(Substrate, "-\\d+$"),
+            Site = str_trim(Site)) %>%
+  filter(!is.na(Substrate_Uniprot_ID), !is.na(Site)) %>%
+  distinct() %>%
+  mutate(key = paste(Substrate_Uniprot_ID, Site, sep = ":")) %>%
+  pull(key)
+
+annot <- cantley[promiscuity_index < promiscuity_cutoff &
+                   !is.na(Kinase_entrez) & !is.na(Substrate_entrez)]
+annot <- merge(annot, ochoa, by = c("Substrate_Uniprot_ID", "position"), all.x = TRUE)
+annot <- merge(annot, as.data.table(coloc_ok_pairs)[, coloc := TRUE],
+               by = c("Kinase_entrez", "Substrate_entrez"), all.x = TRUE)
+annot[is.na(coloc), coloc := FALSE]
+annot[, curated_site := paste(Substrate_Uniprot_ID, Site, sep = ":") %in% curated_site_keys]
+
+# Dark status by Entrez ID (DarkKinaseTools still uses superseded symbols for a few genes)
+dark_kin <- all_kinases %>% filter(class_2019 == "Dark") %>% pull(entrez_id) %>% as.character()
+
+sweep_grid <- expand_grid(
+  motif_cut = c(80, 85, 90, 95, 99),
+  func_cut  = c(0.3, 0.4, 0.5, 0.6, 0.7)
+)
+
+sweep <- sweep_grid %>%
+  pmap_dfr(function(motif_cut, func_cut) {
+    keep <- annot[Percentile >= motif_cut & coloc == TRUE &
+                    (curated_site == TRUE |
+                       (!is.na(functional_score) & functional_score >= func_cut))]
+    pairs <- unique(keep[, .(Kinase, Kinase_entrez, Substrate)])
+    tibble(
+      motif_cut = motif_cut,
+      func_cut  = func_cut,
+      n_pairs   = nrow(pairs),
+      n_kinases = uniqueN(pairs$Kinase_entrez),
+      n_dark_pairs = sum(pairs$Kinase_entrez %in% dark_kin),
+      pct_dark  = 100 * mean(pairs$Kinase_entrez %in% dark_kin)
+    )
+  })
+
+write_csv(sweep, here("results", "threshold_sensitivity_sweep.csv"))
+
+# Reconcile with the pipeline at the operating point: this sweep is an independent
+# re-implementation, so agreement here is a check on both.
+pipeline_numbers <- read_csv(here("results", "manuscript_numbers.csv"), show_col_types = FALSE)
+pipeline_atlas_pairs <- as.integer(pipeline_numbers$value[pipeline_numbers$quantity == "pairs_atlas"])
+sweep_at_operating_point <- sweep$n_pairs[sweep$motif_cut == motif_percentile_cutoff &
+                                            sweep$func_cut == functional_score_cutoff]
+message("Operating point: sweep = ", sweep_at_operating_point,
+        " pairs; pipeline = ", pipeline_atlas_pairs, " pairs.")
+knitr::kable(sweep, digits = 1)
+```
+
+```{r}
+#| label: fig-sweep
+#| fig-cap: "Threshold sensitivity. Operating point used in the manuscript marked in red."
+p_pairs <- sweep %>%
+  ggplot(aes(func_cut, n_pairs, colour = factor(motif_cut), group = motif_cut)) +
+  geom_line(linewidth = 0.7) + geom_point(size = 1.6) +
+  geom_point(data = filter(sweep, motif_cut == motif_percentile_cutoff,
+                           func_cut == functional_score_cutoff),
+             colour = "red", size = 3.4, shape = 21, stroke = 1.2) +
+  scale_y_log10(labels = scales::comma) +
+  labs(x = "Functional score cut-off", y = "High-confidence pairs",
+       colour = "Motif\npercentile") +
+  theme_pubr(legend = "right")
+
+p_dark <- sweep %>%
+  ggplot(aes(func_cut, pct_dark, colour = factor(motif_cut), group = motif_cut)) +
+  geom_line(linewidth = 0.7) + geom_point(size = 1.6) +
+  geom_point(data = filter(sweep, motif_cut == motif_percentile_cutoff,
+                           func_cut == functional_score_cutoff),
+             colour = "red", size = 3.4, shape = 21, stroke = 1.2) +
+  labs(x = "Functional score cut-off", y = "% pairs with a dark kinase",
+       colour = "Motif\npercentile") +
+  theme_pubr(legend = "right")
+
+fig_sweep <- p_pairs / p_dark + plot_annotation(tag_levels = "A")
+ggsave(file.path(fig_dir, "figS2_threshold_sensitivity.png"), fig_sweep,
+       width = 8, height = 7, dpi = 400)
+fig_sweep
+```
+
+## Evidence-layer orthogonality
+
+*Addresses Reviewer 1, comment 4: are the information sources actually orthogonal,
+and does HPA add anything beyond the Ochoa functional score?*
+
+```{r}
+#| label: mutual-information
+ct <- read_csv(here("results", "filter_evidence_contingency.csv"), show_col_types = FALSE)
+N <- sum(ct$n_site_kinase_pairs)
+
+shannon <- function(p) { p <- p[p > 0]; -sum(p * log2(p)) }
+
+layer_names <- c(coloc_ok = "HPA co-localization",
+                 curated_site = "Curated site",
+                 ochoa_high = "Functional score")
+
+# marginal and joint distributions straight off the contingency table
+marg_p <- function(v) as.numeric(tapply(ct$n_site_kinase_pairs, ct[[v]], sum)) / N
+joint_p <- function(a, b) {
+  as.numeric(tapply(ct$n_site_kinase_pairs, list(ct[[a]], ct[[b]]), sum)) %>%
+    replace_na(0) %>% (function(x) x / N)
+}
+
+entropy_tbl <- tibble(
+  layer = unname(layer_names[names(layer_names)]),
+  entropy_bits = vapply(names(layer_names), function(v) shannon(marg_p(v)), numeric(1)),
+  pass_rate = vapply(names(layer_names),
+                     function(v) sum(ct$n_site_kinase_pairs[ct[[v]]]) / N, numeric(1))
+)
+
+mi_tbl <- combn(names(layer_names), 2, simplify = FALSE) %>%
+  map_dfr(function(pr) {
+    a <- pr[[1]]; b <- pr[[2]]
+    mi <- shannon(marg_p(a)) + shannon(marg_p(b)) - shannon(joint_p(a, b))
+    tibble(layer_a = unname(layer_names[a]),
+           layer_b = unname(layer_names[b]),
+           mi_bits = mi,
+           normalised_redundancy = mi / min(shannon(marg_p(a)), shannon(marg_p(b))))
+  })
+
+write_csv(entropy_tbl, here("results", "evidence_layer_entropy.csv"))
+write_csv(mi_tbl, here("results", "evidence_layer_mutual_information.csv"))
+knitr::kable(entropy_tbl, digits = 4)
+knitr::kable(mi_tbl, digits = 5)
+```
+
+```{r}
+#| label: leave-one-out
+keep_all <- ct %>% filter(coloc_ok, curated_site | ochoa_high) %>%
+  pull(n_site_kinase_pairs) %>% sum()
+drop_coloc <- ct %>% filter(curated_site | ochoa_high) %>%
+  pull(n_site_kinase_pairs) %>% sum()
+drop_site <- ct %>% filter(coloc_ok) %>% pull(n_site_kinase_pairs) %>% sum()
+
+loo <- tibble(
+  scenario = c("All criteria", "Without co-localization", "Without site-level support"),
+  n_pairs = c(keep_all, drop_coloc, drop_site),
+  uniquely_removed = c(NA, drop_coloc - keep_all, drop_site - keep_all),
+  pct_inflation = c(NA, 100 * (drop_coloc / keep_all - 1), 100 * (drop_site / keep_all - 1))
+)
+write_csv(loo, here("results", "evidence_layer_leave_one_out.csv"))
+knitr::kable(loo, digits = 1)
+```
+
+## Tissue-specificity coverage
+
+*Addresses Reviewer 1, comment 3 (cell-type-specific proteins gain few predictions)
+and Reviewer 2, comment 10 (most proteins are broadly expressed, so co-localization
+filtering has limited discriminative power).*
+
+```{r}
+#| label: tissue-specificity
+# HPA RNA tissue-specificity classification, extracted from the proteinatlas
+# release (see data/hpa/README for provenance).
+spec <- read_tsv(here("data", "hpa", "rna_tissue_specificity.tsv"),
+                 show_col_types = FALSE) %>%
+  filter(rna_tissue_specificity != "", rna_tissue_specificity != "Not detected") %>%
+  mutate(specificity = factor(
+    rna_tissue_specificity,
+    levels = c("Low tissue specificity", "Tissue enhanced",
+               "Group enriched", "Tissue enriched")))
+
+res <- read_csv(here("results", "combined_kinase_substrate_pairs_2025.csv"),
+                show_col_types = FALSE)
+curated_pairs <- res %>%
+  filter(Source %in% c("PhosphoSitePlus", "EPSD", "iPTMNet")) %>%
+  distinct(Kinase, Substrate)
+atlas_pairs <- res %>% filter(Source == "Cantley") %>% distinct(Kinase, Substrate)
+novel_pairs <- anti_join(atlas_pairs, curated_pairs, by = c("Kinase", "Substrate"))
+
+substrate_status <- res %>%
+  distinct(Substrate) %>%
+  mutate(has_curated = Substrate %in% curated_pairs$Substrate,
+         has_novel   = Substrate %in% novel_pairs$Substrate) %>%
+  inner_join(spec %>% distinct(Gene, specificity), by = c("Substrate" = "Gene"))
+
+tissue_tbl <- substrate_status %>%
+  group_by(specificity) %>%
+  summarise(n_substrates = n(),
+            pct_with_novel = 100 * mean(has_novel),
+            pct_curated_only = 100 * mean(has_curated & !has_novel),
+            .groups = "drop")
+
+# Background: how the whole proteome is distributed across these classes, which
+# is the relevant denominator for Reviewer 2's point that most proteins are
+# broadly expressed and so co-expression carries little discriminative power.
+background_tbl <- spec %>%
+  count(specificity, name = "n_genes") %>%
+  mutate(pct_of_proteome = 100 * n_genes / sum(n_genes))
+
+write_csv(tissue_tbl, here("results", "tissue_specificity_coverage.csv"))
+write_csv(background_tbl, here("results", "tissue_specificity_background.csv"))
+knitr::kable(background_tbl, digits = 1)
+knitr::kable(tissue_tbl, digits = 1)
+```
+
+```{r}
+#| label: coloc-discriminative-power
+# How much does requiring shared localization actually constrain the candidate set?
+breadth <- hpa_long %>% count(Gene_entrez, name = "n_compartments")
+coloc_summary <- tibble(
+  metric = c("genes with HPA localization",
+             "median compartments per gene",
+             "genes annotated to >= 5 compartments",
+             "pct of genes annotated to >= 5 compartments"),
+  value = c(nrow(breadth),
+            median(breadth$n_compartments),
+            sum(breadth$n_compartments >= 5),
+            round(100 * mean(breadth$n_compartments >= 5), 1))
+)
+write_csv(coloc_summary, here("results", "coloc_discriminative_power.csv"))
+knitr::kable(coloc_summary)
+```
+
+## Session information
+
+```{r}
+#| label: session
+sessionInfo()
+```
