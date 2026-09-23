@@ -4,7 +4,9 @@ editor: visual
 author:
   - name: "Chinmaya Joisa"
     url: "https://github.com/cujoisa/KinaseCanvas"
-date: "09/08/2025"
+date-modified: last-modified
+language:
+  title-block-modified: "Updated"
 toc: false
 highlight-style: pygments
 format: 
@@ -261,14 +263,26 @@ viewer_tags <- tags$div(
       .app-grid.controls-hidden #main-col{grid-column:1}
       .app-grid.controls-hidden #detailPanel{grid-column:2}
     }
+    /* Narrow screens: a single column in the order a user works through it -- search inputs,
+       the graph they drive, its details, then the remaining controls, then the table. The
+       sidebar and main column are flattened (display:contents) so their parts can be ordered
+       individually; the sidebar's groups become their own cards. */
     @media (max-width: 1100px){
-      .app-grid{grid-template-columns:1fr !important}
-      #sidebar, #main-col, #detailPanel{grid-column:1 !important}
-      #main-col{order:1} #sidebar{order:2} #detailPanel{order:3}
-      #sidebar, #detailPanel{position:static;max-height:none}
+      .app-grid{grid-template-columns:minmax(0,1fr) !important}
+      /* .app-grid prefix: the desktop #sidebar/#detailPanel rules come later and would win on equal specificity */
+      .app-grid #sidebar, .app-grid #main-col{display:contents}
+      .app-grid > *, .app-grid #sidebar > *, .app-grid #main-col > *{grid-column:1 !important;min-width:0}
+      .app-grid .sidebar-intro{order:1} .app-grid .search-group{order:2} .app-grid #network{order:3} .app-grid #detailPanel{order:4}
+      .app-grid #sidebar > .sidebar-group:not(.search-group), .app-grid #sidebar > .tip{order:5}
+      .app-grid #table{order:6}
+      .app-grid #sidebar > .sidebar-group{border:1px solid var(--stroke);background:var(--panel);border-radius:var(--radius-md);padding:14px}
+      .app-grid #detailPanel{position:static;max-height:none}
       #btnControls{display:none}
     }
-    @media (max-width: 640px){#cy{height:480px}}
+    /* Phones: the neighbourhood graph is roughly round, so a square canvas avoids a screenful of
+       empty space (the .app-grid prefix is needed to beat the base #cy height defined below). */
+    /* ...and the header wraps to ~140px there, so it scrolls away instead of pinning over the content. */
+    @media (max-width: 640px){.app-grid #cy{height:auto;aspect-ratio:1 / 1} header#topbar{position:static}}
 
     #sidebar{grid-column:1;border:1px solid var(--stroke);background:var(--panel);border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:14px;position:sticky;top:70px;max-height:calc(100vh - 90px);overflow:auto}
     #main-col{grid-column:2;min-width:0}
@@ -367,7 +381,7 @@ viewer_tags <- tags$div(
       tags$div(id="sidebar",
         tags$p(class="sidebar-intro", "Search a kinase or substrate to explore curated and predicted interactions."),
 
-        tags$div(class="sidebar-group",
+        tags$div(class="sidebar-group search-group",
           tags$h4("Search"),
           tags$div(class="field-row",
             tags$label(`for`="kinSel", "Kinase"),
