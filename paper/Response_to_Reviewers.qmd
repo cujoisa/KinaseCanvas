@@ -99,7 +99,7 @@ This use case motivated the resource, and the portal did not serve it well enoug
 
 We have rewritten the Data Availability Statement to improve clarity:
 
-> *Each released kinase-substrate-site triplet carries the individual evidence values behind its classification (motif percentile, the kinase's rank for that site, promiscuity index, phosphosite functional score, number of shared subcellular compartments and the composite confidence score), so the inclusion criteria can be checked case by case. \[...\] Supplementary Tables S1-S3, the relaxed motif tier and the complete unfiltered prediction matrix are deposited in a public archive with a persistent DOI.*
+> *Each released kinase-substrate-site triplet carries the individual evidence values behind its classification (motif percentile, the kinase's rank for that site, promiscuity index, phosphosite functional score, number of shared subcellular compartments and the composite confidence score), so the inclusion criteria can be checked case by case. \[...\] Supplementary Tables S1-S4, the relaxed motif tier and the complete unfiltered prediction matrix are deposited in a public archive with a persistent DOI.*
 
 Specific comments
 
@@ -153,9 +153,15 @@ The 8,364 figure counts distinct kinase-substrate pairs. The same curated layer 
 
 > Figure 1C \-- The Alluvial diagram seems strange to me with most substrates identified as functional. The vast majority (\>98 of the total number of known human phosphosites appear to be non-functional. It would seem that established functionality is an major criteria for inclusion in the KinaseCanvas database.
 
-We agree, the figure was misleading as drawn. It is not a sample of the human phosphoproteome; it is conditioned on sites that have already passed the motif filter and are present in curated phosphoproteomics databases. Rewritten Figure 1 caption, with per-stage counts:
+We agree, the figure was misleading as drawn. It is not a sample of the human phosphoproteome; it is conditioned on sites that have already passed the motif filter and are present in curated phosphoproteomics databases. Rewritten Figure 1 caption:
 
-> *Note that this diagram is conditioned on substrates that have already passed the motif and promiscuity filters and whose sites are present in curated phosphoproteomics databases; it is not a sample of the human phosphoproteome, and the proportions should not be read as such. Substrates are first classified as known vs. novel relative to curated databases (2,697 known, 6,078 novel), then by the kind of site-level support they carry (800 with both curated and functional-score support, 929 curated only, 1,578 functional score only, 5,468 with neither), then by whether the kinase-substrate pair is co-localized according to the HPA (2,675 co-localized, 632 not), leaving 2,675 substrates in the high-confidence set (1,704 known, 971 novel).*
+> *Alluvial diagram tracking substrates through successive filtering stages: known vs. novel status, site-level support, and co-localization, to the final high-confidence set. The diagram is conditioned on substrates already retained by the initial motif and promiscuity filters and is not a sample of the human phosphoproteome.*
+
+The per-stage substrate counts, which the figure does not state, are now given in a new supplementary table, cited from Methods, "Integration of motif, localization and function":
+
+> *The effect of these filters on the substrate set is visualized as an alluvial diagram in Figure 1(C), with per-stage substrate counts given in Supp. Table 4.*
+
+Preparing that table also showed that the diagram's last stage was drawn too loosely: it counted a substrate as retained if it had any supported site and, separately, any co-localized kinase, which kept 204 substrates whose supported sites and co-localized kinases never coincide. The diagram now applies the filter to the kinase-site pair as the pipeline does, so its final stage (2,471 substrates) equals the number the specificity atlas contributes to the resource (Figure 1B). The resource itself was not affected.
 
 We also now cite the literature on weak functional constraints across phosphoproteomes in the Introduction (@Landry2009-wf, quoted under specific comment 2 above), where the point belongs.
 

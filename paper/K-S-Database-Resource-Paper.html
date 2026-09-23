@@ -213,7 +213,7 @@ window.Quarto = {
 <img src="../figures/paper_figures/fig1.png" class="img-fluid figure-img">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-1-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;1: <strong>Construction of the integrated kinase-substrate network.</strong> A) Overview of the integration strategy. Motif-based predictions from the specificity atlas are filtered by site-level and co-localization criteria and merged with curated KSIs from PhosphoSitePlus, EPSD and iPTMnet to generate an integrated kinase-substrate network. An example TNIK-centred neighbourhood from the KinaseCanvas Explorer illustrates how curated (dark) and predicted (light) interactions are combined. B) Numbers of kinases (left) and substrates (right) contributed by each source and in the integrated total. C) Alluvial diagram tracking substrates through successive filters. Note that this diagram is conditioned on substrates that have already passed the motif and promiscuity filters and whose sites are present in curated phosphoproteomics databases; it is not a sample of the human phosphoproteome, and the proportions should not be read as such. Substrates are first classified as known vs.&nbsp;novel relative to curated databases (2,697 known, 6,078 novel), then by the kind of site-level support they carry (800 with both curated and functional-score support, 929 curated only, 1,578 functional score only, 5,468 with neither), then by whether the kinase-substrate pair is co-localized according to the HPA (2,675 co-localized, 632 not), leaving 2,675 substrates in the high-confidence set (1,704 known, 971 novel). Per-stage counts are also provided as a supplementary table. D) UpSet plot showing overlap of substrates across the four main KSI sources, highlighting both unique and shared substrate sets. E) Distribution of kinases (left) and substrates (right) across major kinase families in the integrated network.
+Figure&nbsp;1: <strong>Construction of the integrated kinase-substrate network.</strong> A) Overview of the integration strategy. Motif-based predictions from the specificity atlas are filtered by site-level and co-localization criteria and merged with curated KSIs from PhosphoSitePlus, EPSD and iPTMnet to generate an integrated kinase-substrate network. An example TNIK-centred neighbourhood from the KinaseCanvas Explorer illustrates how curated (dark) and predicted (light) interactions are combined. B) Numbers of kinases (left) and substrates (right) contributed by each source and in the integrated total. C) Alluvial diagram tracking substrates through successive filtering stages: known vs.&nbsp;novel status, site-level support, and co-localization, to the final high-confidence set. The diagram is conditioned on substrates already retained by the initial motif and promiscuity filters and is not a sample of the human phosphoproteome. D) UpSet plot showing overlap of substrates across the four main KSI sources, highlighting both unique and shared substrate sets. E) Distribution of kinases (left) and substrates (right) across major kinase families in the integrated network.
 </figcaption>
 </figure>
 </div>
@@ -266,7 +266,7 @@ Figure&nbsp;2: <strong>Specificity Atlas Filtering Results</strong>. A) Distribu
 <li>Site-level support: the substrate site either has a phosphosite functional score <span class="math inline">\(\ge\)</span> 0.5 <strong>or</strong> is already curated in PhosphoSitePlus, EPSD or iPTMnet.</li>
 </ol>
 <p>Criterion 4 is deliberately a disjunction rather than a conjunction. A site that has already been curated from the primary literature carries direct experimental evidence of relevance, so requiring it to additionally clear a machine-learned functional-score threshold would discard well-established sites on the basis of a predictor. Curated and functional-score support are reported as separate columns so that either can be required independently.</p>
-<p>The effect of these filters on the substrate set is visualized as an alluvial diagram in <a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(C). This representation tracks substrates as they transition from known vs.&nbsp;novel, through known vs.&nbsp;novel sites, to likely functional vs.&nbsp;other sites, and finally to co-localized vs.&nbsp;non-co-localized predictions. Although some true interactions will undoubtedly be excluded (e.g.&nbsp;transient co-localization not captured by HPA, functional sites below the threshold, or kinases with context-dependent specificity), we deliberately favour specificity over sensitivity to generate a conservative, high-confidence prediction set. Each predicted KSI is also cross-referenced to the curated KSI list; interactions present in curated databases are flagged as “known”, whereas motif-only interactions with no curated evidence are classified as novel predictions contributed by this resource.</p>
+<p>The effect of these filters on the substrate set is visualized as an alluvial diagram in <a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(C), with per-stage substrate counts given in <a href="#stab-4" class="quarto-xref">Supp. Table&nbsp;4</a>. This representation tracks substrates as they transition from known vs.&nbsp;novel, through known vs.&nbsp;novel sites, to likely functional vs.&nbsp;other sites, and finally to co-localized vs.&nbsp;non-co-localized predictions. Although some true interactions will undoubtedly be excluded (e.g.&nbsp;transient co-localization not captured by HPA, functional sites below the threshold, or kinases with context-dependent specificity), we deliberately favour specificity over sensitivity to generate a conservative, high-confidence prediction set. Each predicted KSI is also cross-referenced to the curated KSI list; interactions present in curated databases are flagged as “known”, whereas motif-only interactions with no curated evidence are classified as novel predictions contributed by this resource.</p>
 </section>
 <section id="species-and-isoform-handling" class="level2">
 <h2 class="anchored" data-anchor-id="species-and-isoform-handling">Species and isoform handling</h2>
@@ -334,7 +334,7 @@ Figure&nbsp;3: <strong>Expansion of the known kinase-substrate network.</strong>
 </section>
 <section id="functional-and-family-level-properties" class="level2">
 <h2 class="anchored" data-anchor-id="functional-and-family-level-properties">Functional and family-level properties</h2>
-<p>Application of the phosphosite functional score retains a large fraction of sites as likely functional, particularly for tyrosine residues and for sites drawn from iPTMnet (<a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(B) and <a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(C)). Of the 3,307 substrates with site-level support, 2,675 (81%) are co-localized with at least one of their predicted kinases and are retained (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(C)).</p>
+<p>Application of the phosphosite functional score retains a large fraction of sites as likely functional, particularly for tyrosine residues and for sites drawn from iPTMnet (<a href="#fig-2" class="quarto-xref">Figure&nbsp;2</a>(B) and <a href="#sfig-1" class="quarto-xref">Supp. Figure&nbsp;1</a>(C)). Of the 3,307 substrates with site-level support, 2,471 (75%) have at least one kinase-site pair that is also co-localized and are retained (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(C); <a href="#stab-4" class="quarto-xref">Supp. Table&nbsp;4</a>).</p>
 <p>Kinase and substrate coverage varies across kinase families (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(E)). TK and CMGC kinases are most numerous, whereas AGC, CAMK and “other” families contribute comparable numbers of kinases but differ in substrate counts (<a href="#fig-1" class="quarto-xref">Figure&nbsp;1</a>(E)). When focusing on novel substrates, dark kinase families show particularly high fractions of predicted-only substrates: “other” and atypical kinases have 66.6% and 62.0% of their substrates classified as novel, respectively, while CAMK and CMGC kinases have 50.7% and 37.5% (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(A)). Incorporating the specificity atlas increases the fraction of kinase–substrate pairs involving dark kinases roughly 4.6-fold, from 3.4% in curated databases alone to 15.7% in the integrated network (<a href="#fig-3" class="quarto-xref">Figure&nbsp;3</a>(B)), underscoring the value of motif-based predictions for illuminating poorly studied regions of the kinome.</p>
 </section>
 <section id="robustness-of-the-filtering-criteria" class="level2">
@@ -433,7 +433,7 @@ Figure&nbsp;4: <strong>The KinaseCanvas Explorer.</strong> A) Header bar, report
 </section>
 <section id="data-availability-statement" class="level1">
 <h1>Data Availability Statement</h1>
-<p>The KinaseCanvas interactive resource is available at https://cujoisa.github.io/KinaseCanvas/, where the integrated network can be browsed and the edge-level and site-level tables downloaded in full. Each released kinase-substrate-site triplet carries the individual evidence values behind its classification (motif percentile, the kinase’s rank for that site, promiscuity index, phosphosite functional score, number of shared subcellular compartments and the composite confidence score), so the inclusion criteria can be checked case by case. All code used for data integration, filtering and analysis is available at https://github.com/cujoisa/KinaseCanvas. Supplementary Tables S1-S3, the relaxed motif tier and the complete unfiltered prediction matrix are deposited in a public archive with a persistent DOI (TKTK_ARCHIVE_DOI); source datasets are redistributed under the terms of their original licences.</p>
+<p>The KinaseCanvas interactive resource is available at https://cujoisa.github.io/KinaseCanvas/, where the integrated network can be browsed and the edge-level and site-level tables downloaded in full. Each released kinase-substrate-site triplet carries the individual evidence values behind its classification (motif percentile, the kinase’s rank for that site, promiscuity index, phosphosite functional score, number of shared subcellular compartments and the composite confidence score), so the inclusion criteria can be checked case by case. All code used for data integration, filtering and analysis is available at https://github.com/cujoisa/KinaseCanvas. Supplementary Tables S1-S4, the relaxed motif tier and the complete unfiltered prediction matrix are deposited in a public archive with a persistent DOI (TKTK_ARCHIVE_DOI); source datasets are redistributed under the terms of their original licences.</p>
 </section>
 <section id="supplementary-data" class="level1">
 <h1>Supplementary Data</h1>
@@ -464,6 +464,77 @@ Supp. Table&nbsp;2
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-stab quarto-uncaptioned" id="stab-3-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Supp. Table&nbsp;3
+</figcaption>
+</figure>
+</div>
+<div id="stab-4" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-stab figure">
+<div aria-describedby="stab-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<p><strong>Substrate counts at each stage of the filtering summarised in Figure 1C.</strong> Each substrate is counted once per stage. A substrate enters the diagram if at least one of its sites ranks at or above the 90th percentile for a kinase with below-median promiscuity; it is “known” if it has at least one curated interaction with any kinase and “novel” otherwise. Site-level support means that at least one such site is curated or has a functional score <span class="math inline">\(\ge\)</span> 0.5. A substrate is retained (“co-localized”) when at least one of its motif-passing kinase-site pairs has a supported site and a kinase that shares an HPA compartment with the substrate, so the final stage is the set of substrates contributed by the specificity atlas to the integrated resource. Substrates without site-level support are not carried into the last two stages. Provided as <code>alluvial_stage_counts.csv</code>.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Stage</th>
+<th style="text-align: left;">Category</th>
+<th style="text-align: right;">Substrates</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Specificity Atlas</td>
+<td style="text-align: left;">Known substrate</td>
+<td style="text-align: right;">2,697</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Specificity Atlas</td>
+<td style="text-align: left;">Novel substrate</td>
+<td style="text-align: right;">6,078</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Site support</td>
+<td style="text-align: left;">Curated + functional score</td>
+<td style="text-align: right;">800</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Site support</td>
+<td style="text-align: left;">Curated site</td>
+<td style="text-align: right;">929</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Site support</td>
+<td style="text-align: left;">Functional score only</td>
+<td style="text-align: right;">1,578</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Site support</td>
+<td style="text-align: left;">No site-level support</td>
+<td style="text-align: right;">5,468</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Co-localized?</td>
+<td style="text-align: left;">Co-localized</td>
+<td style="text-align: right;">2,471</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Co-localized?</td>
+<td style="text-align: left;">No co-localization</td>
+<td style="text-align: right;">836</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Filtered Result</td>
+<td style="text-align: left;">Known substrate</td>
+<td style="text-align: right;">1,602</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Filtered Result</td>
+<td style="text-align: left;">Novel substrate</td>
+<td style="text-align: right;">869</td>
+</tr>
+</tbody>
+</table>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-stab quarto-uncaptioned" id="stab-4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Supp. Table&nbsp;4
 </figcaption>
 </figure>
 </div>

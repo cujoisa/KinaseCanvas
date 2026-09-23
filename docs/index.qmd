@@ -1,11 +1,11 @@
 ---
 title: "Explorer for Known and Predicted Kinase-Substrate Interactions"
 editor: visual
-author: "Chinmaya Joisa"
+author:
+  - name: "Chinmaya Joisa"
+    url: "https://github.com/cujoisa/KinaseCanvas"
 date: "09/08/2025"
-toc: true
-toc-depth: 5
-toc-title: Table of Contents
+toc: false
 highlight-style: pygments
 format: 
   html:
@@ -231,8 +231,17 @@ viewer_tags <- tags$div(
     }
     /* Quarto Overrides */
     .quarto-container, .quarto-page-container, .main, .quarto-content-column { max-width: 100% !important; margin: 0 !important; }
+    /* page-layout:full still seats <main> in Quarto's 'page' column (~1135px on any screen),
+       which left the network canvas ~450px wide. Span the whole screen track instead, and
+       line the title block up with the app's left edge. */
+    main#quarto-document-content, #title-block-header{grid-column:screen-start-inset / screen-end-inset !important}
+    #title-block-header{max-width:2400px;margin:0 auto;padding:0 18px}
+    #title-block-header h1.title{font-size:1.5rem;margin:10px 0 2px}
+    #title-block-header .quarto-title-meta{margin-top:0;padding-bottom:0}
+    #title-block-header .quarto-title-meta-heading{font-size:10px}
+    #title-block-header .quarto-title-meta-contents p{margin:0;font-size:12px}
     body {font-family: var(--font-sans); background: var(--bg); color: var(--ink); font-size:14px;}
-    .page-shell{max-width:1800px;margin:0 auto;padding:16px 18px 32px;}
+    .page-shell{max-width:2400px;margin:0 auto;padding:10px 18px 32px;}
     header#topbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 20px;padding:12px 16px;margin-bottom:16px;border:1px solid var(--stroke);background:var(--panel);border-radius:var(--radius-md);position:sticky;top:0;z-index:10}
     #brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:16px;letter-spacing:0.2px;color:var(--ink)}
     #brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent-2)}
@@ -245,15 +254,23 @@ viewer_tags <- tags$div(
        selector outranks our single-class .app-grid rule for grid-template-columns.
        !important, plus explicit column placement on each child below, makes our
        three-column layout win regardless of what Quarto adds. */
-    .app-grid{display:grid !important;grid-template-columns:260px minmax(0,1fr) 360px !important;gap:16px;align-items:start}
+    .app-grid{display:grid !important;grid-template-columns:240px minmax(0,1fr) 370px !important;gap:16px;align-items:start}
+    @media (min-width: 1101px){
+      .app-grid.controls-hidden{grid-template-columns:minmax(0,1fr) 370px !important}
+      .app-grid.controls-hidden #sidebar{display:none}
+      .app-grid.controls-hidden #main-col{grid-column:1}
+      .app-grid.controls-hidden #detailPanel{grid-column:2}
+    }
     @media (max-width: 1100px){
       .app-grid{grid-template-columns:1fr !important}
       #sidebar, #main-col, #detailPanel{grid-column:1 !important}
+      #main-col{order:1} #sidebar{order:2} #detailPanel{order:3}
       #sidebar, #detailPanel{position:static;max-height:none}
+      #btnControls{display:none}
     }
     @media (max-width: 640px){#cy{height:480px}}
 
-    #sidebar{grid-column:1;border:1px solid var(--stroke);background:var(--panel);border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:14px;position:sticky;top:70px}
+    #sidebar{grid-column:1;border:1px solid var(--stroke);background:var(--panel);border-radius:var(--radius-md);padding:14px;display:flex;flex-direction:column;gap:14px;position:sticky;top:70px;max-height:calc(100vh - 90px);overflow:auto}
     #main-col{grid-column:2;min-width:0}
     .sidebar-intro{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
     .sidebar-group{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--stroke)}
@@ -285,7 +302,7 @@ viewer_tags <- tags$div(
 
     #truncNote{display:block;font-size:12px;color:var(--muted);margin-bottom:8px;min-height:1em}
     #cywrap{margin-bottom:12px}
-    #cy {width:100%;height:800px;border:1px solid var(--stroke);border-radius:var(--radius-md);background:#f7f2e8}
+    #cy {width:100%;height:clamp(520px, calc(100vh - 240px), 1100px);border:1px solid var(--stroke);border-radius:var(--radius-md);background:#f7f2e8}
 
     .badge {display:inline-block;padding:2px 6px;border-radius:var(--radius-sm);border:1px solid var(--stroke);color:var(--muted);background:var(--panel-2);font-size:11px;font-family:var(--font-mono)}
     .kbadge{background:#f4efe4;border-color:#3b352c;color:#1f1b16}
@@ -300,6 +317,7 @@ viewer_tags <- tags$div(
     .tbl td.num{font-family:var(--font-mono)}
     .tbl th{background:var(--panel); position: sticky; top: 0; z-index: 1; color:var(--muted)}
 
+    .btn.sm{padding:3px 9px;font-size:12px}
     .btn{display:inline-block;padding:7px 11px;border:1px solid var(--stroke);border-radius:var(--radius-md);background:transparent;cursor:pointer;color:var(--ink);font-weight:600;font-size:13px;font-family:var(--font-sans)}
     .btn:hover{background:var(--panel-2)}
     .btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -339,6 +357,7 @@ viewer_tags <- tags$div(
       tags$nav(
         tags$a(href="#network", "Network"),
         tags$a(href="#table", "Edges"),
+        tags$a(href="https://github.com/cujoisa/KinaseCanvas", target="_blank", rel="noopener", "GitHub"),
         tags$a(href="https://kinet.kinametrix.com/#section-proteins", target="_blank", "KiNet (curated resource)")
       )
     ),
@@ -431,7 +450,8 @@ viewer_tags <- tags$div(
 
       tags$div(id="main-col",
         tags$div(id="network", class="section",
-          tags$div(class="section-head", tags$h3("Network")),
+          tags$div(class="section-head", tags$h3("Network"),
+            tags$button(id="btnControls", type="button", class="btn sm", "Hide controls")),
           tags$div(id="truncNote"),
           tags$div(id="cywrap", tags$div(id="cy"))
         ),
@@ -710,6 +730,16 @@ viewer_tags <- tags$div(
     cy.on('tap', 'node', evt => showNodeDetail(evt.target));
     cy.on('tap', 'edge', evt => showEdgeDetail(evt.target));
     cy.on('tap', evt => { if(evt.target === cy){ clearDetailPanel(); } });
+
+    // Collapse the controls sidebar to give the canvas the full left side; the canvas is
+    // re-measured and re-fitted because its container width changes.
+    const FIT_PADDING = 30;
+    document.getElementById('btnControls').addEventListener('click', evt => {
+      const hidden = document.querySelector('.app-grid').classList.toggle('controls-hidden');
+      evt.currentTarget.textContent = hidden ? 'Show controls' : 'Hide controls';
+      cy.resize();
+      cy.fit(undefined, FIT_PADDING);
+    });
 
     const detailBodyEl = document.getElementById('detailBody');
     if(detailBodyEl){

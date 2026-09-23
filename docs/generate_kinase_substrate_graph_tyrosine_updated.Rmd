@@ -1479,18 +1479,6 @@ coloc_key <- inner_join(kin_loc, sub_loc, by = "loc") %>%
   ) %>%
   distinct()
 
-# mark coloc per pair, then summarize to substrate
-cantley_pairs_with_coloc <- cantley_uni %>%
-  mutate(Kinase_entrez = as.integer(Kinase_entrez),
-         Substrate_entrez = as.integer(Substrate_entrez),
-         KS_key = paste(Kinase_entrez, Substrate_entrez)) %>%
-  filter(!is.na(Kinase_entrez), !is.na(Substrate_entrez)) %>%
-  mutate(coloc = !is.na(fmatch(KS_key, coloc_key$KS_key)))
-
-substrate_coloc <- cantley_pairs_with_coloc %>%
-  group_by(Substrate, Substrate_entrez) %>%
-  summarise(any_coloc = any(coloc, na.rm = TRUE), .groups = "drop")
-
 ## 6) Site-level annotations on the Specificity Atlas universe (curated site? Ochoa-high?)
 cutoff <- functional_score_cutoff
 
@@ -1502,7 +1490,14 @@ cantley_sites_annot <- cantley_uni %>%
     ochoa_fs_norm,
     by = c("Substrate_Uniprot_ID", "position")
   ) %>%
-  mutate(ochoa_high = !is.na(functional_score) & functional_score >= cutoff)
+  mutate(ochoa_high = !is.na(functional_score) & functional_score >= cutoff) %>%
+  # The high-confidence filter is applied to the kinase-site pair as a whole: the SAME
+  # pair must have a supported site and a co-localized kinase. Evaluating "any supported
+  # site" and "any co-localized kinase" separately at the substrate level would keep
+  # substrates whose supported sites and co-localized kinases never coincide.
+  mutate(KS_key = paste(as.integer(Kinase_entrez), as.integer(Substrate_entrez)),
+         coloc = !is.na(fmatch(KS_key, coloc_key$KS_key)),
+         triplet_ok = coloc & (curated_site | ochoa_high))
 
 ## 7) Collapse to SUBSTRATE-level flags
 substrate_summary <- cantley_sites_annot %>%
@@ -1511,6 +1506,7 @@ substrate_summary <- cantley_sites_annot %>%
     has_curated_site = any(curated_site, na.rm = TRUE),
     has_functional_site = any(ochoa_high, na.rm = TRUE),
     passes_support = any(curated_site, na.rm = TRUE) | any(ochoa_high, na.rm = TRUE),
+    keep = any(triplet_ok, na.rm = TRUE),
     novel_label = if_else(
       any(Substrate %in% curated_sub_universe, na.rm = TRUE),
       "Known substrate",
@@ -1518,16 +1514,11 @@ substrate_summary <- cantley_sites_annot %>%
     ),
     .groups = "drop"
   ) %>%
-  left_join(
-    substrate_coloc %>% mutate(Substrate_entrez = as.character(Substrate_entrez)),
-    by = c("Substrate", "Substrate_entrez")
-  ) %>%
   mutate(
     has_curated_site = replace_na(has_curated_site, FALSE),
     has_functional_site = replace_na(has_functional_site, FALSE),
     passes_support = replace_na(passes_support, FALSE),
-    any_coloc = replace_na(any_coloc, FALSE),
-    keep = passes_support & any_coloc
+    keep = replace_na(keep, FALSE)
   )
 
 substrate_paths <- cantley_sites_annot %>%
@@ -1543,7 +1534,7 @@ substrate_paths <- cantley_sites_annot %>%
     ),
     `Co-localized?` = case_when(
       !passes_support ~ NA_character_,
-      any_coloc ~ "Co-localized",
+      keep ~ "Co-localized",
       TRUE ~ "No co-localization"
     ),
     `Filtered Result` = if_else(keep, novel_label, NA_character_)
@@ -1560,6 +1551,13 @@ alluvial_stage_counts <- substrate_paths %>%
   count(stage, stratum, name = "n_substrates") %>%
   mutate(stage = factor(stage, levels = stage_vars)) %>%
   arrange(stage, desc(n_substrates))
+
+# The last stage must be the substrate set of the released atlas layer (Figure 1B); if this
+# fails, the alluvial is no longer describing the filter the pipeline actually applies.
+stopifnot(
+  sum(alluvial_stage_counts$n_substrates[alluvial_stage_counts$stage == "Filtered Result"]) ==
+    dplyr::n_distinct(combined_pairs$Substrate[combined_pairs$Source == "Specificity Atlas"])
+)
 
 write_csv(alluvial_stage_counts, here("results/alluvial_stage_counts.csv"))
 print(as.data.frame(alluvial_stage_counts), row.names = FALSE)
