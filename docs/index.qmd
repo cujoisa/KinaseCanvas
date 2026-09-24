@@ -350,6 +350,11 @@ viewer_tags <- tags$div(
     .detail-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;border-bottom:1px solid var(--stroke)}
     .detail-row .k{color:var(--muted)}
     .detail-row .v{font-family:var(--font-mono)}
+    .detail-pmids{font-size:12px;padding:3px 0;border-bottom:1px solid var(--stroke)}
+    .detail-pmids .k{display:block;color:var(--muted);margin-bottom:2px}
+    .detail-pmids .v{font-family:var(--font-mono);line-height:1.6;overflow-wrap:anywhere}
+    .pmid-more summary{cursor:pointer;color:var(--muted);margin-top:2px}
+    .pmid-scroll{max-height:160px;overflow:auto;margin-top:4px}
     .detail-sites{margin-top:10px}
     /* The sites table (7 columns including a 15-character sequence) is wider
        than the 300px detail panel; scroll it horizontally rather than letting
@@ -639,6 +644,28 @@ viewer_tags <- tags$div(
              escHtml(label || acc) + ' (UniProt)</a>';
     }
 
+    // PMIDs are stored as one '; '-separated string per pair. The median pair has 6, but the
+    // busiest (PDPK1 -> AKT1) has over a thousand, so link the first few (oldest first, i.e. the
+    // original characterisation papers) and fold the remainder into a scrollable list.
+    const PMID_SHOWN = 8;
+    function pmidLink(id){
+      return '<a class=\\'detail-link\\' href=\\'https://pubmed.ncbi.nlm.nih.gov/' + encodeURIComponent(id) +
+             '/\\' target=\\'_blank\\' rel=\\'noopener\\'>' + escHtml(id) + '</a>';
+    }
+
+    function pmidRow(str){
+      const ids = Array.from(new Set(String(str ?? '').split(';').map(x => x.trim()).filter(x => /^[0-9]+$/.test(x))))
+                       .sort((a, b) => Number(a) - Number(b));
+      if(!ids.length) return '';
+      let html = '<div class=\\'detail-pmids\\'><span class=\\'k\\'>PMIDs for curated sites (' + ids.length + ')</span><div class=\\'v\\'>' +
+                 ids.slice(0, PMID_SHOWN).map(pmidLink).join(', ');
+      if(ids.length > PMID_SHOWN){
+        html += '<details class=\\'pmid-more\\'><summary>+' + (ids.length - PMID_SHOWN) + ' more</summary>' +
+                '<div class=\\'pmid-scroll\\'>' + ids.slice(PMID_SHOWN).map(pmidLink).join(', ') + '</div></details>';
+      }
+      return html + '</div></div>';
+    }
+
     function detailRow(k, v){
       return '<div class=\\'detail-row\\'><span class=\\'k\\'>' + escHtml(k) +
              '</span><span class=\\'v\\'>' + escHtml(v) + '</span></div>';
@@ -705,7 +732,7 @@ viewer_tags <- tags$div(
       if(d.MotifRank != null && d.MotifRank !== ''){ html += detailRow('Kinase rank for site', d.MotifRank); }
       if(d.SharedCompartments != null && d.SharedCompartments !== ''){ html += detailRow('Shared compartments', d.SharedCompartments); }
       if(d.SourceList){ html += detailRow('Sources', d.SourceList); }
-      if(d.Reference_PMID){ html += detailRow('PMID', d.Reference_PMID); }
+      if(d.Reference_PMID){ html += pmidRow(d.Reference_PMID); }
 
       // Rank candidate sites for the pair: sites where this kinase-site pairing is
       // curated first, then by how well the site fits the kinase motif, then by name.
