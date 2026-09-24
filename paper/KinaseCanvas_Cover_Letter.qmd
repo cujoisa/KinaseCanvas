@@ -3,42 +3,53 @@ format:
   pdf:
     documentclass: article
     geometry:
-      - margin=1in
+      - margin=0.75in
     fontsize: 11pt
+    pagestyle: empty
+    include-in-header:
+      text: |
+        \usepackage{enumitem}
+        \setlist{itemsep=1pt, topsep=2pt}
+        \setlength{\parskip}{4pt plus 1pt}
 ---
 
-Chinmaya Joisa  
-Lineberger Comprehensive Cancer Center  
-University of North Carolina at Chapel Hill  
-Chapel Hill, NC 27599  
-Chinmaya_Joisa@med.unc.edu | 919-527-8895  
+Chinmaya Joisa\
+Lineberger Comprehensive Cancer Center\
+University of North Carolina at Chapel Hill\
+Chapel Hill, NC 27599\
+Chinmaya_Joisa@med.unc.edu | 919-527-8895
 
-March 20, 2026  
+September 24, 2026
 
-**Re: Submission of Database Resource Paper - "KinaseCanvas: An Integrated Resource for Curated and Novel Kinase-Substrate Interactions"**
+**Re: Revised submission DATABASE-2026-0054 - "KinaseCanvas: An Integrated Resource for Curated and Novel Kinase-Substrate Interactions"**
 
 Dear Database Editors,
 
-We are pleased to submit our paper describing **KinaseCanvas**, an open-access resource that directly addresses a critical curation gap in the phosphoproteomics community by dramatically expanding the functional annotation of the understudied "dark" kinome.
+Thank you for the opportunity to revise our manuscript describing **KinaseCanvas**, an open-access resource that expands the functional annotation of the understudied "dark" kinome by integrating kinome-wide specificity atlases with curated kinase-substrate interactions. We thank both reviewers for their careful reading and have addressed every comment; a point-by-point response is enclosed, and changes to the manuscript are shown in blue.
 
-Currently, curated kinase databases are heavily skewed toward well-studied signaling hubs, while recent kinome-wide specificity atlases generate millions of raw predictions that are too noisy for direct interpretation. KinaseCanvas bridges this gap. By applying three stringent biological filters we successfully integrate empirical motif predictions with known interactions to yield a high-confidence and interpretable network.
+**Principal revisions:**
 
-**Key Impacts and Discoveries:**
+* **Corrected pipeline.** The reviewers' checks led us to re-audit the pipeline and correct two implementation errors: an identifier-resolution error and an error in the functional-score cut-off. The resource has been regenerated with added consistency checks, and every figure and statistic reflects the corrected pipeline.
 
-* **Large Network Expansion:** We generate **22,613 novel kinase-substrate pairs** not present in existing databases, for a total of 30,977 distinct pairs spanning 429 kinases and 3,927 substrates.
+* **New analyses.** Threshold sensitivity, a continuous confidence score for every interaction, the information content and independence of the evidence layers, and coverage by tissue specificity.
 
-* **Illuminating the Dark Kinome:** We increase the representation of understudied "dark" kinase interactions roughly five-fold (from 3.3% to 16.9%), addressing a major priority in kinase biology.
+* **Explorer.** Substrate-first queries, a pair mode that ranks candidate sites with their flanking sequences, quantitative evidence for every interaction, and a detail panel linking to UniProt and PubMed.
 
-* **Biological Utility:** KinaseCanvas enables rapid hypothesis generation. For example, our integration highlights a novel ABL1→ARID1A phosphorylation event with actionable implications for cancer biology.
+* **Data access.** Every released interaction carries the evidence values behind its classification; the tables, code and full prediction matrix are archived on Zenodo.
 
-**Resource Accessibility and Sustainability:**
-KinaseCanvas is FAIR-compliant and features an interactive web application (KinaseCanvas Explorer) for dynamic filtering by confidence and functional evidence. All underlying data (including >28 million raw specificity scores), code, and documentation are publicly available via GitHub (https://cujoisa.github.io/KinaseCanvas/). We are committed to 5+ years of automated updates and institutional maintenance. 
+**Key results of the revised resource:**
+
+* **Network expansion:** **21,916 novel kinase-substrate pairs**, for 30,280 pairs in total across 426 kinases and 3,901 substrates.
+
+* **Illuminating the dark kinome:** The share of interactions involving understudied kinases rises 4.6-fold, from 3.4% to 15.7%.
+
+* **Biological utility:** Layering localization and functional evidence onto motif scores prioritises CDK1 among five motif-compatible kinases for the mitotic phosphosite RANGAP1 S442, consistent with the study that first reported the site.
+
+**Enclosed:** the response to reviewers; the revised manuscript with changes in blue, and a clean copy; and Supplementary Tables S2-S4 and the relaxed motif tier (Table S1, 3.6 GB, is on Zenodo).
 
 Thank you for your time and consideration.
 
 Sincerely,
 
-**Chinmaya Joisa**   
-Postdoctoral Fellow  
-Lineberger Comprehensive Cancer Center  
-University of North Carolina at Chapel Hill
+**Chinmaya Joisa**\
+Postdoctoral Fellow, on behalf of all authors
