@@ -333,18 +333,18 @@ The KinaseCanvas interactive resource is available at https://cujoisa.github.io/
 ::: {#stab-4}
 **Substrate counts at each stage of the filtering summarised in Figure 1C.** Each substrate is counted once per stage. A substrate enters the diagram if at least one of its sites ranks at or above the 90th percentile for a kinase with below-median promiscuity; it is "known" if it has at least one curated interaction with any kinase and "novel" otherwise. Site-level support means that at least one such site is curated or has a functional score $\ge$ 0.5. A substrate is retained ("co-localized") when at least one of its motif-passing kinase-site pairs has a supported site and a kinase that shares an HPA compartment with the substrate, so the final stage is the set of substrates contributed by the specificity atlas to the integrated resource. Substrates without site-level support are not carried into the last two stages. Provided as `alluvial_stage_counts.csv`.
 
-| Stage | Category | Substrates |
-|:------|:---------|-----------:|
-| Specificity Atlas | Known substrate | 2,697 |
-| Specificity Atlas | Novel substrate | 6,078 |
-| Site support | Curated + functional score | 800 |
-| Site support | Curated site | 929 |
-| Site support | Functional score only | 1,578 |
-| Site support | No site-level support | 5,468 |
-| Co-localized? | Co-localized | 2,471 |
-| Co-localized? | No co-localization | 836 |
-| Filtered Result | Known substrate | 1,602 |
-| Filtered Result | Novel substrate | 869 |
+| Stage             | Category                   | Substrates |
+|:------------------|:---------------------------|-----------:|
+| Specificity Atlas | Known substrate            |      2,697 |
+| Specificity Atlas | Novel substrate            |      6,078 |
+| Site support      | Curated + functional score |        800 |
+| Site support      | Curated site               |        929 |
+| Site support      | Functional score only      |      1,578 |
+| Site support      | No site-level support      |      5,468 |
+| Co-localized?     | Co-localized               |      2,471 |
+| Co-localized?     | No co-localization         |        836 |
+| Filtered Result   | Known substrate            |      1,602 |
+| Filtered Result   | Novel substrate            |        869 |
 :::
 
 ![**Comprehensive landscape and functional density of integrated phosphosites.** A) Distribution of unique phosphosite counts across individual database sources (PhosphoSitePlus, EPSD, iPTMnet) and the predicted specificity atlas, alongside the non-redundant integrated total. B) UpSet plot showing the intersection of unique phosphosites across the four primary sources. While many sites are unique to specific repositories, KinaseCanvas provides a unified framework that highlights the substantial expansion provided by integrating motif-based predictions. C) Percentage of phosphosites within each source designated as 'likely functional' (Ochoa functional score $\ge$ 0.5), demonstrating high functional density across both curated and predicted datasets.](../figures/paper_figures/figS1.png){#sfig-1}

@@ -8,6 +8,15 @@ format:
     documentclass: article
     geometry: margin=1in
     colorlinks: true
+    # article's title block sets the author line in a single-column tabular that cannot wrap,
+    # so a long author list runs past the right margin; give the column the text width instead.
+    include-in-header:
+      text: |
+        \usepackage{etoolbox}
+        \usepackage{array}
+        \makeatletter
+        \patchcmd{\@maketitle}{\begin{tabular}[t]{c}}{\begin{tabular}[t]{>{\centering\arraybackslash}p{\dimexpr\linewidth-2\tabcolsep\relax}}}{}{\typeout{WARNING: author wrap patch failed}}
+        \makeatother
   docx: default
 bibliography: ../refs/references.bib
 csl: https://www.zotero.org/styles/database
