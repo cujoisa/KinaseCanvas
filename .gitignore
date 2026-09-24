@@ -15,3 +15,7 @@ renv/staging/
 /.luarc.json
 
 **/*.quarto_ipynb
+
+scripts/figure4/node_modules/
+scripts/figure4/package-lock.json
+scripts/figure4/capture/

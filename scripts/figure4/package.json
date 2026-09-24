@@ -1,0 +1,8 @@
+{
+  "name": "kinasecanvas-figure4",
+  "private": true,
+  "description": "Screenshot capture for manuscript Figure 4",
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

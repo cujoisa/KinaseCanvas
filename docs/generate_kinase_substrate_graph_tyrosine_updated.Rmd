@@ -2141,7 +2141,9 @@ curated_vs_novel_edges_overlap <- combined_pairs %>%
   group_by(Kinase, Substrate) %>%
   summarise(
     known = any(is_curated),
-    novel = any(is_spec_atlas & !is_curated),
+    # pair-level: predicted and never curated (a per-row test counted the 881
+    # atlas pairs that are also curated as novel)
+    novel = any(is_spec_atlas) & !any(is_curated),
     .groups = "drop"
   ) %>%
   group_by(Kinase) %>%
