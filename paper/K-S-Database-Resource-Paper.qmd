@@ -319,19 +319,19 @@ The KinaseCanvas interactive resource is available at https://cujoisa.github.io/
 # Supplementary Data
 
 ::: {#stab-1}
-**Unfiltered specificity atlas.** Motif ranks, percentiles, and promiscuity indices for the human kinome specificity atlases. Provided as `unfiltered_cantley_dataset.csv`.
+**Unfiltered specificity atlas.** Motif ranks, percentiles, and promiscuity indices for the human kinome specificity atlases. Because of its size (27.8 million rows; 3.6 GB), this table is available from Zenodo (<https://doi.org/10.5281/zenodo.22941318>) as `results/unfiltered_cantley_dataset.csv`.
 :::
 
 ::: {#stab-2}
-**Subcellular localization mapping.** Protein compartmentalization data derived from the Human Protein Atlas (HPA). Provided as `subcellular_localization_mapping.csv`.
+**Subcellular localization mapping.** Protein compartmentalization data derived from the Human Protein Atlas (HPA). Provided as `Supplementary_Table_S2.csv`.
 :::
 
 ::: {#stab-3}
-**Phosphosite functional scores.** Pre-computed functional scores for each reported phosphosite in the human phosphoproteome. Provided as `ochoa_functional_scores.csv`.
+**Phosphosite functional scores.** Pre-computed functional scores for each reported phosphosite in the human phosphoproteome. Provided as `Supplementary_Table_S3.csv`.
 :::
 
 ::: {#stab-4}
-**Substrate counts at each stage of the filtering summarised in Figure 1C.** Each substrate is counted once per stage. A substrate enters the diagram if at least one of its sites ranks at or above the 90th percentile for a kinase with below-median promiscuity; it is "known" if it has at least one curated interaction with any kinase and "novel" otherwise. Site-level support means that at least one such site is curated or has a functional score $\ge$ 0.5. A substrate is retained ("co-localized") when at least one of its motif-passing kinase-site pairs has a supported site and a kinase that shares an HPA compartment with the substrate, so the final stage is the set of substrates contributed by the specificity atlas to the integrated resource. Substrates without site-level support are not carried into the last two stages. Provided as `alluvial_stage_counts.csv`.
+**Substrate counts at each stage of the filtering summarised in Figure 1C.** Each substrate is counted once per stage. A substrate enters the diagram if at least one of its sites ranks at or above the 90th percentile for a kinase with below-median promiscuity; it is "known" if it has at least one curated interaction with any kinase and "novel" otherwise. Site-level support means that at least one such site is curated or has a functional score $\ge$ 0.5. A substrate is retained ("co-localized") when at least one of its motif-passing kinase-site pairs has a supported site and a kinase that shares an HPA compartment with the substrate, so the final stage is the set of substrates contributed by the specificity atlas to the integrated resource. Substrates without site-level support are not carried into the last two stages. Provided as `Supplementary_Table_S4.csv`.
 
 | Stage             | Category                   | Substrates |
 |:------------------|:---------------------------|-----------:|

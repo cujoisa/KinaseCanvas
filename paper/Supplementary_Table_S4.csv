@@ -1,0 +1,11 @@
+stage,stratum,n_substrates
+Specificity Atlas,Novel substrate,6078
+Specificity Atlas,Known substrate,2697
+Site support,No site-level support,5468
+Site support,Functional score only,1578
+Site support,Curated site,929
+Site support,Curated + functional score,800
+Co-localized?,Co-localized,2471
+Co-localized?,No co-localization,836
+Filtered Result,Known substrate,1602
+Filtered Result,Novel substrate,869
