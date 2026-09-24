@@ -256,9 +256,18 @@ viewer_tags <- tags$div(
        selector outranks our single-class .app-grid rule for grid-template-columns.
        !important, plus explicit column placement on each child below, makes our
        three-column layout win regardless of what Quarto adds. */
-    .app-grid{display:grid !important;grid-template-columns:240px minmax(0,1fr) 370px !important;gap:16px;align-items:start}
+    /* The side panels scale with the window: on wide screens the graph absorbed all the extra room and
+       left the sidebar and detail panel looking tiny. `zoom` scales type, padding and controls together;
+       the grid tracks use the same factor, and the sticky offset and height cap are divided by it
+       because zoom would otherwise scale them too. Laptop widths (< 1700px) are unchanged. */
+    :root{--side-zoom:1}
+    @media (min-width: 1700px){:root{--side-zoom:1.1}}
+    @media (min-width: 2000px){:root{--side-zoom:1.2}}
+    @media (min-width: 2300px){:root{--side-zoom:1.3}}
+    .app-grid{display:grid !important;grid-template-columns:calc(240px * var(--side-zoom)) minmax(0,1fr) calc(370px * var(--side-zoom)) !important;gap:16px;align-items:start}
+    .app-grid #sidebar, .app-grid #detailPanel{zoom:var(--side-zoom);top:calc(70px / var(--side-zoom));max-height:calc((100vh - 90px) / var(--side-zoom))}
     @media (min-width: 1101px){
-      .app-grid.controls-hidden{grid-template-columns:minmax(0,1fr) 370px !important}
+      .app-grid.controls-hidden{grid-template-columns:minmax(0,1fr) calc(370px * var(--side-zoom)) !important}
       .app-grid.controls-hidden #sidebar{display:none}
       .app-grid.controls-hidden #main-col{grid-column:1}
       .app-grid.controls-hidden #detailPanel{grid-column:2}
