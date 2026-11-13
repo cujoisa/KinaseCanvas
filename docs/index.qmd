@@ -443,7 +443,12 @@ viewer_tags <- tags$div(
           ),
           tags$label(class="check-row", tags$input(type="checkbox", id="edgeLabelsChk"), "Edge labels"),
           tags$label(class="check-row", tags$input(type="checkbox", id="arrowsChk", checked=NA), "Arrows"),
-          tags$label(class="check-row", tags$input(type="checkbox", id="showAllChk"), "Show all substrates (no cap)")
+          tags$div(class="field-row",
+            tags$label(`for`="capLayers", "Interactions shown"),
+            tags$input(type="range", id="capLayers", min="1", max="1", value="1", step="1"),
+            tags$span(id="capLayersVal", class="badge", "–"),
+            tags$span(class="legend-note", "Each step adds the next 75 interactions, in the same order (curated first, then by confidence).")
+          )
         ),
 
         tags$div(class="sidebar-group",
@@ -520,6 +525,7 @@ viewer_tags <- tags$div(
     // median kinase (41 substrates) is never truncated while the hubs are.
     const NEIGHBOURHOOD_CAP = 75;
     let lastTruncation = {shown: 0, total: 0, hidden: 0};
+    let lastCapQuery = null;
     let currentSeeds = [];
     const maxDeg     = data.nodes.reduce((m,n) => Math.max(m, (n.indeg || 0) + (n.outdeg || 0)), 0);
 
@@ -977,14 +983,27 @@ viewer_tags <- tags$div(
       // first (they carry direct experimental evidence and no composite score), then
       // predicted ones by descending confidence, ties broken alphabetically so the
       // same seed always yields the same view.
-      const showAll = document.getElementById('showAllChk')?.checked;
+      // The Interactions shown slider reveals further layers of NEIGHBOURHOOD_CAP
+      // interactions in that same order; its last step shows the whole neighbourhood.
+      // A new query starts again from the first layer so a hub never opens as a hairball.
       const total = edges.length;
+      const nLayers = Math.max(1, Math.ceil(total / NEIGHBOURHOOD_CAP));
+      const capEl = document.getElementById('capLayers');
+      const queryKey = [kinSeed, subSeed, pairMode].join('|');
+      if(capEl){
+        if(queryKey !== lastCapQuery){ capEl.value = '1'; lastCapQuery = queryKey; }
+        capEl.max = String(nLayers);
+        capEl.disabled = nLayers === 1;
+      }
+      const layers = capEl ? Math.min(Number(capEl.value), nLayers) : 1;
       let truncated = 0;
-      if(!showAll && total > NEIGHBOURHOOD_CAP){
-        edges = edges.slice().sort(edgeRankCompare).slice(0, NEIGHBOURHOOD_CAP);
+      if(total > layers * NEIGHBOURHOOD_CAP){
+        edges = edges.slice().sort(edgeRankCompare).slice(0, layers * NEIGHBOURHOOD_CAP);
         truncated = total - edges.length;
       }
       lastTruncation = {shown: edges.length, total: total, hidden: truncated};
+      const capVal = document.getElementById('capLayersVal');
+      if(capVal){ capVal.textContent = edges.length + ' / ' + total; }
 
       const nset = new Set(); edges.forEach(e => { nset.add(e.source); nset.add(e.target); });
       const nodes = Array.from(nset).map(id => ({
@@ -1055,7 +1074,7 @@ viewer_tags <- tags$div(
         note.textContent = lastTruncation.hidden > 0
           ? 'Showing the ' + lastTruncation.shown + ' best-supported of ' +
             lastTruncation.total + ' interactions (curated first, then by confidence). ' +
-            lastTruncation.hidden + ' hidden. Tick Show all substrates to include them.'
+            lastTruncation.hidden + ' hidden. Move the Interactions shown slider to add 75 more at a time.'
           : (pairMode && elems.edges.length === 0)
             ? 'No interaction between these two in the resource.'
             : '';
@@ -1092,8 +1111,8 @@ viewer_tags <- tags$div(
     }
     const pairModeEl = document.getElementById('pairModeChk');
     if(pairModeEl){ pairModeEl.addEventListener('change', () => render()); }
-    const showAllEl = document.getElementById('showAllChk');
-    if(showAllEl){ showAllEl.addEventListener('change', () => render()); }
+    const capLayersEl = document.getElementById('capLayers');
+    if(capLayersEl){ capLayersEl.addEventListener('change', () => render()); }
 
     document.getElementById('curatedOnlyChk').addEventListener('change', () => {
       applyFilters(true);

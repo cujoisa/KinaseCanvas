@@ -1,0 +1,57 @@
+---
+format:
+  pdf:
+    documentclass: article
+    geometry:
+      - margin=0.75in
+    fontsize: 11pt
+    pagestyle: empty
+    include-in-header:
+      text: |
+        \usepackage{enumitem}
+        \setlist{itemsep=1pt, topsep=2pt}
+        \setlength{\parskip}{4pt plus 1pt}
+---
+
+Chinmaya Joisa\
+Lineberger Comprehensive Cancer Center\
+University of North Carolina at Chapel Hill\
+Chapel Hill, NC 27599\
+Chinmaya_Joisa@med.unc.edu | 919-527-8895
+
+October 10, 2026
+
+**Re: Revised submission DATABASE-2026-0054 - "KinaseCanvas: An Integrated Resource for Curated and Novel Kinase-Substrate Interactions"**
+
+Dear Database Editors,
+
+Thank you for the opportunity to revise our manuscript describing **KinaseCanvas**, an open-access resource that expands the functional annotation of the understudied "dark" kinome by integrating kinome-wide specificity atlases with curated kinase-substrate interactions. We thank both reviewers for their careful reading and have addressed every comment; a point-by-point response is enclosed, and changes to the manuscript are shown in blue.
+
+**Principal revisions:**
+
+* **Corrected pipeline.** The reviewers' checks led us to re-audit the pipeline and correct two implementation errors: an identifier-resolution error and an error in the functional-score cut-off. The resource has been regenerated with added consistency checks, and every figure and statistic reflects the corrected pipeline.
+
+* **New analyses.** Threshold sensitivity, a continuous confidence score for every interaction, the information content and independence of the evidence layers, and coverage by tissue specificity.
+
+* **Explorer.** Substrate-first queries, a pair mode that ranks candidate sites with their flanking sequences, quantitative evidence for every interaction, and a detail panel linking to UniProt and PubMed.
+
+* **Related resources.** PhosphoNET and KiNECTOR are now cited, and the Discussion sets out how the experimentally measured specificity atlases differ from PhosphoNET's sequence-inferred predictions.
+
+* **Data access.** Every released interaction carries the evidence values behind its classification; the tables, code and full prediction matrix are archived on Zenodo.
+
+**Key results of the revised resource:**
+
+* **Network expansion:** **21,916 predicted kinase-substrate pairs absent from the curated databases we integrate**, for 30,280 pairs in total across 426 kinases and 3,901 substrates.
+
+* **Illuminating the dark kinome:** Relative to curated databases alone, the share of interactions involving understudied kinases rises 4.6-fold, from 3.4% to 15.7%.
+
+* **Biological utility:** For the mitotic phosphosite RANGAP1 S442, layering localization and functional evidence onto motif scores narrows five motif-compatible kinases to two, including CDK1, the kinase proposed by the study that first reported the site.
+
+**Enclosed:** the response to reviewers; the revised manuscript with changes in blue, and a clean copy; and Supplementary Tables S2–S4 and the relaxed motif tier (Table S1, 3.6 GB, is on Zenodo).
+
+Thank you for your time and consideration.
+
+Sincerely,
+
+**Chinmaya Joisa**\
+Postdoctoral Fellow, on behalf of all authors

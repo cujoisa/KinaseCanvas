@@ -1,6 +1,7 @@
 """Build the tracked-changes manuscript for resubmission.
 
-Compares the current manuscript with the version originally submitted and writes a copy of the
+Compares the current manuscript with the previously submitted version (BASELINE; for the second
+revision, the R1 submission of 10 October 2026) and writes a copy of the
 current manuscript in which every added or changed passage is wrapped as [text]{.rev}. The Lua
 filter paper/revision-markup.lua renders those passages in colour in the PDF, Word and HTML outputs.
 
@@ -10,15 +11,22 @@ sentences that were rewritten or are new are marked whole. Deleted text is not s
 Usage (from the repository root):
     python3 scripts/mark_revisions.py
     quarto render paper/K-S-Database-Resource-Paper_revised.qmd --to elsevier-pdf
-    quarto render paper/K-S-Database-Resource-Paper_revised.qmd --to elsevier-docx
+
+For the Word versions use scripts/build_word_versions.sh instead of rendering the docx directly: Quarto's
+Word output needs scripts/finalize_docx.py afterwards (front matter, and blue colouring of citations,
+cross-references and maths, which the .rev span alone does not reach).
 """
 
 import difflib
 import re
 from pathlib import Path
 
+from us_spelling import to_us
+
 REPO = Path(__file__).resolve().parents[1]
-SUBMITTED = REPO / "paper" / "submitted_reference" / "K-S-Database-Resource-Paper_submitted.qmd"
+# Baseline for the blue marking. The original submission is K-S-Database-Resource-Paper_submitted.qmd;
+# this round marks only what changed since the first revision.
+SUBMITTED = REPO / "paper" / "submitted_reference" / "K-S-Database-Resource-Paper_R1_submitted.qmd"
 CURRENT = REPO / "paper" / "K-S-Database-Resource-Paper.qmd"
 OUTPUT = REPO / "paper" / "K-S-Database-Resource-Paper_revised.qmd"
 
@@ -38,10 +46,14 @@ TOKEN = re.compile(r"\[@[^\]]*\]|\$[^$]*\$|\S+")
 # ---- Text normalisation ----
 
 def normalise(text):
-    """Comparison form: ignores emphasis markers, escapes, quote and dash styles."""
-    t = text.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
+    """Comparison form: ignores emphasis markers, escapes, quote and dash styles, and UK/US spelling
+    (the revision standardized on US spelling; that alone is not a change worth marking)."""
+    t = to_us(text).replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
     t = re.sub(r"—|–|--", "-", t)
     t = re.sub(r"\\(?=[^A-Za-z])", "", t)          # markdown escapes such as \- \[ \~
+    # Panel references lost their brackets in R2 (@{fig-1}A for @fig-1(A)); not a change worth marking.
+    t = re.sub(r"@\{([\w-]+)\}([A-E])(?: and ([A-E]))?",
+               lambda m: f"@{m[1]}({m[2]}" + (f", {m[3]})" if m[3] else ")"), t)
     t = t.replace("**", "").replace("*", "")
     return re.sub(r"\s+", " ", t).strip()
 
@@ -184,7 +196,8 @@ class Marker:
     def mark_words(self, unit, match):
         toks = list(TOKEN.finditer(unit))
         cur = [normalise(t.group()) for t in toks]
-        sm = difflib.SequenceMatcher(None, cur, match.split(), autojunk=False)
+        # tokenize the baseline sentence the same way, so a citation followed by "." matches itself
+        sm = difflib.SequenceMatcher(None, cur, [normalise(t) for t in TOKEN.findall(match)], autojunk=False)
         # a = current tokens, b = submitted: words only in the current text are "delete" or "replace"
         runs = [(i1, i2) for tag, i1, i2, _, _ in sm.get_opcodes() if tag in ("replace", "delete")]
         changed = sum(i2 - i1 for i1, i2 in runs)

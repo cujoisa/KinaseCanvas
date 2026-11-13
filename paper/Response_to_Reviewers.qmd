@@ -32,27 +32,27 @@ We thank both reviewers for their thorough, constructive reading of the manuscri
 
 Peptide libraries give even coverage across the kinome but, as the reviewer notes, can have modest signal-to-noise and report only what the active site sees; the Sugiyama et al. design presents protein substrates in native context and offers complementary evidence. Part of the head-to-head comparison the reviewer proposes has already been published, so we added a new Discussion subsection, "Motif models derived from peptide libraries and from in vitro phosphoproteomics":
 
-> *\[...\] An orthogonal strategy is to phosphorylate dephosphorylated proteome extracts with individual recombinant kinases and read out the products by mass spectrometry, as done by Sugiyama et al. for 385 kinases [@Sugiyama2019-ki]. This design presents kinases with protein substrates in native sequence context, and several groups have since converted the resulting data into position-specific matrices suitable for scoring. Poll et al. derived position-dependent Shannon information matrices for 384 kinases [@Poll2024-km], and Invergo et al. built position-specific scoring matrices and naive Bayes classifiers from the same source [@Invergo2022-iv]. \[...\] Poll et al. compared their mass-spectrometry-derived “logos” directly against the peptide-library motifs used here and reported a high degree of concordance, concluding that the best predictions are likely to come from combining both data types [@Poll2024-km]. A systematic head-to-head comparison of peptide-library and in vitro phosphoproteomic specificity models is an important future direction as an independent benchmarking enterprise.*
+> *\[...\] An orthogonal strategy is to phosphorylate dephosphorylated proteome extracts with individual recombinant kinases and read out the products by mass spectrometry, as done by Sugiyama et al. for 385 kinases [@Sugiyama2019-ki]. This design presents kinases with protein substrates in native sequence context, and several groups have since converted the resulting data into position-specific matrices suitable for scoring. Poll et al. derived position-dependent Shannon information matrices for 384 kinases [@Poll2024-km], and Invergo et al. built position-specific scoring matrices and naive Bayes classifiers from the same source [@Invergo2022-iv]. \[...\] Poll et al. compared their mass-spectrometry-derived “logos” directly against the peptide-library motifs used here and reported a high degree of concordance, concluding that the best predictions are likely to come from combining both data types [@Poll2024-km]. A systematic head-to-head comparison of peptide-library and in vitro phosphoproteomic specificity models is an important future direction, best undertaken as an independent benchmarking effort.*
 
 **2\.**
 
 > The use of discrete cut-offs or thresholds in the contextual filtering process can be regarded as a weakness. For example, it appears that for the Ochoa functional score a discrete cut-off of 0.5 was used. That means that a site with a score of 0.4999 is "out", while a site with a score of 0.50001 is "in". As understand it, a site with a score of 0.50001 gets the same emphasis as one with 0.999. Although the resource developed by the authors brings considerable value, future development of the tool should consider making the weightings probabilistic/Bayesian or at least transform the data to produce a continuously differentiable, monotonic weighting function. Although it is unrealistic to expect the authors to totally revise their calculations for the current publication, this issue should at least be discussed.
 
-This is a fair critique; auditing it also surfaced the second implementation error, a data-derived cutoff of 0.375 that the pipeline had been enforcing instead of the stated 0.5, which we have corrected. We have added more detail to the Methods under "Phosphosite functional score":
+This is a fair critique; auditing it also surfaced the second implementation error, a data-derived cutoff of 0.375 that the pipeline had been enforcing instead of the stated 0.5, which we have corrected. Methods, "Phosphosite functional score," now states the threshold and how we handle its arbitrariness:
 
-> *We downloaded the pre-computed human phosphosite functional scores and mapped them to our phosphosite identifiers (provided as Supp. Table 3). For each predicted KSI, we annotated the substrate site with its functional score and designated a site as "likely functional" if its score was $\ge$ 0.5. This is the threshold recommended by the authors of the score, who report that at a 0.5 cut-off approximately 10% of the phosphoproteome is retained while 50% of true-positive functional sites are recovered, making it a useful cut-off for initial prioritization [@Ochoa2020-og]; comparable thresholds have been applied in subsequent work [@Yaron-Barir2024-lv].*
+> *\[...\] For each predicted KSI, we annotated the substrate site with its functional score and designated a site as "likely functional" if its score was $\ge$ 0.5. Comparable thresholds have been applied in subsequent work [@Yaron-Barir2024-lv]. Because any fixed threshold is arbitrary, we additionally report a sensitivity analysis across the range 0.3–0.7 and release a continuous confidence score.*
 
-We also added a sensitivity analysis and a continuous confidence score. Methods, "Phosphosite functional score":
+Discussion, Limitations, explains where the cut-offs come from and how their effect is mitigated:
 
-> *Because any fixed threshold is arbitrary at its boundary, we additionally report a sensitivity analysis across the range 0.3-0.7 and release a continuous confidence score (see below).*
+> *The cut-offs are not arbitrary in origin (0.5 is the value recommended by the authors of the functional score [@Ochoa2020-og], and the 90th motif percentile follows the specificity atlases [@Johnson2023-ai; @Yaron-Barir2024-lv]), and we mitigate their effect in two ways: the sensitivity analysis shows which conclusions depend on the operating point, and the continuous confidence score lets users rank rather than filter.*
 
 The sensitivity analysis itself is reported in a new Results subsection, "Robustness of the filtering criteria":
 
-> *Sweeping the functional-score cut-off from 0.3 to 0.7 and the motif percentile from the 80th to the 99th (Supp. Figure 2) changes the size of the high-confidence set substantially \[...\] but leaves the qualitative conclusions intact. The proportion of retained predicted pairs involving a dark kinase varies only between 19.1% and 20.8% across that same functional-score range, and the number of kinases represented varies between 318 and 325\.*
+> *Sweeping the functional-score cut-off from 0.3 to 0.7 and the motif percentile from the 80th to the 99th (Supp. Figure 2) changes the size of the high-confidence set substantially. At the 90th motif percentile, the number of retained pairs falls from 58,319 to 13,815 across the functional-score range, but the qualitative conclusions are unchanged. The proportion of retained predicted pairs involving a dark kinase varies only between 19.1% and 20.8% across that same functional-score range, and the number of kinases represented varies between 318 and 325.*
 
 The continuous score is described in a new Methods subsection, "Confidence scoring":
 
-> *Motif percentile and functional score are each passed through a monotonic, continuously differentiable logistic transform centred on the corresponding threshold, and localization evidence is expressed as a saturating function of the number of shared HPA compartments rather than a binary flag. \[...\] This is a transparent re-weighting rather than a calibrated probability: a fully probabilistic treatment would require labelled negative examples, which do not exist at kinome scale [@Invergo2022-iv; @Horn2014-kx].*
+> *Motif percentile and functional score are each passed through a monotonic, continuously differentiable logistic transform centered on the corresponding threshold, and localization evidence is expressed as a saturating function of the number of shared HPA compartments rather than a binary flag. \[...\] This is a transparent re-weighting rather than a calibrated probability: a fully probabilistic treatment would require labeled negative examples, which do not exist at kinome scale [@Invergo2022-iv; @Horn2014-kx].*
 
 **3\.**
 
@@ -60,23 +60,27 @@ The continuous score is described in a new Methods subsection, "Confidence scori
 
 This matches what we found once we checked it directly. We added a paragraph to the “Robustness of the filtering criteria” subsection:
 
-> *Classifying substrates by HPA RNA tissue specificity, 70.4% of substrates with low tissue specificity gain at least one novel predicted interaction, falling monotonically to 57.8% for tissue-enhanced, 46.9% for group-enriched and 40.6% for tissue-enriched proteins.*
+> *When substrates are classified by HPA RNA tissue specificity, 70.4% of those with low tissue specificity gain at least one novel predicted interaction, falling monotonically to 57.8% for tissue-enhanced, 46.9% for group-enriched and 40.6% for tissue-enriched proteins.*
 
 We additionally report the likely causes with a new paragraph in the “Limitations” subsection:
 
-> *\[...\] Three mechanisms contribute to this result. The specificity atlases score only phosphosites already reported in phosphoproteomics experiments, a literature dominated by immortalized and cancer cell lines, so a site never observed in those systems cannot enter the resource however good its motif match [@Huttlin2010-ts]. Tissue-restricted proteins have sparser HPA annotation, so co-localization can fail for missing-data rather than biological reasons [@Thul2017-cl; @Uhlen2015-sd]. \[...\] By the same logic, the resource is at its most useful in settings where differentiated programs are lost: cancer being the clearest case, and one where large phosphoproteomic cohorts already exist to test predictions against.*
+> *\[...\] Three mechanisms contribute to this result. The specificity atlases score only phosphosites already reported in phosphoproteomics experiments, a literature dominated by immortalized and cancer cell lines, so a site never observed in those systems cannot enter the resource however good its motif match [@Huttlin2010-ts]. Tissue-restricted proteins have sparser HPA annotation, so co-localization can fail for missing-data rather than biological reasons [@Thul2017-cl; @Uhlen2015-sd]. \[...\] However, the resource is at its most useful in settings where differentiated programs are lost: cancer being the clearest case.*
 
 **4\.**
 
 > It would be of interest to characterize the methodology with regard to relative information derived from the different data sources (e.g. in terms of 'Shannon information content'). Note that it seems that the information sources may not be entirely orthogonal. For example, co-localization seems to be a factor in the functional score of Ochoa et al. and is of course central to HPA. So the simple question is whether HPA adds anything.
 
-We computed the entropy of each evidence layer and the mutual information between them. On orthogonality, the 59 features of the Ochoa functional score span mass-spectrometry evidence, phosphosite regulation, structural environment and evolutionary conservation, and do not include subcellular localization (its "localization" features describe mass-spectrometric confidence in the site's position within the peptide). We added a Methods subsection, "Information content of the evidence layers," and the results to "Robustness of the filtering criteria":
+We computed the entropy of each evidence layer and the mutual information between them. Co-localization carries the most information of the three layers (marginal entropy 0.90 bits, against 0.42 bits for curated-site status and 0.43 bits for functional-score support). On orthogonality, the 59 features of the Ochoa functional score span mass-spectrometry evidence, phosphosite regulation, structural environment and evolutionary conservation, and do not include subcellular localization (its "localization" features describe mass-spectrometric confidence in the site's position within the peptide). We added a Methods subsection, "Information content of the evidence layers":
 
-> *Across all motif-passing kinase-site pairs, subcellular co-localization carries the highest marginal entropy (0.896 bits, versus 0.418 bits for curated-site status and 0.430 bits for functional-score support). Pairwise mutual information between the three layers is very small \[...\], giving normalised redundancies of 0.19%, 0.16% and 1.95% respectively, and conditioning on the third indicator does not change this. The layers are therefore close to orthogonal, and each is doing distinct work: in a leave-one-out analysis, co-localization uniquely removes 47,029 kinase-site pairs that satisfy every other criterion, and omitting it would inflate the high-confidence set by 182%.*
+> *\[...\] From this table we computed marginal Shannon entropies, pairwise mutual information and normalized redundancy (mutual information divided by the smaller of the two marginal entropies), together with a leave-one-filter-out analysis quantifying how many pairs each layer uniquely removes.*
+
+and the results to "Robustness of the filtering criteria":
+
+> *Pairwise mutual information between the three layers is very small (at most 0.0082 bits, between curated status and functional-score support), with normalized redundancy of at most 1.95%. The layers are therefore close to orthogonal, and each is doing distinct work: in a leave-one-out analysis, co-localization uniquely removes 47,029 kinase-site pairs that satisfy every other criterion, and omitting it would inflate the high-confidence set by 182%.*
 
 A new Discussion subsection, "Orthogonality and information content of the evidence layers," interprets this:
 
-> *This is expected from how the functional score is built. It is trained on 59 features spanning mass-spectrometry evidence, phosphosite regulation, structural environment and evolutionary conservation [@Ochoa2020-og], and subcellular localization is not among them. The co-localization filter therefore contributes essentially independent evidence and does substantial work of its own, rather than rubber-stamping decisions already made by the other layers.*
+> *This is expected from how the functional score is built. It is trained on 59 features spanning mass-spectrometry evidence, phosphosite regulation, structural environment and evolutionary conservation [@Ochoa2020-og], and subcellular localization is not among them. The co-localization filter therefore contributes essentially independent evidence and does substantial work of its own, rather than reusing decisions already made by the other layers.*
 
 The analysis showed that HPA adds information that the other layers do not carry.
 
@@ -92,9 +96,13 @@ General comments
 
 > One of the key goals of the KinaseCanvas website is to identify potential substrates and their phosphosites for novel (i.e., less characterized) kinases. This offers predictive capabilities generally not available from other websites that track kinase-substrate connections. However, similar known and predictive information is available from [www.phosphonet.ca](http://www.phosphonet.ca), which is not cited.
 
-We apologise for the omission and have added PhosphoNET to the Introduction:
+We apologize for the omission and have added both resources to the Introduction, PhosphoNET in both of its roles: with the curated resources, and as the established kinome-scale predictor against which the specificity atlases are introduced:
 
-> *PhosphoNET additionally provides sequence-based predictions of kinase-phosphosite pairings for 486 human protein kinases, using scoring matrices that span the \-7 to \+7 positions around the phosphoacceptor, alongside curated sites [@Safaei2011-pn]; the companion KiNECTOR resource ([http://www.kinector.ca](http://www.kinector.ca)) aggregates over 25,000 human kinase-substrate-phosphosite relationships into navigable pathway maps.*
+> *PhosphoNET additionally catalogs curated sites [@Safaei2011-pn]; the companion KiNECTOR resource (<http://www.kinector.ca>) aggregates over 25,000 human kinase-substrate-phosphosite relationships into pathway maps. \[...\] Kinome-scale prediction itself is not new: PhosphoNET infers specificity matrices for nearly 500 human kinases from the sequence of each kinase's catalytic domain [@Safaei2011-pn], whereas the atlases measure each kinase's preferences experimentally.*
+
+The Discussion, "Relationship to existing resources," now sets out how the two approaches differ and what KinaseCanvas adds:
+
+> *\[...\] Relative to PhosphoNET, the specificity atlases used here differ in kind rather than in scope: they measure each kinase's preferences directly with oriented peptide libraries [@Johnson2023-ai; @Yaron-Barir2024-lv]. This matters most for understudied kinases, which have few known substrates against which an inferred specificity can be checked; PhosphoNET's predicted matrices were validated against about 150 well-studied kinases [@Safaei2011-pn]. We have not benchmarked the two approaches against each other, and each can serve as an independent check on the other.*
 
 We also compare our predictions with PhosphoNET's in our response to specific comment 17.
 
@@ -102,9 +110,9 @@ We also compare our predictions with PhosphoNET's in our response to specific co
 
 > One of the useful aspects of creation of the KinaseCanvas database is to identify potential sites of phosphorylation in a substrate for a kinase that demonstrated enhanced phosphorylation, but it is not known from the experiment where the substrate protein is phosphorylated. This might be evident from studies where non-specific phosphorylation is visualized with generic phosphotyrosine antibodies or band-shift of a substrate following incubation with a protein kinase with Phos-tagged SDS-PAGE gels and band shifts with a pan-specific antibody for the target.
 
-This use case motivated the resource, and the portal did not serve it well enough. We have added this to the Results, "Interactive exploration and visualization":
+This use case motivated the resource, and the portal did not serve it well enough. It is the situation the reviewer describes, a band shift or pan-phosphotyrosine signal without a mapped site, and we have added it to the Results, "Interactive exploration and visualization":
 
-> *Site-level interrogation of a specific pair: A pair mode restricts the view to a single kinase-substrate link and ranks the candidate sites on that substrate. This addresses the common experimental situation in which a kinase is known to phosphorylate a protein (e.g., from a band shift on a Phos-tag gel or a pan-phosphotyrosine blot) but the modified residue is unidentified.*
+> *Site-level interrogation of a specific pair: A pair mode restricts the view to a single kinase-substrate link and ranks the candidate sites on that substrate. This addresses the experimental scenario in which a kinase is known to phosphorylate a protein but the modified residue is unidentified.*
 
 **3\.**
 
@@ -112,7 +120,7 @@ This use case motivated the resource, and the portal did not serve it well enoug
 
 We have rewritten the Data Availability Statement to improve clarity:
 
-> *Each released kinase-substrate-site triplet carries the individual evidence values behind its classification (motif percentile, the kinase's rank for that site, promiscuity index, phosphosite functional score, number of shared subcellular compartments and the composite confidence score), so the inclusion criteria can be checked case by case. \[...\] Supplementary Tables S1-S4 (S1 being the complete unfiltered prediction matrix) and the relaxed motif tier are deposited on Zenodo (<https://doi.org/10.5281/zenodo.22941318>) \[...\].*
+> *Each released kinase-substrate-site triplet carries the individual evidence values behind its classification (motif percentile, the kinase's rank for that site, promiscuity index, phosphosite functional score, number of shared subcellular compartments and the composite confidence score), so the inclusion criteria can be checked case by case. \[...\] Supplementary Tables S1–S4 (S1 being the complete unfiltered prediction matrix) and the relaxed motif tier are deposited on Zenodo (<https://doi.org/10.5281/zenodo.22941318>) \[...\].*
 
 Specific comments
 
@@ -122,7 +130,7 @@ Specific comments
 
 The wording was our error: the 8,365 (8,364 in the revised resource) were curated interactions, not predictions. We have rewritten the relevant sentence of the Abstract:
 
-> *By applying stringent biological filters for subcellular co-localization and phosphosite functional importance, we distill tens of millions of raw predictions into 21,916 high-confidence novel interactions and integrate them with 8,364 curated interactions, yielding 30,280 distinct kinase-substrate pairs.*
+> *By applying stringent biological filters for subcellular co-localization and phosphosite functional importance, we distill tens of millions of raw predictions into 21,916 high-confidence interactions absent from the curated databases we integrate and combine them with 8,364 curated interactions, yielding 30,280 distinct kinase-substrate pairs.*
 
 **2\.**
 
@@ -130,7 +138,7 @@ The wording was our error: the 8,365 (8,364 in the revised resource) were curate
 
 We removed reference 1 (Iakoucheva et al.). Rewritten opening of the Introduction:
 
-> *Public repositories now catalogue well over 200,000 human phosphosites distributed across the large majority of the human proteome [@Hornbeck2019-psp; @Vlastaridis2017-hz], and modelling that accounts for the incomplete and biased coverage of tryptic phosphoproteomics places the true totals higher still [@Vlastaridis2017-hz; @Sharma2014-ud]. Estimates of how many of these sites are individually functional are considerably lower [@Landry2009-wf; @Ochoa2020-og; @Kalyuzhnyy2022-ph], so the operative problem is not enumeration but prioritization.*
+> *Public repositories now catalog over 200,000 human phosphosites across most of the proteome [@Hornbeck2019-psp; @Vlastaridis2017-hz]. Modeling of the incomplete and biased coverage of tryptic phosphoproteomics suggests the true number is higher still [@Vlastaridis2017-hz; @Sharma2014-ud]. Considerably fewer of these sites are estimated to be functional [@Landry2009-wf; @Ochoa2020-og; @Kalyuzhnyy2022-ph], so a central task is to determine which sites have consequences for signal transduction, drug response and disease.*
 
 **3\.**
 
@@ -138,7 +146,9 @@ We removed reference 1 (Iakoucheva et al.). Rewritten opening of the Introductio
 
 These were addressed in the same Introduction paragraph, where the sentence on complementary resources now reads:
 
-> *\[...\] although these differ substantially in scope and currency: Phospho.ELM has not been updated since 2010, and PhosphoNetworks reports kinase-substrate relationships measured on protein microarrays without resolving the modified residue [@Newman2013-pn; @Hu2014-dp].*
+> *\[...\] although these differ substantially in scope: Phospho.ELM has not been updated since 2010, and PhosphoNetworks reports kinase-substrate relationships measured on protein microarrays without resolving the modified residue [@Newman2013-pn; @Hu2014-dp].*
+
+PhosphoNET and KiNECTOR, which this comment also raises, are covered under general comment 1.
 
 **4\.**
 
@@ -154,7 +164,7 @@ The Limitations paragraph previously hinted at docking motifs and priming phosph
 
 We agree that this would be an important next step for this resource. We have added a new limitation paragraph, in Discussion, Limitations:
 
-> *Fourth, our filters are spatial but not temporal. Requiring a kinase and substrate to share a subcellular compartment is a necessary condition for a genuine interaction, not a sufficient one: a real kinase-substrate pair should additionally show coordinated behaviour over time, with substrate phosphorylation tracking kinase activity across stimuli, inhibitor treatments or genetic perturbation. Compendia of perturbation phosphoproteomics now make this tractable in principle [@Ochoa2016-kr; @Muller-Dott2025-yf], and adding a co-regulation layer \[...\] is the most obvious way to improve the resource.*
+> *Fourth, our filters are spatial but not temporal. Requiring a kinase and substrate to share a subcellular compartment is a necessary condition for a genuine interaction, not a sufficient one: a real kinase-substrate pair should additionally show coordinated behavior over time. Compendia of perturbation phosphoproteomics now make this tractable in principle [@Ochoa2016-kr; @Muller-Dott2025-yf], and adding a co-regulation layer is the most obvious way to improve the resource.*
 
 **6\.**
 
@@ -184,7 +194,7 @@ We also now cite the literature on weak functional constraint across phosphoprot
 
 This was an omission. New Methods subsection, "Species and isoform handling":
 
-> *The resource is restricted to human proteins (NCBI taxonomy 9606). Every protein in the curated KiNet table is a reviewed (Swiss-Prot) human UniProt entry, and we performed no cross-species orthologue mapping of our own, so a site enters the resource only if a contributing database reports it on the human protein. All phosphosite positions refer to the canonical UniProt sequence of the substrate: neither the curated table nor the specificity atlases use isoform-specific accessions. Every site is checked against that canonical sequence (see below), and the UniProt accession is released alongside every site so that positions can be verified independently.*
+> *The resource is restricted to human proteins (NCBI taxonomy 9606). Every protein in the curated KiNet table is a reviewed (Swiss-Prot) human UniProt entry, and we performed no cross-species ortholog mapping of our own, so a site enters the resource only if a contributing database reports it on the human protein. All phosphosite positions refer to the canonical UniProt sequence of the substrate: neither the curated table nor the specificity atlases use isoform-specific accessions. Every site is checked against that canonical sequence (see below), and the UniProt accession is released alongside every site so that positions can be verified independently.*
 
 **9\.**
 
@@ -196,15 +206,17 @@ The Limitations paragraph quoted under specific comment 4 now states the bias pl
 
 The relaxed tier is described in Methods, "Kinome-wide motif-based substrate predictions":
 
-> *Because a single stringent tier structurally excludes kinases whose specificity is dominated by docking interactions rather than by the catalytic cleft (see Discussion), we additionally release a relaxed tier comprising kinase-site pairs between the 75th and 90th motif percentiles that satisfy the same contextual criteria. This layer is released as a separate, labelled table (see Data Availability) and is not part of the high-confidence set.*
+> *Because a single stringent tier structurally excludes kinases whose specificity is dominated by docking interactions rather than by the catalytic cleft, we additionally release a relaxed tier comprising kinase-site pairs between the 75th and 90th motif percentiles that satisfy the same contextual criteria. This tier is released as a separate, labeled table (see Data Availability) and is not part of the high-confidence set.*
 
 **10\.**
 
 > Page 6, lines 32-33 \-- The authors acknowledge that the filtration of the KSI hits by co-localization had a limited effect. This is because the vast majority of proteins are expressed in the same cells as evidenced in the GEO database (and presented in [www.transcriptonet.ca](http://www.transcriptonet.ca)), and most proteins are found in the cytoplasm of cells, where they are at least initially made on ribosomes.
 
-We quantified both sides of this in a new Results subsection, "Robustness of the filtering criteria":
+We quantified this in a new Results subsection, "Robustness of the filtering criteria." The co-localization filter is far from trivially satisfied:
 
-> *This filter is not trivially satisfied: the median gene has HPA annotations for two compartments and only 2.6% of annotated genes are assigned to five or more. \[...\] In a leave-one-out analysis, co-localization uniquely removes 47,029 kinase-site pairs that satisfy every other criterion, and omitting it would inflate the high-confidence set by 182%.*
+> *\[...\] in a leave-one-out analysis, co-localization uniquely removes 47,029 kinase-site pairs that satisfy every other criterion, and omitting it would inflate the high-confidence set by 182%.*
+
+The reason is that HPA assigns most proteins to only a few compartments: the median annotated gene has two, and only 2.6% of annotated genes have five or more.
 
 **11\.**
 
@@ -212,11 +224,11 @@ We quantified both sides of this in a new Results subsection, "Robustness of the
 
 We answer this together with specific comment 16, which also concerns the tyrosine enrichment. With corrected thresholds, and now computed once per unique site rather than once per kinase-site pair, the figures are 36.1% tyrosine against 12.8% serine and 15.0% threonine, not 70.8%/27.5%/26.9%. Rewritten passage of Discussion, "Biological insights from the integrated network":
 
-> *We report this as a property of the assembled resource rather than as a claim about the phosphoproteome, because several factors plausibly contribute to it and we cannot separate them here. Much of the available phosphotyrosine data was generated using anti-phosphotyrosine immunoaffinity enrichment [@Rush2005-py], a targeted design that both concentrates on sites of prior biological interest and differs systematically from the untargeted enrichment used for serine and threonine sites. Phosphotyrosine is also the smallest and best-studied of the three classes, so its coverage is comparatively closer to saturation, and a substantial share of well-characterised tyrosine sites are receptor tyrosine kinase autophosphorylation sites whose documented function is to recruit SH2- and PTB-domain effectors [@Miller2018-hi]. \[...\] the relative evolutionary conservation of phosphothreonine and phosphotyrosine sites remains an area of active disagreement [@Landry2009-wf; @Ochoa2020-og]. We therefore draw no evolutionary inference from this observation.*
+> *We report this as a property of the assembled resource rather than as a claim about the phosphoproteome, because several factors plausibly contribute to it and we cannot separate them here. Much of the available phosphotyrosine data was generated using anti-phosphotyrosine immunoaffinity enrichment [@Rush2005-py], a targeted design that concentrates on sites of prior biological interest. Phosphotyrosine is also the smallest and best-studied of the three classes, so its coverage is comparatively closer to saturation, and a substantial share of well-characterized tyrosine sites are receptor tyrosine kinase autophosphorylation sites whose documented function is to recruit SH2- and PTB-domain effectors [@Miller2018-hi]. \[...\] We therefore draw no inference about the regulatory or evolutionary importance of tyrosine sites from this observation.*
 
 This difference is now backed by a statistical test the submitted version lacked, added to Methods, "Phosphosite functional score":
 
-> *The difference between residue classes is highly significant ($\chi^2$ = 1848.1, df = 2, $p < 2 \times 10^{-16}$; n = 5,132 tyrosine, 34,754 serine and 7,844 threonine sites).*
+> *The difference between residue classes is highly significant ($\chi^2$ = 1848.1, $p < 2 \times 10^{-16}$).*
 
 On the relative conservation of phosphothreonine and phosphotyrosine sites, we are not in a position to adjudicate and, as quoted above, draw no evolutionary inference from our data.
 
@@ -226,7 +238,7 @@ On the relative conservation of phosphothreonine and phosphotyrosine sites, we a
 
 We agree, and appreciate that the reviewer finds the premise reasonable. Our Methods description of dark-kinase classification is already consistent with this framing (Methods, "Annotation of dark kinases"):
 
-> *we used the DarkKinaseTools R package from the NIH Illuminating the Druggable Genome (IDG) programme to classify kinases as "understudied (dark)" or "well-studied (light)" based on publication counts, functional annotations and available reagents [@Berginski2021-so]*
+> *we used the DarkKinaseTools R package from the NIH Illuminating the Druggable Genome (IDG) program to classify kinases as "understudied (dark)" or "well-studied (light)" based on publication counts, functional annotations and available reagents [@Berginski2021-so]*
 
 No change was needed: as the reviewer notes, with only \~90 dedicated tyrosine kinases, a serine/threonine skew among understudied kinases is expected.
 
@@ -246,21 +258,23 @@ We answer comments 13-15 together, since all three concern the web portal.
 
 The released interaction table did not contain the continuous scores for each K-S pair. We fixed that upstream, then rewrote the Results, "Interactive exploration and visualization," in full. The relevant bullets now read:
 
-> *Kinase- or substrate-first querying: The graph can be seeded from either a kinase or a substrate, with autocomplete on both fields. Seeding with a substrate returns all upstream kinases, curated and predicted, so the resource can be used to ask which kinases might act on a protein of interest as readily as the reverse. \[...\] Quantitative evidence on every interaction: The motif percentile, the kinase's rank for that site among all kinases, the phosphosite functional score, the number of shared subcellular compartments and the composite confidence score are all displayed in a filterable table of the interactions in view and carried into every table export. A minimum-confidence slider filters predicted edges on the composite score. Explicit evidence provenance: Curated-site status and functional-score support are reported as separate fields, so a site known to be functional from the primary literature is distinguishable from one predicted to be functional, and the view can be restricted to curated pairs or to functional sites. Visual encoding: Node shape and colour encode role (kinase, substrate, or both), and for predicted edges the line thickness and opacity scale with the composite confidence score, so relative support is visible and not merely filterable.*
+> *Kinase- or substrate-first querying: Seeding with a substrate returns all upstream kinases, curated and predicted, so the resource can be used to ask which kinases might act on a protein of interest as readily as the reverse. \[...\] Quantitative evidence on every interaction: The motif percentile, the kinase's rank for that site among all kinases, the phosphosite functional score, the number of shared subcellular compartments and the composite confidence score are all displayed in a filterable table of the interactions in view. A minimum-confidence slider filters predicted edges on the composite score. Explicit evidence provenance: Curated-site status and functional-score support are reported as separate fields, so a site known to be functional from the primary literature is distinguishable from one predicted to be functional, and the view can be restricted to curated pairs or to functional sites.*
+
+On the icons, node shape and color now carry information, as the Figure 4 caption describes:
+
+> *\[...\] Node shape and color encode role (hexagon, kinase; rectangle, substrate; diamond, both); edge color distinguishes curated (dark) from predicted (light) interactions; solid lines mark sites with functional support and dotted lines sites without; and the thickness and opacity of predicted edges scale with the composite confidence score.*
 
 On the question of in what way a site is functional: the phosphosite functional score is based on a gradient boosting model, trained on sites of known function, that aggregates 59 features grouped as mass-spectrometry evidence, phosphosite regulation, structural environment and evolutionary conservation into a single estimate of functional relevance [@Ochoa2020-og]. It indicates how likely a site is to be functional, not the mechanism; where a mechanism is known, it is described in the publications linked by PMID from each curated interaction's detail panel.
 
 On the promiscuous-kinase point specifically, the most connected kinase, CDK1, has 629 substrates in the revised resource. We added:
 
-> *Legible neighbourhoods for promiscuous kinases: Highly connected kinases would otherwise render as unreadable hairballs; the most connected, CDK1, has 629 substrates. A seeded neighbourhood is therefore capped at 75 interactions by default, chosen under a stated ordering (curated first, then by descending composite confidence, ties broken alphabetically), with the count shown and the cap removable in one click. The cap does not affect the 63% of kinases, and 96% of all proteins in the resource, whose neighbourhoods contain 75 or fewer interactions.*
+> *Legible neighborhoods for promiscuous kinases: Highly connected kinases would otherwise render as unreadable hairballs; the most connected, CDK1, has 629 substrates. A seeded neighborhood is therefore capped at 75 interactions by default, chosen under a stated ordering (curated first, then by descending composite confidence, ties broken alphabetically), with the count shown and the cap removable in one click. The cap does not affect the 63% of kinases, and 96% of all proteins in the resource, whose neighborhoods contain 75 or fewer interactions.*
 
-Clicking any protein or interaction now also opens a detail panel. Results, "Interactive exploration and visualization":
+Clicking any protein or interaction now also opens a detail panel, shown in Figure 4(D):
 
-> *Click-to-inspect detail panel: Selecting a protein shows its role, UniProt link, numbers of substrates and upstream kinases, and its highest-ranked interactions. Selecting an interaction shows its evidence, sources and PMIDs, together with a per-site table giving each site's flanking sequence, curation status, functional score, motif percentile, kinase rank and shared compartments, with curated sites listed first and the rest ranked by motif percentile.*
+> *\[...\] Detail panel for a selected interaction (TNIK to ORC2), giving the evidence behind it and a per-site table with the flanking sequence, curation status, functional score, motif percentile, kinase rank and number of shared compartments.*
 
-We also added:
-
-> *Site sequence context: Each site's -7/+7 flanking sequence is shown with the phosphoacceptor highlighted, verified against the canonical UniProt sequence for every site in the resource.*
+The flanking sequence shown for each site is verified against the canonical UniProt sequence (Methods, quoted under specific comment 18).
 
 These comments improved the resource more than any other part of the review.
 
@@ -278,7 +292,7 @@ We thank the reviewer for checking this prediction against PhosphoNET. Its top-r
 
 > *The value of layering orthogonal evidence is illustrated by RANGAP1 S442, an experimentally observed mitotic phosphosite that lies in a cyclin-dependent kinase (Cdk) consensus motif but has no assigned upstream kinase in the curated databases we integrated [@Swaminathan2004-rg]. \[...\] Localization does separate them: CDK1 and CDK3 share the cytosol with RANGAP1, whereas CDK2 and GSK3B are annotated only to compartments that RANGAP1 does not occupy and MARK3 has no HPA annotation. The site also carries a high functional score (0.92).*
 
-As a check independent of our pipeline, KinaseNET and KiNECTOR both list RANGAP1 S442 as a known site of CDK1, one of the two kinases our pipeline retains (KiNECTOR also lists T409, the site curated in the databases we integrated); neither gives a ranking. OmniPath's records for CDK1 at S442 [@Turei2016-op; @Turei2021-op] cite Swaminathan et al. (PMID 15037602), the study cited above, while its CDK2 and p38α (MAPK14) assignments for this site come from a computational prediction study (Linding et al., 2007; PMID 17570479). The experimental evidence for CDK1 at S442 therefore rests on a single study, and we present the site as a prioritised candidate rather than an established assignment. We could not repeat the reviewer's PhosphoNET check for this site or for the example under specific comment 18: www.phosphonet.ca did not respond, or returned a "service unavailable" error, whenever we tried between 21 and 24 September 2026.
+As a check independent of our pipeline, KinaseNET and KiNECTOR both list RANGAP1 S442 as a known site of CDK1, one of the two kinases our pipeline retains (KiNECTOR also lists T409, the site curated in the databases we integrated); neither gives a ranking. OmniPath's records for CDK1 at S442 [@Turei2016-op; @Turei2021-op] cite Swaminathan et al. (PMID 15037602), the study cited above, while its CDK2 and p38α (MAPK14) assignments for this site come from a computational prediction study (Linding et al., 2007; PMID 17570479). The experimental evidence for CDK1 at S442 therefore rests on a single study, and we present the site as a prioritized candidate rather than an established assignment. We could not repeat the reviewer's PhosphoNET check for this site or for the example under specific comment 18: www.phosphonet.ca did not respond, or returned a "service unavailable" error, whenever we tried between 21 September 2026 and 10 October 2026.
 
 **18\.**
 
@@ -286,7 +300,7 @@ As a check independent of our pipeline, KinaseNET and KiNECTOR both list RANGAP1
 
 The reviewer is right that this prediction should not have been made, and we are grateful for the care taken in checking it by hand. The cause was worse than the isoform-numbering issue the reviewer reasonably inferred, and we describe it in full because it affected the resource beyond this one example.
 
-The site does not exist on KIFAP3 at all. Our identifier-harmonisation code resolved gene symbols through an alias lookup and kept every match when an alias mapped to more than one gene. "SMAP" is an alias of C11orf58 (UniProt O00193), of KIFAP3 (via "Smg GDS-associated protein") and of BRD8, so a single phosphosite on O00193, S25, was emitted under three different substrate names while keeping O00193's residue numbering. The specificity atlas contains no S25 entry for KIFAP3; only S60 and S102. The reviewer's observation that UniProt Q92845 position 25 is a lysine is correct, and was the first sign of this.
+The site does not exist on KIFAP3 at all. Our identifier-harmonization code resolved gene symbols through an alias lookup and kept every match when an alias mapped to more than one gene. "SMAP" is an alias of C11orf58 (UniProt O00193), of KIFAP3 (via "Smg GDS-associated protein") and of BRD8, so a single phosphosite on O00193, S25, was emitted under three different substrate names while keeping O00193's residue numbering. The specificity atlas contains no S25 entry for KIFAP3; only S60 and S102. The reviewer's observation that UniProt Q92845 position 25 is a lysine is correct, and was the first sign of this.
 
 We have added a new Methods subsection, "Substrate and kinase identity resolution," describing the fix:
 
@@ -296,11 +310,11 @@ The mistake was general, so we audited the whole resource. It affected 12 of 10,
 
 The case study has been replaced. We rewrote the relevant paragraph of Discussion, "Biological insights from the integrated network":
 
-> *Similarly, our resource illuminates potential regulatory roles for dark kinases. MAPK15 (ERK8) is classified as understudied by the IDG programme [@Berginski2021-so] and has few annotated substrates despite belonging to a well-characterised, proline-directed kinase family. Our pipeline nominates RING1, the E3 ubiquitin ligase subunit of the Polycomb repressive complex 1, as a candidate substrate at S38. The prediction satisfies every criterion in the pipeline and is internally coherent with what is known about the kinase: MAPK15 is the top-ranked kinase of the entire kinome for this site (rank 1, 99.0th percentile), the site carries a high functional score (0.89), MAPK15 and RING1 share two annotated compartments (cytosol and nucleoplasm), and the local sequence (DGTEIAV-**S**\-PRSLHSE) is a canonical serine-proline motif of the kind MAPK-family kinases require. Six of the seven kinases that score at or above the 90th percentile for this site are retained (PINK1, ranked third, shares no compartment with RING1), and MAPK15 ranks first among them, well ahead of ERK1 (MAPK3; rank 2, 93.5th percentile). S38 is an experimentally observed phosphosite that currently has no assigned upstream kinase in the curated databases we integrated, which is precisely the gap this resource is intended to fill. We present it as a prioritised hypothesis for experimental testing rather than as an established mechanism.*
+> *Similarly, our resource illuminates potential regulatory roles for dark kinases. MAPK15 (ERK8) was classified as understudied by the IDG program [@Berginski2021-so] and has few annotated substrates despite belonging to a well-characterized, proline-directed kinase family. Our pipeline nominates RING1, the E3 ubiquitin ligase subunit of Polycomb repressive complex 1, as a candidate substrate at S38. The prediction satisfies every criterion in the pipeline and is internally coherent with what is known about the kinase: MAPK15 is the top-ranked kinase of the entire kinome for this site (rank 1, 99.0th percentile), the site carries a high functional score (0.89), MAPK15 and RING1 share two annotated compartments (cytosol and nucleoplasm), and the local sequence (DGTEIAV-**S**-PRSLHSE) is a canonical serine-proline motif of the kind MAPK-family kinases require. Six of the seven kinases that score at or above the 90th percentile for this site are retained (PINK1, ranked third, shares no compartment with RING1). S38 is an experimentally observed phosphosite that currently has no assigned upstream kinase in the curated databases we integrated. We present it as a prioritized hypothesis for experimental testing rather than as an established mechanism.*
 
-MAPK15 \-\> RING1 S38 is not listed in KinaseNET or KiNECTOR, as expected for an interaction that is novel with respect to curated resources, and we found no independent experimental support for it in the literature, HIPPIE or OmniPath. We therefore present it strictly as a prioritised hypothesis, and rest the argument for the pipeline on the RANGAP1 example (specific comment 17), where the prioritized kinase is independently supported.
+MAPK15 \-\> RING1 S38 is not listed in KinaseNET or KiNECTOR, as expected for an interaction that is novel with respect to curated resources, and we found no independent experimental support for it in the literature, HIPPIE or OmniPath. We therefore present it strictly as a prioritized hypothesis, and rest the argument for the pipeline on the RANGAP1 example (specific comment 17), where the prioritized kinase is independently supported.
 
-This flanking-sequence context, worked out by hand for the case study above, is now surfaced for every site in the Explorer itself, verified against the canonical UniProt sequence. See the Results passage quoted under specific comment 15\.
+This flanking-sequence context, worked out by hand for the case study above, is now shown for every site in the Explorer's detail panel (Figure 4(D)), verified against the canonical UniProt sequence as described in the Methods passage quoted above.
 
 References
 

@@ -130,6 +130,20 @@ quarto render paper/K-S-Database-Resource-Paper.qmd --to elsevier-html
 
 The PDF format needs a LaTeX installation.
 
+The two Word versions submitted with the revision are built together:
+
+```sh
+bash scripts/build_word_versions.sh
+```
+
+This writes `paper/K-S-Database-Resource-Paper.docx` (clean) and
+`paper/K-S-Database-Resource-Paper_revised.docx`, in which everything added or changed since the original
+submission (`paper/submitted_reference/`) is in blue. The script marks the changes
+(`scripts/mark_revisions.py`), renders both files, and then finishes them (`scripts/finalize_docx.py`):
+the front matter of the submitted PDF (affiliations, corresponding author), explicit page setup and figure
+sizes, and, for the marked-up copy, blue colouring that reaches citations, cross-references and maths.
+Edit the clean `.qmd`, never the `_revised.qmd`, which is regenerated.
+
 ## Figures and tables
 
 | Item | Produced by |

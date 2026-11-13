@@ -19,3 +19,5 @@ renv/staging/
 scripts/figure4/node_modules/
 scripts/figure4/package-lock.json
 scripts/figure4/capture/
+
+__pycache__/

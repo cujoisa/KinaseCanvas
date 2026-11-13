@@ -19,33 +19,35 @@ University of North Carolina at Chapel Hill\
 Chapel Hill, NC 27599\
 Chinmaya_Joisa@med.unc.edu | 919-527-8895
 
-September 24, 2026
+November 12, 2026
 
-**Re: Revised submission DATABASE-2026-0054 - "KinaseCanvas: An Integrated Resource for Curated and Novel Kinase-Substrate Interactions"**
+**Re: Second revision of DATABASE-2026-0054.R1 - "KinaseCanvas: An Integrated Resource for Curated and Novel Kinase-Substrate Interactions"**
 
-Dear Database Editors,
+Dear Dr. Ouellette and Database Editors,
 
-Thank you for the opportunity to revise our manuscript describing **KinaseCanvas**, an open-access resource that expands the functional annotation of the understudied "dark" kinome by integrating kinome-wide specificity atlases with curated kinase-substrate interactions. We thank both reviewers for their careful reading and have addressed every comment; a point-by-point response is enclosed, and changes to the manuscript are shown in blue.
+Thank you for the opportunity to submit a minor revision of our manuscript describing **KinaseCanvas**, an open-access resource that expands the functional annotation of the understudied "dark" kinome by integrating kinome-wide specificity atlases with curated kinase-substrate interactions. We have addressed every comment from Reviewer 2; a point-by-point response is enclosed, and changes made in this revision are shown in blue.
 
 **Principal revisions:**
 
-* **Corrected pipeline.** The reviewers' checks led us to re-audit the pipeline and correct two implementation errors: an identifier-resolution error and an error in the functional-score cut-off. The resource has been regenerated with added consistency checks, and every figure and statistic reflects the corrected pipeline.
+* **Motif reliability by kinase family.** A new analysis tests how well the specificity atlas recovers each kinase's curated sites. Recovery is well above chance overall and highest for atypical kinases, with weaker recovery for MTOR noted.
 
-* **New analyses.** Threshold sensitivity, a continuous confidence score for every interaction, the information content and independence of the evidence layers, and coverage by tissue specificity.
+* **Comparison with PhosphoNET.** The MAPK15-RING1 case study now reports that PhosphoNET favors other MAPKs for this site.
 
-* **Explorer.** Substrate-first queries, a pair mode that ranks candidate sites with their flanking sequences, quantitative evidence for every interaction, and a detail panel linking to UniProt and PubMed.
+* **Explorer.** The neighborhood cap for promiscuous kinases is replaced by a slider that adds interactions 75 at a time, up to the full neighborhood (Figure 4 updated).
 
-* **Data access.** Every released interaction carries the evidence values behind its classification; the tables, code and full prediction matrix are archived on Zenodo.
+* **Future directions.** Transfer of interactions from orthologous sites in other species, stimulus-resolved co-regulation data, and experimental validation of a random sample of predictions.
 
-**Key results of the revised resource:**
+* **Presentation.** Alt text below every figure legend; panel letters without brackets.
 
-* **Network expansion:** **21,916 novel kinase-substrate pairs**, for 30,280 pairs in total across 426 kinases and 3,901 substrates.
+**Key results of the resource (unchanged in this revision):**
 
-* **Illuminating the dark kinome:** The share of interactions involving understudied kinases rises 4.6-fold, from 3.4% to 15.7%.
+* **Network expansion:** **21,916 predicted kinase-substrate pairs absent from the curated databases we integrate**, for 30,280 pairs in total across 426 kinases and 3,901 substrates.
 
-* **Biological utility:** Layering localization and functional evidence onto motif scores prioritises CDK1 among five motif-compatible kinases for the mitotic phosphosite RANGAP1 S442, consistent with the study that first reported the site.
+* **Illuminating the dark kinome:** Relative to curated databases alone, the share of interactions involving understudied kinases rises 4.6-fold, from 3.4% to 15.7%.
 
-**Enclosed:** the response to reviewers; the revised manuscript with changes in blue, and a clean copy; and Supplementary Tables S2-S4 and the relaxed motif tier (Table S1, 3.6 GB, is on Zenodo).
+* **Biological utility:** For the mitotic phosphosite RANGAP1 S442, layering localization and functional evidence onto motif scores narrows five motif-compatible kinases to two, including CDK1, the kinase proposed by the study that first reported the site.
+
+**Enclosed:** the response to reviewers; the revised manuscript with changes in blue, and a clean copy; and Supplementary Tables S2–S4 and the relaxed motif tier (Table S1, 3.6 GB, is on Zenodo), unchanged from the previous round.
 
 Thank you for your time and consideration.
 
