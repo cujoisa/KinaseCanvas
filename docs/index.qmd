@@ -447,7 +447,7 @@ viewer_tags <- tags$div(
             tags$label(`for`="capN", "Interactions shown"),
             tags$input(type="range", id="capN", min="1", max="75", value="75", step="1"),
             tags$span(id="capNVal", class="badge", "–"),
-            tags$span(class="legend-note", "Draws the top interactions that pass the filters (default 75), curated first, then by confidence.")
+            tags$span(class="legend-note", "Default 75; curated first, then by confidence.")
           )
         ),
 
@@ -703,17 +703,43 @@ viewer_tags <- tags$div(
       const body = document.getElementById('detailBody');
       if(body){ body.innerHTML = html; }
     }
+    let detailSel = null;   // what the detail panel shows: {node} or {source, target}
     function clearDetailPanel(){
+      detailSel = null;
       renderDetailPanel('<p id=\\'detailPlaceholder\\'>Click a node or edge to see details.</p>');
+    }
+    // After a re-render, keep the user's selection if it is still drawn; otherwise describe
+    // the query itself (the single interaction in pair mode, else the first seed), so the
+    // column is never an empty box.
+    function restoreOrDefaultDetail(){
+      if(!detailSel || detailSel.auto){ showDefaultDetail(); return; }
+      if(detailSel.node){
+        const n = cy.getElementById(detailSel.node);
+        if(n && n.length){ showNodeDetail(n); return; }
+      } else {
+        const e = cy.edges().filter(x => x.data('source') === detailSel.source && x.data('target') === detailSel.target);
+        if(e.length){ showEdgeDetail(e[0]); return; }
+      }
+      showDefaultDetail();
+    }
+    function showDefaultDetail(){
+      const pairEdges = cy.edges();
+      const seed = (currentSeeds || []).map(s => cy.getElementById(s)).find(n => n && n.length);
+      if(document.getElementById('pairModeChk')?.checked && pairEdges.length === 1){ showEdgeDetail(pairEdges[0]); }
+      else if(seed){ showNodeDetail(seed); }
+      else { clearDetailPanel(); return; }
+      detailSel.auto = true;   // follows the query; a click replaces it with a user selection
     }
 
     function showNodeDetail(node){
       const d = node.data();
+      detailSel = {node: d.id};
       const role = d.role || '';
       const isK = role.indexOf('Kinase') >= 0, isS = role.indexOf('Substrate') >= 0;
       const roleLabel = (isK && isS) ? 'Kinase and substrate' : isK ? 'Kinase' : 'Substrate';
-      const outN = node.outgoers('node').length;
-      const inN  = node.incomers('node').length;
+      // Count from the whole resource, not the drawn neighbourhood, which the cap may truncate.
+      const outN = new Set(data.edges.filter(e => e.source === d.id).map(e => e.target)).size;
+      const inN  = new Set(data.edges.filter(e => e.target === d.id).map(e => e.source)).size;
       const relatedEdges = data.edges
         .filter(e => e.source === d.id || e.target === d.id)
         .slice().sort(edgeRankCompare).slice(0, 5);
@@ -739,6 +765,7 @@ viewer_tags <- tags$div(
 
     function showEdgeDetail(edge){
       const d = edge.data();
+      detailSel = {source: d.source, target: d.target};
       let html = '<span class=\\'detail-role\\'>' + escHtml(d.evidence) + '</span>';
       html += '<h4>' + escHtml(d.source) + ' -> ' + escHtml(d.target) + '</h4>';
       html += '<p>' + uniprotLink(d.Uniprot, d.target) + '</p>';
@@ -785,7 +812,7 @@ viewer_tags <- tags$div(
     // doesn't cost the user their place in the graph.
     cy.on('tap', 'node', evt => showNodeDetail(evt.target));
     cy.on('tap', 'edge', evt => showEdgeDetail(evt.target));
-    cy.on('tap', evt => { if(evt.target === cy){ clearDetailPanel(); } });
+    cy.on('tap', evt => { if(evt.target === cy){ detailSel = null; showDefaultDetail(); } });
 
     // Collapse the controls sidebar to give the canvas the full left side; the canvas is
     // re-measured and re-fitted because its container width changes.
@@ -1111,9 +1138,8 @@ viewer_tags <- tags$div(
         const filtered = (lastTruncation.filteredOut > 0
           ? ' ' + lastTruncation.filteredOut + ' more removed by the filters.' : '') + allCurated;
         note.textContent = lastTruncation.hidden > 0
-          ? 'Showing the ' + lastTruncation.shown + ' best-supported of ' +
-            lastTruncation.total + ' interactions (curated first, then by confidence). ' +
-            lastTruncation.hidden + ' hidden; move the Interactions shown slider to see more.' + filtered
+          ? 'Showing ' + lastTruncation.shown + ' of ' + lastTruncation.total +
+            ' interactions, curated first, then by confidence; use Interactions shown to see more.' + filtered
           : (elems.edges.length === 0 && lastTruncation.filteredOut > 0)
             ? 'No interactions pass the current filters (' + lastTruncation.filteredOut + ' removed).'
           : (pairMode && elems.edges.length === 0)
@@ -1126,6 +1152,7 @@ viewer_tags <- tags$div(
       applyNodeSizing();
       applyFilters(true);
       refreshEdgesTable();
+      restoreOrDefaultDetail();
     }
 
     const triggerRender = () => render();

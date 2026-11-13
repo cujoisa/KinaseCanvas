@@ -2484,7 +2484,7 @@ Arrows
 <label for="capN">Interactions shown</label>
 <input type="range" id="capN" min="1" max="75" value="75" step="1">
 <span id="capNVal" class="badge">–</span>
-<span class="legend-note">Draws the top interactions that pass the filters (default 75), curated first, then by confidence.</span>
+<span class="legend-note">Default 75; curated first, then by confidence.</span>
 </div>
 </div>
 <div class="sidebar-group">
@@ -13628,17 +13628,43 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
       const body = document.getElementById('detailBody');
       if(body){ body.innerHTML = html; }
     }
+    let detailSel = null;   // what the detail panel shows: {node} or {source, target}
     function clearDetailPanel(){
+      detailSel = null;
       renderDetailPanel('<p id=\'detailPlaceholder\'>Click a node or edge to see details.</p>');
+    }
+    // After a re-render, keep the user's selection if it is still drawn; otherwise describe
+    // the query itself (the single interaction in pair mode, else the first seed), so the
+    // column is never an empty box.
+    function restoreOrDefaultDetail(){
+      if(!detailSel || detailSel.auto){ showDefaultDetail(); return; }
+      if(detailSel.node){
+        const n = cy.getElementById(detailSel.node);
+        if(n && n.length){ showNodeDetail(n); return; }
+      } else {
+        const e = cy.edges().filter(x => x.data('source') === detailSel.source && x.data('target') === detailSel.target);
+        if(e.length){ showEdgeDetail(e[0]); return; }
+      }
+      showDefaultDetail();
+    }
+    function showDefaultDetail(){
+      const pairEdges = cy.edges();
+      const seed = (currentSeeds || []).map(s => cy.getElementById(s)).find(n => n && n.length);
+      if(document.getElementById('pairModeChk')?.checked && pairEdges.length === 1){ showEdgeDetail(pairEdges[0]); }
+      else if(seed){ showNodeDetail(seed); }
+      else { clearDetailPanel(); return; }
+      detailSel.auto = true;   // follows the query; a click replaces it with a user selection
     }
 
     function showNodeDetail(node){
       const d = node.data();
+      detailSel = {node: d.id};
       const role = d.role || '';
       const isK = role.indexOf('Kinase') >= 0, isS = role.indexOf('Substrate') >= 0;
       const roleLabel = (isK && isS) ? 'Kinase and substrate' : isK ? 'Kinase' : 'Substrate';
-      const outN = node.outgoers('node').length;
-      const inN  = node.incomers('node').length;
+      // Count from the whole resource, not the drawn neighbourhood, which the cap may truncate.
+      const outN = new Set(data.edges.filter(e => e.source === d.id).map(e => e.target)).size;
+      const inN  = new Set(data.edges.filter(e => e.target === d.id).map(e => e.source)).size;
       const relatedEdges = data.edges
         .filter(e => e.source === d.id || e.target === d.id)
         .slice().sort(edgeRankCompare).slice(0, 5);
@@ -13664,6 +13690,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
 
     function showEdgeDetail(edge){
       const d = edge.data();
+      detailSel = {source: d.source, target: d.target};
       let html = '<span class=\'detail-role\'>' + escHtml(d.evidence) + '</span>';
       html += '<h4>' + escHtml(d.source) + ' -> ' + escHtml(d.target) + '</h4>';
       html += '<p>' + uniprotLink(d.Uniprot, d.target) + '</p>';
@@ -13710,7 +13737,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
     // doesn't cost the user their place in the graph.
     cy.on('tap', 'node', evt => showNodeDetail(evt.target));
     cy.on('tap', 'edge', evt => showEdgeDetail(evt.target));
-    cy.on('tap', evt => { if(evt.target === cy){ clearDetailPanel(); } });
+    cy.on('tap', evt => { if(evt.target === cy){ detailSel = null; showDefaultDetail(); } });
 
     // Collapse the controls sidebar to give the canvas the full left side; the canvas is
     // re-measured and re-fitted because its container width changes.
@@ -14036,9 +14063,8 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
         const filtered = (lastTruncation.filteredOut > 0
           ? ' ' + lastTruncation.filteredOut + ' more removed by the filters.' : '') + allCurated;
         note.textContent = lastTruncation.hidden > 0
-          ? 'Showing the ' + lastTruncation.shown + ' best-supported of ' +
-            lastTruncation.total + ' interactions (curated first, then by confidence). ' +
-            lastTruncation.hidden + ' hidden; move the Interactions shown slider to see more.' + filtered
+          ? 'Showing ' + lastTruncation.shown + ' of ' + lastTruncation.total +
+            ' interactions, curated first, then by confidence; use Interactions shown to see more.' + filtered
           : (elems.edges.length === 0 && lastTruncation.filteredOut > 0)
             ? 'No interactions pass the current filters (' + lastTruncation.filteredOut + ' removed).'
           : (pairMode && elems.edges.length === 0)
@@ -14051,6 +14077,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
       applyNodeSizing();
       applyFilters(true);
       refreshEdgesTable();
+      restoreOrDefaultDetail();
     }
 
     const triggerRender = () => render();
@@ -15071,7 +15098,7 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
 <span id="cb1-449"><a href="#cb1-449" aria-hidden="true" tabindex="-1"></a>            tags<span class="sc">$</span><span class="fu">label</span>(<span class="st">`</span><span class="at">for</span><span class="st">`</span><span class="ot">=</span><span class="st">&quot;capN&quot;</span>, <span class="st">&quot;Interactions shown&quot;</span>),</span>
 <span id="cb1-450"><a href="#cb1-450" aria-hidden="true" tabindex="-1"></a>            tags<span class="sc">$</span><span class="fu">input</span>(<span class="at">type=</span><span class="st">&quot;range&quot;</span>, <span class="at">id=</span><span class="st">&quot;capN&quot;</span>, <span class="at">min=</span><span class="st">&quot;1&quot;</span>, <span class="at">max=</span><span class="st">&quot;75&quot;</span>, <span class="at">value=</span><span class="st">&quot;75&quot;</span>, <span class="at">step=</span><span class="st">&quot;1&quot;</span>),</span>
 <span id="cb1-451"><a href="#cb1-451" aria-hidden="true" tabindex="-1"></a>            tags<span class="sc">$</span><span class="fu">span</span>(<span class="at">id=</span><span class="st">&quot;capNVal&quot;</span>, <span class="at">class=</span><span class="st">&quot;badge&quot;</span>, <span class="st">&quot;–&quot;</span>),</span>
-<span id="cb1-452"><a href="#cb1-452" aria-hidden="true" tabindex="-1"></a>            tags<span class="sc">$</span><span class="fu">span</span>(<span class="at">class=</span><span class="st">&quot;legend-note&quot;</span>, <span class="st">&quot;Draws the top interactions that pass the filters (default 75), curated first, then by confidence.&quot;</span>)</span>
+<span id="cb1-452"><a href="#cb1-452" aria-hidden="true" tabindex="-1"></a>            tags<span class="sc">$</span><span class="fu">span</span>(<span class="at">class=</span><span class="st">&quot;legend-note&quot;</span>, <span class="st">&quot;Default 75; curated first, then by confidence.&quot;</span>)</span>
 <span id="cb1-453"><a href="#cb1-453" aria-hidden="true" tabindex="-1"></a>          )</span>
 <span id="cb1-454"><a href="#cb1-454" aria-hidden="true" tabindex="-1"></a>        ),</span>
 <span id="cb1-455"><a href="#cb1-455" aria-hidden="true" tabindex="-1"></a></span>
@@ -15327,545 +15354,572 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var r,n,i,a,
 <span id="cb1-705"><a href="#cb1-705" aria-hidden="true" tabindex="-1"></a><span class="st">      const body = document.getElementById(&#39;detailBody&#39;);</span></span>
 <span id="cb1-706"><a href="#cb1-706" aria-hidden="true" tabindex="-1"></a><span class="st">      if(body){ body.innerHTML = html; }</span></span>
 <span id="cb1-707"><a href="#cb1-707" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-708"><a href="#cb1-708" aria-hidden="true" tabindex="-1"></a><span class="st">    function clearDetailPanel(){</span></span>
-<span id="cb1-709"><a href="#cb1-709" aria-hidden="true" tabindex="-1"></a><span class="st">      renderDetailPanel(&#39;&lt;p id=</span><span class="sc">\\</span><span class="st">&#39;detailPlaceholder</span><span class="sc">\\</span><span class="st">&#39;&gt;Click a node or edge to see details.&lt;/p&gt;&#39;);</span></span>
-<span id="cb1-710"><a href="#cb1-710" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-711"><a href="#cb1-711" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-712"><a href="#cb1-712" aria-hidden="true" tabindex="-1"></a><span class="st">    function showNodeDetail(node){</span></span>
-<span id="cb1-713"><a href="#cb1-713" aria-hidden="true" tabindex="-1"></a><span class="st">      const d = node.data();</span></span>
-<span id="cb1-714"><a href="#cb1-714" aria-hidden="true" tabindex="-1"></a><span class="st">      const role = d.role || &#39;&#39;;</span></span>
-<span id="cb1-715"><a href="#cb1-715" aria-hidden="true" tabindex="-1"></a><span class="st">      const isK = role.indexOf(&#39;Kinase&#39;) &gt;= 0, isS = role.indexOf(&#39;Substrate&#39;) &gt;= 0;</span></span>
-<span id="cb1-716"><a href="#cb1-716" aria-hidden="true" tabindex="-1"></a><span class="st">      const roleLabel = (isK &amp;&amp; isS) ? &#39;Kinase and substrate&#39; : isK ? &#39;Kinase&#39; : &#39;Substrate&#39;;</span></span>
-<span id="cb1-717"><a href="#cb1-717" aria-hidden="true" tabindex="-1"></a><span class="st">      const outN = node.outgoers(&#39;node&#39;).length;</span></span>
-<span id="cb1-718"><a href="#cb1-718" aria-hidden="true" tabindex="-1"></a><span class="st">      const inN  = node.incomers(&#39;node&#39;).length;</span></span>
-<span id="cb1-719"><a href="#cb1-719" aria-hidden="true" tabindex="-1"></a><span class="st">      const relatedEdges = data.edges</span></span>
-<span id="cb1-720"><a href="#cb1-720" aria-hidden="true" tabindex="-1"></a><span class="st">        .filter(e =&gt; e.source === d.id || e.target === d.id)</span></span>
-<span id="cb1-721"><a href="#cb1-721" aria-hidden="true" tabindex="-1"></a><span class="st">        .slice().sort(edgeRankCompare).slice(0, 5);</span></span>
-<span id="cb1-722"><a href="#cb1-722" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-723"><a href="#cb1-723" aria-hidden="true" tabindex="-1"></a><span class="st">      let html = &#39;&lt;span class=</span><span class="sc">\\</span><span class="st">&#39;detail-role</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(roleLabel) + &#39;&lt;/span&gt;&#39;;</span></span>
-<span id="cb1-724"><a href="#cb1-724" aria-hidden="true" tabindex="-1"></a><span class="st">      html += &#39;&lt;h4&gt;&#39; + escHtml(d.label) + &#39;&lt;/h4&gt;&#39;;</span></span>
-<span id="cb1-725"><a href="#cb1-725" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.uniprot){ html += &#39;&lt;p&gt;&#39; + uniprotLink(d.uniprot, d.label) + &#39;&lt;/p&gt;&#39;; }</span></span>
-<span id="cb1-726"><a href="#cb1-726" aria-hidden="true" tabindex="-1"></a><span class="st">      if(isK){ html += detailRow(&#39;Substrates&#39;, outN); }</span></span>
-<span id="cb1-727"><a href="#cb1-727" aria-hidden="true" tabindex="-1"></a><span class="st">      if(isS){ html += detailRow(&#39;Upstream kinases&#39;, inN); }</span></span>
-<span id="cb1-728"><a href="#cb1-728" aria-hidden="true" tabindex="-1"></a><span class="st">      if(relatedEdges.length){</span></span>
-<span id="cb1-729"><a href="#cb1-729" aria-hidden="true" tabindex="-1"></a><span class="st">        html += &#39;&lt;div class=</span><span class="sc">\\</span><span class="st">&#39;detail-sites</span><span class="sc">\\</span><span class="st">&#39;&gt;&lt;strong&gt;Top interactions&lt;/strong&gt;&lt;ul class=</span><span class="sc">\\</span><span class="st">&#39;detail-interactions</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39;;</span></span>
-<span id="cb1-730"><a href="#cb1-730" aria-hidden="true" tabindex="-1"></a><span class="st">        relatedEdges.forEach(e =&gt; {</span></span>
-<span id="cb1-731"><a href="#cb1-731" aria-hidden="true" tabindex="-1"></a><span class="st">          const other = (e.source === d.id) ? e.target : e.source;</span></span>
-<span id="cb1-732"><a href="#cb1-732" aria-hidden="true" tabindex="-1"></a><span class="st">          const dir   = (e.source === d.id) ? &#39; -&gt; &#39; : &#39; &lt;- &#39;;</span></span>
-<span id="cb1-733"><a href="#cb1-733" aria-hidden="true" tabindex="-1"></a><span class="st">          html += &#39;&lt;li&gt;&lt;button type=</span><span class="sc">\\</span><span class="st">&#39;button</span><span class="sc">\\</span><span class="st">&#39; class=</span><span class="sc">\\</span><span class="st">&#39;detail-jump</span><span class="sc">\\</span><span class="st">&#39; data-source=</span><span class="sc">\\</span><span class="st">&#39;&#39; + escHtml(e.source) +</span></span>
-<span id="cb1-734"><a href="#cb1-734" aria-hidden="true" tabindex="-1"></a><span class="st">                  &#39;</span><span class="sc">\\</span><span class="st">&#39; data-target=</span><span class="sc">\\</span><span class="st">&#39;&#39; + escHtml(e.target) + &#39;</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(d.label) + dir + escHtml(other) +</span></span>
-<span id="cb1-735"><a href="#cb1-735" aria-hidden="true" tabindex="-1"></a><span class="st">                  &#39;&lt;/button&gt; (&#39; + escHtml(e.evidence) + &#39;)&lt;/li&gt;&#39;;</span></span>
-<span id="cb1-736"><a href="#cb1-736" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
-<span id="cb1-737"><a href="#cb1-737" aria-hidden="true" tabindex="-1"></a><span class="st">        html += &#39;&lt;/ul&gt;&lt;/div&gt;&#39;;</span></span>
-<span id="cb1-738"><a href="#cb1-738" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
-<span id="cb1-739"><a href="#cb1-739" aria-hidden="true" tabindex="-1"></a><span class="st">      renderDetailPanel(html);</span></span>
-<span id="cb1-740"><a href="#cb1-740" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-741"><a href="#cb1-741" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-742"><a href="#cb1-742" aria-hidden="true" tabindex="-1"></a><span class="st">    function showEdgeDetail(edge){</span></span>
-<span id="cb1-743"><a href="#cb1-743" aria-hidden="true" tabindex="-1"></a><span class="st">      const d = edge.data();</span></span>
-<span id="cb1-744"><a href="#cb1-744" aria-hidden="true" tabindex="-1"></a><span class="st">      let html = &#39;&lt;span class=</span><span class="sc">\\</span><span class="st">&#39;detail-role</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(d.evidence) + &#39;&lt;/span&gt;&#39;;</span></span>
-<span id="cb1-745"><a href="#cb1-745" aria-hidden="true" tabindex="-1"></a><span class="st">      html += &#39;&lt;h4&gt;&#39; + escHtml(d.source) + &#39; -&gt; &#39; + escHtml(d.target) + &#39;&lt;/h4&gt;&#39;;</span></span>
-<span id="cb1-746"><a href="#cb1-746" aria-hidden="true" tabindex="-1"></a><span class="st">      html += &#39;&lt;p&gt;&#39; + uniprotLink(d.Uniprot, d.target) + &#39;&lt;/p&gt;&#39;;</span></span>
-<span id="cb1-747"><a href="#cb1-747" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.Score != null &amp;&amp; d.Score !== &#39;&#39;){ html += detailRow(&#39;Composite score&#39;, Number(d.Score).toFixed(2)); }</span></span>
-<span id="cb1-748"><a href="#cb1-748" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.MotifPercentile != null &amp;&amp; d.MotifPercentile !== &#39;&#39;){ html += detailRow(&#39;Motif percentile&#39;, d.MotifPercentile); }</span></span>
-<span id="cb1-749"><a href="#cb1-749" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.MotifRank != null &amp;&amp; d.MotifRank !== &#39;&#39;){ html += detailRow(&#39;Kinase rank for site&#39;, d.MotifRank); }</span></span>
-<span id="cb1-750"><a href="#cb1-750" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.SharedCompartments != null &amp;&amp; d.SharedCompartments !== &#39;&#39;){ html += detailRow(&#39;Shared compartments&#39;, d.SharedCompartments); }</span></span>
-<span id="cb1-751"><a href="#cb1-751" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.SourceList){ html += detailRow(&#39;Sources&#39;, d.SourceList); }</span></span>
-<span id="cb1-752"><a href="#cb1-752" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.Reference_PMID){ html += pmidRow(d.Reference_PMID); }</span></span>
-<span id="cb1-753"><a href="#cb1-753" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-754"><a href="#cb1-754" aria-hidden="true" tabindex="-1"></a><span class="st">      // Rank candidate sites for the pair: sites where this kinase-site pairing is</span></span>
-<span id="cb1-755"><a href="#cb1-755" aria-hidden="true" tabindex="-1"></a><span class="st">      // curated first, then by how well the site fits the kinase motif, then by name.</span></span>
-<span id="cb1-756"><a href="#cb1-756" aria-hidden="true" tabindex="-1"></a><span class="st">      const sites = siteData</span></span>
-<span id="cb1-757"><a href="#cb1-757" aria-hidden="true" tabindex="-1"></a><span class="st">        .filter(s =&gt; s.kinase === d.source &amp;&amp; s.substrate === d.target)</span></span>
-<span id="cb1-758"><a href="#cb1-758" aria-hidden="true" tabindex="-1"></a><span class="st">        .slice()</span></span>
-<span id="cb1-759"><a href="#cb1-759" aria-hidden="true" tabindex="-1"></a><span class="st">        .sort((a, b) =&gt; ((b.evidence === &#39;Curated&#39;) - (a.evidence === &#39;Curated&#39;)) ||</span></span>
-<span id="cb1-760"><a href="#cb1-760" aria-hidden="true" tabindex="-1"></a><span class="st">                        ((b.motifPercentile ?? -1) - (a.motifPercentile ?? -1)) ||</span></span>
-<span id="cb1-761"><a href="#cb1-761" aria-hidden="true" tabindex="-1"></a><span class="st">                        String(a.site).localeCompare(String(b.site)));</span></span>
-<span id="cb1-762"><a href="#cb1-762" aria-hidden="true" tabindex="-1"></a><span class="st">      if(sites.length){</span></span>
-<span id="cb1-763"><a href="#cb1-763" aria-hidden="true" tabindex="-1"></a><span class="st">        html += &#39;&lt;div class=</span><span class="sc">\\</span><span class="st">&#39;detail-sites</span><span class="sc">\\</span><span class="st">&#39;&gt;&lt;strong&gt;Sites&lt;/strong&gt;&lt;div class=</span><span class="sc">\\</span><span class="st">&#39;table-scroll</span><span class="sc">\\</span><span class="st">&#39;&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&#39; +</span></span>
-<span id="cb1-764"><a href="#cb1-764" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th&gt;Site&lt;/th&gt;&lt;th title=</span><span class="sc">\\</span><span class="st">&#39;Flanking sequence, -7 to +7</span><span class="sc">\\</span><span class="st">&#39;&gt;Sequence (+/-7)&lt;/th&gt;&#39; +</span></span>
-<span id="cb1-765"><a href="#cb1-765" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39; title=</span><span class="sc">\\</span><span class="st">&#39;Site curated in PhosphoSitePlus, EPSD or iPTMnet</span><span class="sc">\\</span><span class="st">&#39;&gt;Cur.&lt;/th&gt;&#39; +</span></span>
-<span id="cb1-766"><a href="#cb1-766" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39; title=</span><span class="sc">\\</span><span class="st">&#39;Phosphosite functional score</span><span class="sc">\\</span><span class="st">&#39;&gt;Func.&lt;/th&gt;&#39; +</span></span>
-<span id="cb1-767"><a href="#cb1-767" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39; title=</span><span class="sc">\\</span><span class="st">&#39;Motif percentile</span><span class="sc">\\</span><span class="st">&#39;&gt;Motif&lt;/th&gt;&#39; +</span></span>
-<span id="cb1-768"><a href="#cb1-768" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39; title=</span><span class="sc">\\</span><span class="st">&#39;Kinase rank for this site</span><span class="sc">\\</span><span class="st">&#39;&gt;Rank&lt;/th&gt;&#39; +</span></span>
-<span id="cb1-769"><a href="#cb1-769" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39; title=</span><span class="sc">\\</span><span class="st">&#39;Shared subcellular compartments</span><span class="sc">\\</span><span class="st">&#39;&gt;Comp.&lt;/th&gt;&#39; +</span></span>
-<span id="cb1-770"><a href="#cb1-770" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&#39;;</span></span>
-<span id="cb1-771"><a href="#cb1-771" aria-hidden="true" tabindex="-1"></a><span class="st">        sites.forEach(s =&gt; {</span></span>
-<span id="cb1-772"><a href="#cb1-772" aria-hidden="true" tabindex="-1"></a><span class="st">          html += &#39;&lt;tr&gt;&lt;td&gt;&#39; + escHtml(s.site) + &#39;&lt;/td&gt;&#39; +</span></span>
-<span id="cb1-773"><a href="#cb1-773" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + renderFlank(s.flankingSequence) + &#39;&lt;/td&gt;&#39; +</span></span>
-<span id="cb1-774"><a href="#cb1-774" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + (s.curatedSite ? &#39;yes&#39; : &#39;no&#39;) + &#39;&lt;/td&gt;&#39; +</span></span>
-<span id="cb1-775"><a href="#cb1-775" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(s.functionalScore) + &#39;&lt;/td&gt;&#39; +</span></span>
-<span id="cb1-776"><a href="#cb1-776" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(s.motifPercentile) + &#39;&lt;/td&gt;&#39; +</span></span>
-<span id="cb1-777"><a href="#cb1-777" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(s.motifRank) + &#39;&lt;/td&gt;&#39; +</span></span>
-<span id="cb1-778"><a href="#cb1-778" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(s.sharedCompartments) + &#39;&lt;/td&gt;&lt;/tr&gt;&#39;;</span></span>
-<span id="cb1-779"><a href="#cb1-779" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
-<span id="cb1-780"><a href="#cb1-780" aria-hidden="true" tabindex="-1"></a><span class="st">        html += &#39;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;&#39;;</span></span>
-<span id="cb1-781"><a href="#cb1-781" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
-<span id="cb1-782"><a href="#cb1-782" aria-hidden="true" tabindex="-1"></a><span class="st">      renderDetailPanel(html);</span></span>
-<span id="cb1-783"><a href="#cb1-783" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-784"><a href="#cb1-784" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-785"><a href="#cb1-785" aria-hidden="true" tabindex="-1"></a><span class="st">    // Node/edge click now opens the detail panel instead of navigating directly</span></span>
-<span id="cb1-786"><a href="#cb1-786" aria-hidden="true" tabindex="-1"></a><span class="st">    // to UniProt -- the link is inside the panel instead, so clicking to inspect</span></span>
-<span id="cb1-787"><a href="#cb1-787" aria-hidden="true" tabindex="-1"></a><span class="st">    // doesn&#39;t cost the user their place in the graph.</span></span>
-<span id="cb1-788"><a href="#cb1-788" aria-hidden="true" tabindex="-1"></a><span class="st">    cy.on(&#39;tap&#39;, &#39;node&#39;, evt =&gt; showNodeDetail(evt.target));</span></span>
-<span id="cb1-789"><a href="#cb1-789" aria-hidden="true" tabindex="-1"></a><span class="st">    cy.on(&#39;tap&#39;, &#39;edge&#39;, evt =&gt; showEdgeDetail(evt.target));</span></span>
-<span id="cb1-790"><a href="#cb1-790" aria-hidden="true" tabindex="-1"></a><span class="st">    cy.on(&#39;tap&#39;, evt =&gt; { if(evt.target === cy){ clearDetailPanel(); } });</span></span>
-<span id="cb1-791"><a href="#cb1-791" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-792"><a href="#cb1-792" aria-hidden="true" tabindex="-1"></a><span class="st">    // Collapse the controls sidebar to give the canvas the full left side; the canvas is</span></span>
-<span id="cb1-793"><a href="#cb1-793" aria-hidden="true" tabindex="-1"></a><span class="st">    // re-measured and re-fitted because its container width changes.</span></span>
-<span id="cb1-794"><a href="#cb1-794" aria-hidden="true" tabindex="-1"></a><span class="st">    const FIT_PADDING = 30;</span></span>
-<span id="cb1-795"><a href="#cb1-795" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;btnControls&#39;).addEventListener(&#39;click&#39;, evt =&gt; {</span></span>
-<span id="cb1-796"><a href="#cb1-796" aria-hidden="true" tabindex="-1"></a><span class="st">      const hidden = document.querySelector(&#39;.app-grid&#39;).classList.toggle(&#39;controls-hidden&#39;);</span></span>
-<span id="cb1-797"><a href="#cb1-797" aria-hidden="true" tabindex="-1"></a><span class="st">      evt.currentTarget.textContent = hidden ? &#39;Show controls&#39; : &#39;Hide controls&#39;;</span></span>
-<span id="cb1-798"><a href="#cb1-798" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.resize();</span></span>
-<span id="cb1-799"><a href="#cb1-799" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.fit(undefined, FIT_PADDING);</span></span>
-<span id="cb1-800"><a href="#cb1-800" aria-hidden="true" tabindex="-1"></a><span class="st">    });</span></span>
-<span id="cb1-801"><a href="#cb1-801" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-802"><a href="#cb1-802" aria-hidden="true" tabindex="-1"></a><span class="st">    const detailBodyEl = document.getElementById(&#39;detailBody&#39;);</span></span>
-<span id="cb1-803"><a href="#cb1-803" aria-hidden="true" tabindex="-1"></a><span class="st">    if(detailBodyEl){</span></span>
-<span id="cb1-804"><a href="#cb1-804" aria-hidden="true" tabindex="-1"></a><span class="st">      detailBodyEl.addEventListener(&#39;click&#39;, evt =&gt; {</span></span>
-<span id="cb1-805"><a href="#cb1-805" aria-hidden="true" tabindex="-1"></a><span class="st">        const btn = evt.target.closest(&#39;.detail-jump&#39;);</span></span>
-<span id="cb1-806"><a href="#cb1-806" aria-hidden="true" tabindex="-1"></a><span class="st">        if(!btn) return;</span></span>
-<span id="cb1-807"><a href="#cb1-807" aria-hidden="true" tabindex="-1"></a><span class="st">        const src = btn.getAttribute(&#39;data-source&#39;);</span></span>
-<span id="cb1-808"><a href="#cb1-808" aria-hidden="true" tabindex="-1"></a><span class="st">        const tgt = btn.getAttribute(&#39;data-target&#39;);</span></span>
-<span id="cb1-809"><a href="#cb1-809" aria-hidden="true" tabindex="-1"></a><span class="st">        const matches = cy.edges().filter(ele =&gt; ele.data(&#39;source&#39;) === src &amp;&amp; ele.data(&#39;target&#39;) === tgt);</span></span>
-<span id="cb1-810"><a href="#cb1-810" aria-hidden="true" tabindex="-1"></a><span class="st">        if(matches.length){</span></span>
-<span id="cb1-811"><a href="#cb1-811" aria-hidden="true" tabindex="-1"></a><span class="st">          showEdgeDetail(matches[0]);</span></span>
-<span id="cb1-812"><a href="#cb1-812" aria-hidden="true" tabindex="-1"></a><span class="st">          cy.edges().unselect();</span></span>
-<span id="cb1-813"><a href="#cb1-813" aria-hidden="true" tabindex="-1"></a><span class="st">          matches[0].select();</span></span>
-<span id="cb1-814"><a href="#cb1-814" aria-hidden="true" tabindex="-1"></a><span class="st">        }</span></span>
-<span id="cb1-815"><a href="#cb1-815" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
-<span id="cb1-816"><a href="#cb1-816" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-817"><a href="#cb1-817" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-818"><a href="#cb1-818" aria-hidden="true" tabindex="-1"></a><span class="st">    function setEdgeLabels(show){</span></span>
-<span id="cb1-819"><a href="#cb1-819" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.style().selector(&#39;edge&#39;).style(&#39;label&#39;, show ? &#39;data(edgeLabel)&#39; : &#39;&#39;).update();</span></span>
-<span id="cb1-820"><a href="#cb1-820" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-821"><a href="#cb1-821" aria-hidden="true" tabindex="-1"></a><span class="st">    function setArrows(show){</span></span>
-<span id="cb1-822"><a href="#cb1-822" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.style().selector(&#39;edge&#39;).style(&#39;target-arrow-shape&#39;, show ? &#39;triangle&#39; : &#39;none&#39;).update();</span></span>
-<span id="cb1-823"><a href="#cb1-823" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-824"><a href="#cb1-824" aria-hidden="true" tabindex="-1"></a><span class="st">    function applyNodeSizing(){</span></span>
-<span id="cb1-825"><a href="#cb1-825" aria-hidden="true" tabindex="-1"></a><span class="st">      const scale = Number(labelScale.value || 100) / 100;</span></span>
-<span id="cb1-826"><a href="#cb1-826" aria-hidden="true" tabindex="-1"></a><span class="st">      if(labelScaleEl){ labelScaleEl.textContent = Math.round(scale * 100) + &#39;%&#39;; }</span></span>
-<span id="cb1-827"><a href="#cb1-827" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.batch(() =&gt; {</span></span>
-<span id="cb1-828"><a href="#cb1-828" aria-hidden="true" tabindex="-1"></a><span class="st">        cy.nodes().forEach(n =&gt; {</span></span>
-<span id="cb1-829"><a href="#cb1-829" aria-hidden="true" tabindex="-1"></a><span class="st">          const fontSize = Math.max(9, Math.min(18, baseFont * scale));</span></span>
-<span id="cb1-830"><a href="#cb1-830" aria-hidden="true" tabindex="-1"></a><span class="st">          const role = n.data(&#39;role&#39;) || &#39;&#39;;</span></span>
-<span id="cb1-831"><a href="#cb1-831" aria-hidden="true" tabindex="-1"></a><span class="st">          const isK = role.indexOf(&#39;Kinase&#39;) &gt;= 0, isS = role.indexOf(&#39;Substrate&#39;) &gt;= 0;</span></span>
-<span id="cb1-832"><a href="#cb1-832" aria-hidden="true" tabindex="-1"></a><span class="st">          // Hexagon and diamond shapes have less usable interior than a rectangle</span></span>
-<span id="cb1-833"><a href="#cb1-833" aria-hidden="true" tabindex="-1"></a><span class="st">          // of the same bounding box, so give them extra padding to keep labels</span></span>
-<span id="cb1-834"><a href="#cb1-834" aria-hidden="true" tabindex="-1"></a><span class="st">          // clear of the sloped edges.</span></span>
-<span id="cb1-835"><a href="#cb1-835" aria-hidden="true" tabindex="-1"></a><span class="st">          const extra = (isK &amp;&amp; isS) ? 5 : isK ? 3 : 0;</span></span>
-<span id="cb1-836"><a href="#cb1-836" aria-hidden="true" tabindex="-1"></a><span class="st">          const pad = Math.max(7, Math.min(20, basePad * scale)) + extra;</span></span>
-<span id="cb1-837"><a href="#cb1-837" aria-hidden="true" tabindex="-1"></a><span class="st">          n.style({ &#39;font-size&#39;: fontSize, &#39;padding&#39;: pad });</span></span>
-<span id="cb1-838"><a href="#cb1-838" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
-<span id="cb1-839"><a href="#cb1-839" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
-<span id="cb1-840"><a href="#cb1-840" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-841"><a href="#cb1-841" aria-hidden="true" tabindex="-1"></a><span class="st">    function isFunctionalEdge(e){</span></span>
-<span id="cb1-842"><a href="#cb1-842" aria-hidden="true" tabindex="-1"></a><span class="st">      const v = (e.data(&#39;Likely_functional&#39;) ?? &#39;&#39;).trim();</span></span>
-<span id="cb1-843"><a href="#cb1-843" aria-hidden="true" tabindex="-1"></a><span class="st">      return v === &#39;Likely functional&#39;;</span></span>
-<span id="cb1-844"><a href="#cb1-844" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-845"><a href="#cb1-845" aria-hidden="true" tabindex="-1"></a><span class="st">    function isCuratedEdge(e){</span></span>
-<span id="cb1-846"><a href="#cb1-846" aria-hidden="true" tabindex="-1"></a><span class="st">      const v = (e.data(&#39;evidence&#39;) ?? &#39;&#39;).trim();</span></span>
-<span id="cb1-847"><a href="#cb1-847" aria-hidden="true" tabindex="-1"></a><span class="st">      return v === &#39;Curated&#39;;</span></span>
-<span id="cb1-848"><a href="#cb1-848" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-849"><a href="#cb1-849" aria-hidden="true" tabindex="-1"></a><span class="st">    // Data-level version of the sidebar filters, applied before the neighbourhood cap.</span></span>
-<span id="cb1-850"><a href="#cb1-850" aria-hidden="true" tabindex="-1"></a><span class="st">    // Curated edges have no composite score and are never removed by the confidence filter.</span></span>
-<span id="cb1-851"><a href="#cb1-851" aria-hidden="true" tabindex="-1"></a><span class="st">    function edgePassesFilters(d){</span></span>
-<span id="cb1-852"><a href="#cb1-852" aria-hidden="true" tabindex="-1"></a><span class="st">      const curatedOnly    = document.getElementById(&#39;curatedOnlyChk&#39;)?.checked;</span></span>
-<span id="cb1-853"><a href="#cb1-853" aria-hidden="true" tabindex="-1"></a><span class="st">      const onlyFunctional = document.getElementById(&#39;onlyFunctionalChk&#39;)?.checked;</span></span>
-<span id="cb1-854"><a href="#cb1-854" aria-hidden="true" tabindex="-1"></a><span class="st">      const scoreMinEl     = document.getElementById(&#39;scoreMin&#39;);</span></span>
-<span id="cb1-855"><a href="#cb1-855" aria-hidden="true" tabindex="-1"></a><span class="st">      const scoreMin       = scoreMinEl ? Number(scoreMinEl.value) / 100 : 0;</span></span>
-<span id="cb1-856"><a href="#cb1-856" aria-hidden="true" tabindex="-1"></a><span class="st">      const curated = (d.evidence ?? &#39;&#39;).trim() === &#39;Curated&#39;;</span></span>
-<span id="cb1-857"><a href="#cb1-857" aria-hidden="true" tabindex="-1"></a><span class="st">      if(curatedOnly &amp;&amp; !curated) return false;</span></span>
-<span id="cb1-858"><a href="#cb1-858" aria-hidden="true" tabindex="-1"></a><span class="st">      if(onlyFunctional &amp;&amp; (d.Likely_functional ?? &#39;&#39;).trim() !== &#39;Likely functional&#39;) return false;</span></span>
-<span id="cb1-859"><a href="#cb1-859" aria-hidden="true" tabindex="-1"></a><span class="st">      return curated || d.Score == null || Number(d.Score) &gt;= scoreMin;</span></span>
-<span id="cb1-860"><a href="#cb1-860" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-861"><a href="#cb1-861" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-862"><a href="#cb1-862" aria-hidden="true" tabindex="-1"></a><span class="st">    function updateCapBadge(){</span></span>
-<span id="cb1-863"><a href="#cb1-863" aria-hidden="true" tabindex="-1"></a><span class="st">      const capEl = document.getElementById(&#39;capN&#39;);</span></span>
-<span id="cb1-864"><a href="#cb1-864" aria-hidden="true" tabindex="-1"></a><span class="st">      const capVal = document.getElementById(&#39;capNVal&#39;);</span></span>
-<span id="cb1-865"><a href="#cb1-865" aria-hidden="true" tabindex="-1"></a><span class="st">      if(capEl &amp;&amp; capVal){ capVal.textContent = capEl.value + &#39; / &#39; + capEl.max; }</span></span>
-<span id="cb1-866"><a href="#cb1-866" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-867"><a href="#cb1-867" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-868"><a href="#cb1-868" aria-hidden="true" tabindex="-1"></a><span class="st">    function applyFilters(doLayout = true){</span></span>
-<span id="cb1-869"><a href="#cb1-869" aria-hidden="true" tabindex="-1"></a><span class="st">      const onlyFunctional = document.getElementById(&#39;onlyFunctionalChk&#39;).checked;</span></span>
-<span id="cb1-870"><a href="#cb1-870" aria-hidden="true" tabindex="-1"></a><span class="st">      const curatedOnly    = document.getElementById(&#39;curatedOnlyChk&#39;)?.checked;</span></span>
-<span id="cb1-871"><a href="#cb1-871" aria-hidden="true" tabindex="-1"></a><span class="st">      const scoreMinEl     = document.getElementById(&#39;scoreMin&#39;);</span></span>
-<span id="cb1-872"><a href="#cb1-872" aria-hidden="true" tabindex="-1"></a><span class="st">      const scoreMin       = scoreMinEl ? Number(scoreMinEl.value) / 100 : 0;</span></span>
-<span id="cb1-873"><a href="#cb1-873" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-874"><a href="#cb1-874" aria-hidden="true" tabindex="-1"></a><span class="st">      const seedSet = new Set(currentSeeds || []);</span></span>
-<span id="cb1-875"><a href="#cb1-875" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.batch(() =&gt; {</span></span>
-<span id="cb1-876"><a href="#cb1-876" aria-hidden="true" tabindex="-1"></a><span class="st">        cy.edges().forEach(e =&gt; {</span></span>
-<span id="cb1-877"><a href="#cb1-877" aria-hidden="true" tabindex="-1"></a><span class="st">          // curated edges have no composite score and are never filtered by it</span></span>
-<span id="cb1-878"><a href="#cb1-878" aria-hidden="true" tabindex="-1"></a><span class="st">          const s = e.data(&#39;Score&#39;);</span></span>
-<span id="cb1-879"><a href="#cb1-879" aria-hidden="true" tabindex="-1"></a><span class="st">          const passScore = isCuratedEdge(e) || s == null || Number(s) &gt;= scoreMin;</span></span>
-<span id="cb1-880"><a href="#cb1-880" aria-hidden="true" tabindex="-1"></a><span class="st">          const keep = passScore &amp;&amp;</span></span>
-<span id="cb1-881"><a href="#cb1-881" aria-hidden="true" tabindex="-1"></a><span class="st">                       (!curatedOnly || isCuratedEdge(e)) &amp;&amp; (!onlyFunctional || isFunctionalEdge(e));</span></span>
-<span id="cb1-882"><a href="#cb1-882" aria-hidden="true" tabindex="-1"></a><span class="st">          e.style(&#39;display&#39;, keep ? &#39;element&#39; : &#39;none&#39;);</span></span>
-<span id="cb1-883"><a href="#cb1-883" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
-<span id="cb1-884"><a href="#cb1-884" aria-hidden="true" tabindex="-1"></a><span class="st">        cy.nodes().forEach(n =&gt; {</span></span>
-<span id="cb1-885"><a href="#cb1-885" aria-hidden="true" tabindex="-1"></a><span class="st">          const hasVisibleEdge = n.connectedEdges(&#39;:visible&#39;).length &gt; 0;</span></span>
-<span id="cb1-886"><a href="#cb1-886" aria-hidden="true" tabindex="-1"></a><span class="st">          const isSeed = seedSet.has(n.id());</span></span>
-<span id="cb1-887"><a href="#cb1-887" aria-hidden="true" tabindex="-1"></a><span class="st">          const noEdgeFilters = !curatedOnly &amp;&amp; !onlyFunctional &amp;&amp; scoreMin === 0;</span></span>
-<span id="cb1-888"><a href="#cb1-888" aria-hidden="true" tabindex="-1"></a><span class="st">          n.style(&#39;display&#39;, (noEdgeFilters || hasVisibleEdge || isSeed) ? &#39;element&#39; : &#39;none&#39;);</span></span>
-<span id="cb1-889"><a href="#cb1-889" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
-<span id="cb1-890"><a href="#cb1-890" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
-<span id="cb1-891"><a href="#cb1-891" aria-hidden="true" tabindex="-1"></a><span class="st">      if(doLayout){ relayout(document.getElementById(&#39;layoutSel&#39;).value); }</span></span>
-<span id="cb1-892"><a href="#cb1-892" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-893"><a href="#cb1-893" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-894"><a href="#cb1-894" aria-hidden="true" tabindex="-1"></a><span class="st">    const EDGE_COLUMNS = [&#39;From&#39;,&#39;To&#39;,&#39;UniProt&#39;,&#39;Evidence&#39;,&#39;Functional Site?&#39;,&#39;#Sites&#39;,&#39;Sites&#39;,</span></span>
-<span id="cb1-895"><a href="#cb1-895" aria-hidden="true" tabindex="-1"></a><span class="st">                          &#39;Motif percentile&#39;,&#39;Kinase rank for site&#39;,&#39;Functional score&#39;,</span></span>
-<span id="cb1-896"><a href="#cb1-896" aria-hidden="true" tabindex="-1"></a><span class="st">                          &#39;Shared compartments&#39;,&#39;KinaseCanvas score&#39;,&#39;Sources&#39;,&#39;Reference_PMID&#39;];</span></span>
-<span id="cb1-897"><a href="#cb1-897" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-898"><a href="#cb1-898" aria-hidden="true" tabindex="-1"></a><span class="st">    function edgeRow(e){</span></span>
-<span id="cb1-899"><a href="#cb1-899" aria-hidden="true" tabindex="-1"></a><span class="st">      const fmt = v =&gt; (v == null || v === &#39;&#39;) ? &#39;&#39; : v;</span></span>
-<span id="cb1-900"><a href="#cb1-900" aria-hidden="true" tabindex="-1"></a><span class="st">      return [</span></span>
-<span id="cb1-901"><a href="#cb1-901" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;source&#39;),</span></span>
-<span id="cb1-902"><a href="#cb1-902" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;target&#39;),</span></span>
-<span id="cb1-903"><a href="#cb1-903" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;Uniprot&#39;)),</span></span>
-<span id="cb1-904"><a href="#cb1-904" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;evidence&#39;),</span></span>
-<span id="cb1-905"><a href="#cb1-905" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;Likely_functional&#39;),</span></span>
-<span id="cb1-906"><a href="#cb1-906" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;SiteCount&#39;),</span></span>
-<span id="cb1-907"><a href="#cb1-907" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;Sites&#39;),</span></span>
-<span id="cb1-908"><a href="#cb1-908" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;MotifPercentile&#39;)),</span></span>
-<span id="cb1-909"><a href="#cb1-909" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;MotifRank&#39;)),</span></span>
-<span id="cb1-910"><a href="#cb1-910" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;FunctionalScore&#39;)),</span></span>
-<span id="cb1-911"><a href="#cb1-911" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;SharedCompartments&#39;)),</span></span>
-<span id="cb1-912"><a href="#cb1-912" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;Score&#39;)),</span></span>
-<span id="cb1-913"><a href="#cb1-913" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;SourceList&#39;) ?? &#39;&#39;,</span></span>
-<span id="cb1-914"><a href="#cb1-914" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;Reference_PMID&#39;)</span></span>
-<span id="cb1-915"><a href="#cb1-915" aria-hidden="true" tabindex="-1"></a><span class="st">      ];</span></span>
-<span id="cb1-916"><a href="#cb1-916" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-917"><a href="#cb1-917" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-918"><a href="#cb1-918" aria-hidden="true" tabindex="-1"></a><span class="st">    // UniProt, Motif percentile, Kinase rank, Functional score, Shared</span></span>
-<span id="cb1-919"><a href="#cb1-919" aria-hidden="true" tabindex="-1"></a><span class="st">    // compartments, KinaseCanvas score -- rendered in the monospace data font.</span></span>
-<span id="cb1-920"><a href="#cb1-920" aria-hidden="true" tabindex="-1"></a><span class="st">    const EDGE_NUMERIC_COLS = [2, 7, 8, 9, 10, 11];</span></span>
-<span id="cb1-921"><a href="#cb1-921" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-922"><a href="#cb1-922" aria-hidden="true" tabindex="-1"></a><span class="st">    function refreshEdgesTable(){</span></span>
-<span id="cb1-923"><a href="#cb1-923" aria-hidden="true" tabindex="-1"></a><span class="st">      const rows = cy.edges(&#39;:visible&#39;).map(edgeRow);</span></span>
-<span id="cb1-924"><a href="#cb1-924" aria-hidden="true" tabindex="-1"></a><span class="st">      renderFilterableTable(&#39;edgesFilters&#39;,&#39;edgesTable&#39;, EDGE_COLUMNS, rows, EDGE_NUMERIC_COLS);</span></span>
-<span id="cb1-925"><a href="#cb1-925" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-926"><a href="#cb1-926" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-927"><a href="#cb1-927" aria-hidden="true" tabindex="-1"></a><span class="st">    function renderFilterableTable(filtersId, tableBoxId, headers, rows, numericCols){</span></span>
-<span id="cb1-928"><a href="#cb1-928" aria-hidden="true" tabindex="-1"></a><span class="st">      numericCols = numericCols || [];</span></span>
-<span id="cb1-929"><a href="#cb1-929" aria-hidden="true" tabindex="-1"></a><span class="st">      const fwrap = document.getElementById(filtersId);</span></span>
-<span id="cb1-930"><a href="#cb1-930" aria-hidden="true" tabindex="-1"></a><span class="st">      const box   = document.getElementById(tableBoxId);</span></span>
-<span id="cb1-931"><a href="#cb1-931" aria-hidden="true" tabindex="-1"></a><span class="st">      fwrap.innerHTML = &#39;&#39;;</span></span>
-<span id="cb1-932"><a href="#cb1-932" aria-hidden="true" tabindex="-1"></a><span class="st">      box.innerHTML   = &#39;&#39;;</span></span>
-<span id="cb1-933"><a href="#cb1-933" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-934"><a href="#cb1-934" aria-hidden="true" tabindex="-1"></a><span class="st">      const filters = headers.map(h =&gt; {</span></span>
-<span id="cb1-935"><a href="#cb1-935" aria-hidden="true" tabindex="-1"></a><span class="st">        const inp = document.createElement(&#39;input&#39;);</span></span>
-<span id="cb1-936"><a href="#cb1-936" aria-hidden="true" tabindex="-1"></a><span class="st">        inp.type = &#39;text&#39;;</span></span>
-<span id="cb1-937"><a href="#cb1-937" aria-hidden="true" tabindex="-1"></a><span class="st">        inp.placeholder = &#39;Filter &#39; + h;</span></span>
-<span id="cb1-938"><a href="#cb1-938" aria-hidden="true" tabindex="-1"></a><span class="st">        fwrap.appendChild(inp);</span></span>
-<span id="cb1-939"><a href="#cb1-939" aria-hidden="true" tabindex="-1"></a><span class="st">        return inp;</span></span>
-<span id="cb1-940"><a href="#cb1-940" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
-<span id="cb1-941"><a href="#cb1-941" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-942"><a href="#cb1-942" aria-hidden="true" tabindex="-1"></a><span class="st">      const table = document.createElement(&#39;table&#39;);</span></span>
-<span id="cb1-943"><a href="#cb1-943" aria-hidden="true" tabindex="-1"></a><span class="st">      table.className = &#39;tbl&#39;;</span></span>
-<span id="cb1-944"><a href="#cb1-944" aria-hidden="true" tabindex="-1"></a><span class="st">      const thead = document.createElement(&#39;thead&#39;);</span></span>
-<span id="cb1-945"><a href="#cb1-945" aria-hidden="true" tabindex="-1"></a><span class="st">      const trh   = document.createElement(&#39;tr&#39;);</span></span>
-<span id="cb1-946"><a href="#cb1-946" aria-hidden="true" tabindex="-1"></a><span class="st">      headers.forEach(h =&gt; { const th = document.createElement(&#39;th&#39;); th.textContent = h; trh.appendChild(th); });</span></span>
-<span id="cb1-947"><a href="#cb1-947" aria-hidden="true" tabindex="-1"></a><span class="st">      thead.appendChild(trh); table.appendChild(thead);</span></span>
+<span id="cb1-708"><a href="#cb1-708" aria-hidden="true" tabindex="-1"></a><span class="st">    let detailSel = null;   // what the detail panel shows: {node} or {source, target}</span></span>
+<span id="cb1-709"><a href="#cb1-709" aria-hidden="true" tabindex="-1"></a><span class="st">    function clearDetailPanel(){</span></span>
+<span id="cb1-710"><a href="#cb1-710" aria-hidden="true" tabindex="-1"></a><span class="st">      detailSel = null;</span></span>
+<span id="cb1-711"><a href="#cb1-711" aria-hidden="true" tabindex="-1"></a><span class="st">      renderDetailPanel(&#39;&lt;p id=</span><span class="sc">\\</span><span class="st">&#39;detailPlaceholder</span><span class="sc">\\</span><span class="st">&#39;&gt;Click a node or edge to see details.&lt;/p&gt;&#39;);</span></span>
+<span id="cb1-712"><a href="#cb1-712" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-713"><a href="#cb1-713" aria-hidden="true" tabindex="-1"></a><span class="st">    // After a re-render, keep the user&#39;s selection if it is still drawn; otherwise describe</span></span>
+<span id="cb1-714"><a href="#cb1-714" aria-hidden="true" tabindex="-1"></a><span class="st">    // the query itself (the single interaction in pair mode, else the first seed), so the</span></span>
+<span id="cb1-715"><a href="#cb1-715" aria-hidden="true" tabindex="-1"></a><span class="st">    // column is never an empty box.</span></span>
+<span id="cb1-716"><a href="#cb1-716" aria-hidden="true" tabindex="-1"></a><span class="st">    function restoreOrDefaultDetail(){</span></span>
+<span id="cb1-717"><a href="#cb1-717" aria-hidden="true" tabindex="-1"></a><span class="st">      if(!detailSel || detailSel.auto){ showDefaultDetail(); return; }</span></span>
+<span id="cb1-718"><a href="#cb1-718" aria-hidden="true" tabindex="-1"></a><span class="st">      if(detailSel.node){</span></span>
+<span id="cb1-719"><a href="#cb1-719" aria-hidden="true" tabindex="-1"></a><span class="st">        const n = cy.getElementById(detailSel.node);</span></span>
+<span id="cb1-720"><a href="#cb1-720" aria-hidden="true" tabindex="-1"></a><span class="st">        if(n &amp;&amp; n.length){ showNodeDetail(n); return; }</span></span>
+<span id="cb1-721"><a href="#cb1-721" aria-hidden="true" tabindex="-1"></a><span class="st">      } else {</span></span>
+<span id="cb1-722"><a href="#cb1-722" aria-hidden="true" tabindex="-1"></a><span class="st">        const e = cy.edges().filter(x =&gt; x.data(&#39;source&#39;) === detailSel.source &amp;&amp; x.data(&#39;target&#39;) === detailSel.target);</span></span>
+<span id="cb1-723"><a href="#cb1-723" aria-hidden="true" tabindex="-1"></a><span class="st">        if(e.length){ showEdgeDetail(e[0]); return; }</span></span>
+<span id="cb1-724"><a href="#cb1-724" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-725"><a href="#cb1-725" aria-hidden="true" tabindex="-1"></a><span class="st">      showDefaultDetail();</span></span>
+<span id="cb1-726"><a href="#cb1-726" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-727"><a href="#cb1-727" aria-hidden="true" tabindex="-1"></a><span class="st">    function showDefaultDetail(){</span></span>
+<span id="cb1-728"><a href="#cb1-728" aria-hidden="true" tabindex="-1"></a><span class="st">      const pairEdges = cy.edges();</span></span>
+<span id="cb1-729"><a href="#cb1-729" aria-hidden="true" tabindex="-1"></a><span class="st">      const seed = (currentSeeds || []).map(s =&gt; cy.getElementById(s)).find(n =&gt; n &amp;&amp; n.length);</span></span>
+<span id="cb1-730"><a href="#cb1-730" aria-hidden="true" tabindex="-1"></a><span class="st">      if(document.getElementById(&#39;pairModeChk&#39;)?.checked &amp;&amp; pairEdges.length === 1){ showEdgeDetail(pairEdges[0]); }</span></span>
+<span id="cb1-731"><a href="#cb1-731" aria-hidden="true" tabindex="-1"></a><span class="st">      else if(seed){ showNodeDetail(seed); }</span></span>
+<span id="cb1-732"><a href="#cb1-732" aria-hidden="true" tabindex="-1"></a><span class="st">      else { clearDetailPanel(); return; }</span></span>
+<span id="cb1-733"><a href="#cb1-733" aria-hidden="true" tabindex="-1"></a><span class="st">      detailSel.auto = true;   // follows the query; a click replaces it with a user selection</span></span>
+<span id="cb1-734"><a href="#cb1-734" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-735"><a href="#cb1-735" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-736"><a href="#cb1-736" aria-hidden="true" tabindex="-1"></a><span class="st">    function showNodeDetail(node){</span></span>
+<span id="cb1-737"><a href="#cb1-737" aria-hidden="true" tabindex="-1"></a><span class="st">      const d = node.data();</span></span>
+<span id="cb1-738"><a href="#cb1-738" aria-hidden="true" tabindex="-1"></a><span class="st">      detailSel = {node: d.id};</span></span>
+<span id="cb1-739"><a href="#cb1-739" aria-hidden="true" tabindex="-1"></a><span class="st">      const role = d.role || &#39;&#39;;</span></span>
+<span id="cb1-740"><a href="#cb1-740" aria-hidden="true" tabindex="-1"></a><span class="st">      const isK = role.indexOf(&#39;Kinase&#39;) &gt;= 0, isS = role.indexOf(&#39;Substrate&#39;) &gt;= 0;</span></span>
+<span id="cb1-741"><a href="#cb1-741" aria-hidden="true" tabindex="-1"></a><span class="st">      const roleLabel = (isK &amp;&amp; isS) ? &#39;Kinase and substrate&#39; : isK ? &#39;Kinase&#39; : &#39;Substrate&#39;;</span></span>
+<span id="cb1-742"><a href="#cb1-742" aria-hidden="true" tabindex="-1"></a><span class="st">      // Count from the whole resource, not the drawn neighbourhood, which the cap may truncate.</span></span>
+<span id="cb1-743"><a href="#cb1-743" aria-hidden="true" tabindex="-1"></a><span class="st">      const outN = new Set(data.edges.filter(e =&gt; e.source === d.id).map(e =&gt; e.target)).size;</span></span>
+<span id="cb1-744"><a href="#cb1-744" aria-hidden="true" tabindex="-1"></a><span class="st">      const inN  = new Set(data.edges.filter(e =&gt; e.target === d.id).map(e =&gt; e.source)).size;</span></span>
+<span id="cb1-745"><a href="#cb1-745" aria-hidden="true" tabindex="-1"></a><span class="st">      const relatedEdges = data.edges</span></span>
+<span id="cb1-746"><a href="#cb1-746" aria-hidden="true" tabindex="-1"></a><span class="st">        .filter(e =&gt; e.source === d.id || e.target === d.id)</span></span>
+<span id="cb1-747"><a href="#cb1-747" aria-hidden="true" tabindex="-1"></a><span class="st">        .slice().sort(edgeRankCompare).slice(0, 5);</span></span>
+<span id="cb1-748"><a href="#cb1-748" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-749"><a href="#cb1-749" aria-hidden="true" tabindex="-1"></a><span class="st">      let html = &#39;&lt;span class=</span><span class="sc">\\</span><span class="st">&#39;detail-role</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(roleLabel) + &#39;&lt;/span&gt;&#39;;</span></span>
+<span id="cb1-750"><a href="#cb1-750" aria-hidden="true" tabindex="-1"></a><span class="st">      html += &#39;&lt;h4&gt;&#39; + escHtml(d.label) + &#39;&lt;/h4&gt;&#39;;</span></span>
+<span id="cb1-751"><a href="#cb1-751" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.uniprot){ html += &#39;&lt;p&gt;&#39; + uniprotLink(d.uniprot, d.label) + &#39;&lt;/p&gt;&#39;; }</span></span>
+<span id="cb1-752"><a href="#cb1-752" aria-hidden="true" tabindex="-1"></a><span class="st">      if(isK){ html += detailRow(&#39;Substrates&#39;, outN); }</span></span>
+<span id="cb1-753"><a href="#cb1-753" aria-hidden="true" tabindex="-1"></a><span class="st">      if(isS){ html += detailRow(&#39;Upstream kinases&#39;, inN); }</span></span>
+<span id="cb1-754"><a href="#cb1-754" aria-hidden="true" tabindex="-1"></a><span class="st">      if(relatedEdges.length){</span></span>
+<span id="cb1-755"><a href="#cb1-755" aria-hidden="true" tabindex="-1"></a><span class="st">        html += &#39;&lt;div class=</span><span class="sc">\\</span><span class="st">&#39;detail-sites</span><span class="sc">\\</span><span class="st">&#39;&gt;&lt;strong&gt;Top interactions&lt;/strong&gt;&lt;ul class=</span><span class="sc">\\</span><span class="st">&#39;detail-interactions</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39;;</span></span>
+<span id="cb1-756"><a href="#cb1-756" aria-hidden="true" tabindex="-1"></a><span class="st">        relatedEdges.forEach(e =&gt; {</span></span>
+<span id="cb1-757"><a href="#cb1-757" aria-hidden="true" tabindex="-1"></a><span class="st">          const other = (e.source === d.id) ? e.target : e.source;</span></span>
+<span id="cb1-758"><a href="#cb1-758" aria-hidden="true" tabindex="-1"></a><span class="st">          const dir   = (e.source === d.id) ? &#39; -&gt; &#39; : &#39; &lt;- &#39;;</span></span>
+<span id="cb1-759"><a href="#cb1-759" aria-hidden="true" tabindex="-1"></a><span class="st">          html += &#39;&lt;li&gt;&lt;button type=</span><span class="sc">\\</span><span class="st">&#39;button</span><span class="sc">\\</span><span class="st">&#39; class=</span><span class="sc">\\</span><span class="st">&#39;detail-jump</span><span class="sc">\\</span><span class="st">&#39; data-source=</span><span class="sc">\\</span><span class="st">&#39;&#39; + escHtml(e.source) +</span></span>
+<span id="cb1-760"><a href="#cb1-760" aria-hidden="true" tabindex="-1"></a><span class="st">                  &#39;</span><span class="sc">\\</span><span class="st">&#39; data-target=</span><span class="sc">\\</span><span class="st">&#39;&#39; + escHtml(e.target) + &#39;</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(d.label) + dir + escHtml(other) +</span></span>
+<span id="cb1-761"><a href="#cb1-761" aria-hidden="true" tabindex="-1"></a><span class="st">                  &#39;&lt;/button&gt; (&#39; + escHtml(e.evidence) + &#39;)&lt;/li&gt;&#39;;</span></span>
+<span id="cb1-762"><a href="#cb1-762" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
+<span id="cb1-763"><a href="#cb1-763" aria-hidden="true" tabindex="-1"></a><span class="st">        html += &#39;&lt;/ul&gt;&lt;/div&gt;&#39;;</span></span>
+<span id="cb1-764"><a href="#cb1-764" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-765"><a href="#cb1-765" aria-hidden="true" tabindex="-1"></a><span class="st">      renderDetailPanel(html);</span></span>
+<span id="cb1-766"><a href="#cb1-766" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-767"><a href="#cb1-767" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-768"><a href="#cb1-768" aria-hidden="true" tabindex="-1"></a><span class="st">    function showEdgeDetail(edge){</span></span>
+<span id="cb1-769"><a href="#cb1-769" aria-hidden="true" tabindex="-1"></a><span class="st">      const d = edge.data();</span></span>
+<span id="cb1-770"><a href="#cb1-770" aria-hidden="true" tabindex="-1"></a><span class="st">      detailSel = {source: d.source, target: d.target};</span></span>
+<span id="cb1-771"><a href="#cb1-771" aria-hidden="true" tabindex="-1"></a><span class="st">      let html = &#39;&lt;span class=</span><span class="sc">\\</span><span class="st">&#39;detail-role</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(d.evidence) + &#39;&lt;/span&gt;&#39;;</span></span>
+<span id="cb1-772"><a href="#cb1-772" aria-hidden="true" tabindex="-1"></a><span class="st">      html += &#39;&lt;h4&gt;&#39; + escHtml(d.source) + &#39; -&gt; &#39; + escHtml(d.target) + &#39;&lt;/h4&gt;&#39;;</span></span>
+<span id="cb1-773"><a href="#cb1-773" aria-hidden="true" tabindex="-1"></a><span class="st">      html += &#39;&lt;p&gt;&#39; + uniprotLink(d.Uniprot, d.target) + &#39;&lt;/p&gt;&#39;;</span></span>
+<span id="cb1-774"><a href="#cb1-774" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.Score != null &amp;&amp; d.Score !== &#39;&#39;){ html += detailRow(&#39;Composite score&#39;, Number(d.Score).toFixed(2)); }</span></span>
+<span id="cb1-775"><a href="#cb1-775" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.MotifPercentile != null &amp;&amp; d.MotifPercentile !== &#39;&#39;){ html += detailRow(&#39;Motif percentile&#39;, d.MotifPercentile); }</span></span>
+<span id="cb1-776"><a href="#cb1-776" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.MotifRank != null &amp;&amp; d.MotifRank !== &#39;&#39;){ html += detailRow(&#39;Kinase rank for site&#39;, d.MotifRank); }</span></span>
+<span id="cb1-777"><a href="#cb1-777" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.SharedCompartments != null &amp;&amp; d.SharedCompartments !== &#39;&#39;){ html += detailRow(&#39;Shared compartments&#39;, d.SharedCompartments); }</span></span>
+<span id="cb1-778"><a href="#cb1-778" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.SourceList){ html += detailRow(&#39;Sources&#39;, d.SourceList); }</span></span>
+<span id="cb1-779"><a href="#cb1-779" aria-hidden="true" tabindex="-1"></a><span class="st">      if(d.Reference_PMID){ html += pmidRow(d.Reference_PMID); }</span></span>
+<span id="cb1-780"><a href="#cb1-780" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-781"><a href="#cb1-781" aria-hidden="true" tabindex="-1"></a><span class="st">      // Rank candidate sites for the pair: sites where this kinase-site pairing is</span></span>
+<span id="cb1-782"><a href="#cb1-782" aria-hidden="true" tabindex="-1"></a><span class="st">      // curated first, then by how well the site fits the kinase motif, then by name.</span></span>
+<span id="cb1-783"><a href="#cb1-783" aria-hidden="true" tabindex="-1"></a><span class="st">      const sites = siteData</span></span>
+<span id="cb1-784"><a href="#cb1-784" aria-hidden="true" tabindex="-1"></a><span class="st">        .filter(s =&gt; s.kinase === d.source &amp;&amp; s.substrate === d.target)</span></span>
+<span id="cb1-785"><a href="#cb1-785" aria-hidden="true" tabindex="-1"></a><span class="st">        .slice()</span></span>
+<span id="cb1-786"><a href="#cb1-786" aria-hidden="true" tabindex="-1"></a><span class="st">        .sort((a, b) =&gt; ((b.evidence === &#39;Curated&#39;) - (a.evidence === &#39;Curated&#39;)) ||</span></span>
+<span id="cb1-787"><a href="#cb1-787" aria-hidden="true" tabindex="-1"></a><span class="st">                        ((b.motifPercentile ?? -1) - (a.motifPercentile ?? -1)) ||</span></span>
+<span id="cb1-788"><a href="#cb1-788" aria-hidden="true" tabindex="-1"></a><span class="st">                        String(a.site).localeCompare(String(b.site)));</span></span>
+<span id="cb1-789"><a href="#cb1-789" aria-hidden="true" tabindex="-1"></a><span class="st">      if(sites.length){</span></span>
+<span id="cb1-790"><a href="#cb1-790" aria-hidden="true" tabindex="-1"></a><span class="st">        html += &#39;&lt;div class=</span><span class="sc">\\</span><span class="st">&#39;detail-sites</span><span class="sc">\\</span><span class="st">&#39;&gt;&lt;strong&gt;Sites&lt;/strong&gt;&lt;div class=</span><span class="sc">\\</span><span class="st">&#39;table-scroll</span><span class="sc">\\</span><span class="st">&#39;&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&#39; +</span></span>
+<span id="cb1-791"><a href="#cb1-791" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th&gt;Site&lt;/th&gt;&lt;th title=</span><span class="sc">\\</span><span class="st">&#39;Flanking sequence, -7 to +7</span><span class="sc">\\</span><span class="st">&#39;&gt;Sequence (+/-7)&lt;/th&gt;&#39; +</span></span>
+<span id="cb1-792"><a href="#cb1-792" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39; title=</span><span class="sc">\\</span><span class="st">&#39;Site curated in PhosphoSitePlus, EPSD or iPTMnet</span><span class="sc">\\</span><span class="st">&#39;&gt;Cur.&lt;/th&gt;&#39; +</span></span>
+<span id="cb1-793"><a href="#cb1-793" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39; title=</span><span class="sc">\\</span><span class="st">&#39;Phosphosite functional score</span><span class="sc">\\</span><span class="st">&#39;&gt;Func.&lt;/th&gt;&#39; +</span></span>
+<span id="cb1-794"><a href="#cb1-794" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39; title=</span><span class="sc">\\</span><span class="st">&#39;Motif percentile</span><span class="sc">\\</span><span class="st">&#39;&gt;Motif&lt;/th&gt;&#39; +</span></span>
+<span id="cb1-795"><a href="#cb1-795" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39; title=</span><span class="sc">\\</span><span class="st">&#39;Kinase rank for this site</span><span class="sc">\\</span><span class="st">&#39;&gt;Rank&lt;/th&gt;&#39; +</span></span>
+<span id="cb1-796"><a href="#cb1-796" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;th class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39; title=</span><span class="sc">\\</span><span class="st">&#39;Shared subcellular compartments</span><span class="sc">\\</span><span class="st">&#39;&gt;Comp.&lt;/th&gt;&#39; +</span></span>
+<span id="cb1-797"><a href="#cb1-797" aria-hidden="true" tabindex="-1"></a><span class="st">          &#39;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&#39;;</span></span>
+<span id="cb1-798"><a href="#cb1-798" aria-hidden="true" tabindex="-1"></a><span class="st">        sites.forEach(s =&gt; {</span></span>
+<span id="cb1-799"><a href="#cb1-799" aria-hidden="true" tabindex="-1"></a><span class="st">          html += &#39;&lt;tr&gt;&lt;td&gt;&#39; + escHtml(s.site) + &#39;&lt;/td&gt;&#39; +</span></span>
+<span id="cb1-800"><a href="#cb1-800" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + renderFlank(s.flankingSequence) + &#39;&lt;/td&gt;&#39; +</span></span>
+<span id="cb1-801"><a href="#cb1-801" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + (s.curatedSite ? &#39;yes&#39; : &#39;no&#39;) + &#39;&lt;/td&gt;&#39; +</span></span>
+<span id="cb1-802"><a href="#cb1-802" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(s.functionalScore) + &#39;&lt;/td&gt;&#39; +</span></span>
+<span id="cb1-803"><a href="#cb1-803" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(s.motifPercentile) + &#39;&lt;/td&gt;&#39; +</span></span>
+<span id="cb1-804"><a href="#cb1-804" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(s.motifRank) + &#39;&lt;/td&gt;&#39; +</span></span>
+<span id="cb1-805"><a href="#cb1-805" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39;&lt;td class=</span><span class="sc">\\</span><span class="st">&#39;num</span><span class="sc">\\</span><span class="st">&#39;&gt;&#39; + escHtml(s.sharedCompartments) + &#39;&lt;/td&gt;&lt;/tr&gt;&#39;;</span></span>
+<span id="cb1-806"><a href="#cb1-806" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
+<span id="cb1-807"><a href="#cb1-807" aria-hidden="true" tabindex="-1"></a><span class="st">        html += &#39;&lt;/tbody&gt;&lt;/table&gt;&lt;/div&gt;&lt;/div&gt;&#39;;</span></span>
+<span id="cb1-808"><a href="#cb1-808" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-809"><a href="#cb1-809" aria-hidden="true" tabindex="-1"></a><span class="st">      renderDetailPanel(html);</span></span>
+<span id="cb1-810"><a href="#cb1-810" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-811"><a href="#cb1-811" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-812"><a href="#cb1-812" aria-hidden="true" tabindex="-1"></a><span class="st">    // Node/edge click now opens the detail panel instead of navigating directly</span></span>
+<span id="cb1-813"><a href="#cb1-813" aria-hidden="true" tabindex="-1"></a><span class="st">    // to UniProt -- the link is inside the panel instead, so clicking to inspect</span></span>
+<span id="cb1-814"><a href="#cb1-814" aria-hidden="true" tabindex="-1"></a><span class="st">    // doesn&#39;t cost the user their place in the graph.</span></span>
+<span id="cb1-815"><a href="#cb1-815" aria-hidden="true" tabindex="-1"></a><span class="st">    cy.on(&#39;tap&#39;, &#39;node&#39;, evt =&gt; showNodeDetail(evt.target));</span></span>
+<span id="cb1-816"><a href="#cb1-816" aria-hidden="true" tabindex="-1"></a><span class="st">    cy.on(&#39;tap&#39;, &#39;edge&#39;, evt =&gt; showEdgeDetail(evt.target));</span></span>
+<span id="cb1-817"><a href="#cb1-817" aria-hidden="true" tabindex="-1"></a><span class="st">    cy.on(&#39;tap&#39;, evt =&gt; { if(evt.target === cy){ detailSel = null; showDefaultDetail(); } });</span></span>
+<span id="cb1-818"><a href="#cb1-818" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-819"><a href="#cb1-819" aria-hidden="true" tabindex="-1"></a><span class="st">    // Collapse the controls sidebar to give the canvas the full left side; the canvas is</span></span>
+<span id="cb1-820"><a href="#cb1-820" aria-hidden="true" tabindex="-1"></a><span class="st">    // re-measured and re-fitted because its container width changes.</span></span>
+<span id="cb1-821"><a href="#cb1-821" aria-hidden="true" tabindex="-1"></a><span class="st">    const FIT_PADDING = 30;</span></span>
+<span id="cb1-822"><a href="#cb1-822" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;btnControls&#39;).addEventListener(&#39;click&#39;, evt =&gt; {</span></span>
+<span id="cb1-823"><a href="#cb1-823" aria-hidden="true" tabindex="-1"></a><span class="st">      const hidden = document.querySelector(&#39;.app-grid&#39;).classList.toggle(&#39;controls-hidden&#39;);</span></span>
+<span id="cb1-824"><a href="#cb1-824" aria-hidden="true" tabindex="-1"></a><span class="st">      evt.currentTarget.textContent = hidden ? &#39;Show controls&#39; : &#39;Hide controls&#39;;</span></span>
+<span id="cb1-825"><a href="#cb1-825" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.resize();</span></span>
+<span id="cb1-826"><a href="#cb1-826" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.fit(undefined, FIT_PADDING);</span></span>
+<span id="cb1-827"><a href="#cb1-827" aria-hidden="true" tabindex="-1"></a><span class="st">    });</span></span>
+<span id="cb1-828"><a href="#cb1-828" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-829"><a href="#cb1-829" aria-hidden="true" tabindex="-1"></a><span class="st">    const detailBodyEl = document.getElementById(&#39;detailBody&#39;);</span></span>
+<span id="cb1-830"><a href="#cb1-830" aria-hidden="true" tabindex="-1"></a><span class="st">    if(detailBodyEl){</span></span>
+<span id="cb1-831"><a href="#cb1-831" aria-hidden="true" tabindex="-1"></a><span class="st">      detailBodyEl.addEventListener(&#39;click&#39;, evt =&gt; {</span></span>
+<span id="cb1-832"><a href="#cb1-832" aria-hidden="true" tabindex="-1"></a><span class="st">        const btn = evt.target.closest(&#39;.detail-jump&#39;);</span></span>
+<span id="cb1-833"><a href="#cb1-833" aria-hidden="true" tabindex="-1"></a><span class="st">        if(!btn) return;</span></span>
+<span id="cb1-834"><a href="#cb1-834" aria-hidden="true" tabindex="-1"></a><span class="st">        const src = btn.getAttribute(&#39;data-source&#39;);</span></span>
+<span id="cb1-835"><a href="#cb1-835" aria-hidden="true" tabindex="-1"></a><span class="st">        const tgt = btn.getAttribute(&#39;data-target&#39;);</span></span>
+<span id="cb1-836"><a href="#cb1-836" aria-hidden="true" tabindex="-1"></a><span class="st">        const matches = cy.edges().filter(ele =&gt; ele.data(&#39;source&#39;) === src &amp;&amp; ele.data(&#39;target&#39;) === tgt);</span></span>
+<span id="cb1-837"><a href="#cb1-837" aria-hidden="true" tabindex="-1"></a><span class="st">        if(matches.length){</span></span>
+<span id="cb1-838"><a href="#cb1-838" aria-hidden="true" tabindex="-1"></a><span class="st">          showEdgeDetail(matches[0]);</span></span>
+<span id="cb1-839"><a href="#cb1-839" aria-hidden="true" tabindex="-1"></a><span class="st">          cy.edges().unselect();</span></span>
+<span id="cb1-840"><a href="#cb1-840" aria-hidden="true" tabindex="-1"></a><span class="st">          matches[0].select();</span></span>
+<span id="cb1-841"><a href="#cb1-841" aria-hidden="true" tabindex="-1"></a><span class="st">        }</span></span>
+<span id="cb1-842"><a href="#cb1-842" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
+<span id="cb1-843"><a href="#cb1-843" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-844"><a href="#cb1-844" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-845"><a href="#cb1-845" aria-hidden="true" tabindex="-1"></a><span class="st">    function setEdgeLabels(show){</span></span>
+<span id="cb1-846"><a href="#cb1-846" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.style().selector(&#39;edge&#39;).style(&#39;label&#39;, show ? &#39;data(edgeLabel)&#39; : &#39;&#39;).update();</span></span>
+<span id="cb1-847"><a href="#cb1-847" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-848"><a href="#cb1-848" aria-hidden="true" tabindex="-1"></a><span class="st">    function setArrows(show){</span></span>
+<span id="cb1-849"><a href="#cb1-849" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.style().selector(&#39;edge&#39;).style(&#39;target-arrow-shape&#39;, show ? &#39;triangle&#39; : &#39;none&#39;).update();</span></span>
+<span id="cb1-850"><a href="#cb1-850" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-851"><a href="#cb1-851" aria-hidden="true" tabindex="-1"></a><span class="st">    function applyNodeSizing(){</span></span>
+<span id="cb1-852"><a href="#cb1-852" aria-hidden="true" tabindex="-1"></a><span class="st">      const scale = Number(labelScale.value || 100) / 100;</span></span>
+<span id="cb1-853"><a href="#cb1-853" aria-hidden="true" tabindex="-1"></a><span class="st">      if(labelScaleEl){ labelScaleEl.textContent = Math.round(scale * 100) + &#39;%&#39;; }</span></span>
+<span id="cb1-854"><a href="#cb1-854" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.batch(() =&gt; {</span></span>
+<span id="cb1-855"><a href="#cb1-855" aria-hidden="true" tabindex="-1"></a><span class="st">        cy.nodes().forEach(n =&gt; {</span></span>
+<span id="cb1-856"><a href="#cb1-856" aria-hidden="true" tabindex="-1"></a><span class="st">          const fontSize = Math.max(9, Math.min(18, baseFont * scale));</span></span>
+<span id="cb1-857"><a href="#cb1-857" aria-hidden="true" tabindex="-1"></a><span class="st">          const role = n.data(&#39;role&#39;) || &#39;&#39;;</span></span>
+<span id="cb1-858"><a href="#cb1-858" aria-hidden="true" tabindex="-1"></a><span class="st">          const isK = role.indexOf(&#39;Kinase&#39;) &gt;= 0, isS = role.indexOf(&#39;Substrate&#39;) &gt;= 0;</span></span>
+<span id="cb1-859"><a href="#cb1-859" aria-hidden="true" tabindex="-1"></a><span class="st">          // Hexagon and diamond shapes have less usable interior than a rectangle</span></span>
+<span id="cb1-860"><a href="#cb1-860" aria-hidden="true" tabindex="-1"></a><span class="st">          // of the same bounding box, so give them extra padding to keep labels</span></span>
+<span id="cb1-861"><a href="#cb1-861" aria-hidden="true" tabindex="-1"></a><span class="st">          // clear of the sloped edges.</span></span>
+<span id="cb1-862"><a href="#cb1-862" aria-hidden="true" tabindex="-1"></a><span class="st">          const extra = (isK &amp;&amp; isS) ? 5 : isK ? 3 : 0;</span></span>
+<span id="cb1-863"><a href="#cb1-863" aria-hidden="true" tabindex="-1"></a><span class="st">          const pad = Math.max(7, Math.min(20, basePad * scale)) + extra;</span></span>
+<span id="cb1-864"><a href="#cb1-864" aria-hidden="true" tabindex="-1"></a><span class="st">          n.style({ &#39;font-size&#39;: fontSize, &#39;padding&#39;: pad });</span></span>
+<span id="cb1-865"><a href="#cb1-865" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
+<span id="cb1-866"><a href="#cb1-866" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
+<span id="cb1-867"><a href="#cb1-867" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-868"><a href="#cb1-868" aria-hidden="true" tabindex="-1"></a><span class="st">    function isFunctionalEdge(e){</span></span>
+<span id="cb1-869"><a href="#cb1-869" aria-hidden="true" tabindex="-1"></a><span class="st">      const v = (e.data(&#39;Likely_functional&#39;) ?? &#39;&#39;).trim();</span></span>
+<span id="cb1-870"><a href="#cb1-870" aria-hidden="true" tabindex="-1"></a><span class="st">      return v === &#39;Likely functional&#39;;</span></span>
+<span id="cb1-871"><a href="#cb1-871" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-872"><a href="#cb1-872" aria-hidden="true" tabindex="-1"></a><span class="st">    function isCuratedEdge(e){</span></span>
+<span id="cb1-873"><a href="#cb1-873" aria-hidden="true" tabindex="-1"></a><span class="st">      const v = (e.data(&#39;evidence&#39;) ?? &#39;&#39;).trim();</span></span>
+<span id="cb1-874"><a href="#cb1-874" aria-hidden="true" tabindex="-1"></a><span class="st">      return v === &#39;Curated&#39;;</span></span>
+<span id="cb1-875"><a href="#cb1-875" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-876"><a href="#cb1-876" aria-hidden="true" tabindex="-1"></a><span class="st">    // Data-level version of the sidebar filters, applied before the neighbourhood cap.</span></span>
+<span id="cb1-877"><a href="#cb1-877" aria-hidden="true" tabindex="-1"></a><span class="st">    // Curated edges have no composite score and are never removed by the confidence filter.</span></span>
+<span id="cb1-878"><a href="#cb1-878" aria-hidden="true" tabindex="-1"></a><span class="st">    function edgePassesFilters(d){</span></span>
+<span id="cb1-879"><a href="#cb1-879" aria-hidden="true" tabindex="-1"></a><span class="st">      const curatedOnly    = document.getElementById(&#39;curatedOnlyChk&#39;)?.checked;</span></span>
+<span id="cb1-880"><a href="#cb1-880" aria-hidden="true" tabindex="-1"></a><span class="st">      const onlyFunctional = document.getElementById(&#39;onlyFunctionalChk&#39;)?.checked;</span></span>
+<span id="cb1-881"><a href="#cb1-881" aria-hidden="true" tabindex="-1"></a><span class="st">      const scoreMinEl     = document.getElementById(&#39;scoreMin&#39;);</span></span>
+<span id="cb1-882"><a href="#cb1-882" aria-hidden="true" tabindex="-1"></a><span class="st">      const scoreMin       = scoreMinEl ? Number(scoreMinEl.value) / 100 : 0;</span></span>
+<span id="cb1-883"><a href="#cb1-883" aria-hidden="true" tabindex="-1"></a><span class="st">      const curated = (d.evidence ?? &#39;&#39;).trim() === &#39;Curated&#39;;</span></span>
+<span id="cb1-884"><a href="#cb1-884" aria-hidden="true" tabindex="-1"></a><span class="st">      if(curatedOnly &amp;&amp; !curated) return false;</span></span>
+<span id="cb1-885"><a href="#cb1-885" aria-hidden="true" tabindex="-1"></a><span class="st">      if(onlyFunctional &amp;&amp; (d.Likely_functional ?? &#39;&#39;).trim() !== &#39;Likely functional&#39;) return false;</span></span>
+<span id="cb1-886"><a href="#cb1-886" aria-hidden="true" tabindex="-1"></a><span class="st">      return curated || d.Score == null || Number(d.Score) &gt;= scoreMin;</span></span>
+<span id="cb1-887"><a href="#cb1-887" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-888"><a href="#cb1-888" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-889"><a href="#cb1-889" aria-hidden="true" tabindex="-1"></a><span class="st">    function updateCapBadge(){</span></span>
+<span id="cb1-890"><a href="#cb1-890" aria-hidden="true" tabindex="-1"></a><span class="st">      const capEl = document.getElementById(&#39;capN&#39;);</span></span>
+<span id="cb1-891"><a href="#cb1-891" aria-hidden="true" tabindex="-1"></a><span class="st">      const capVal = document.getElementById(&#39;capNVal&#39;);</span></span>
+<span id="cb1-892"><a href="#cb1-892" aria-hidden="true" tabindex="-1"></a><span class="st">      if(capEl &amp;&amp; capVal){ capVal.textContent = capEl.value + &#39; / &#39; + capEl.max; }</span></span>
+<span id="cb1-893"><a href="#cb1-893" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-894"><a href="#cb1-894" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-895"><a href="#cb1-895" aria-hidden="true" tabindex="-1"></a><span class="st">    function applyFilters(doLayout = true){</span></span>
+<span id="cb1-896"><a href="#cb1-896" aria-hidden="true" tabindex="-1"></a><span class="st">      const onlyFunctional = document.getElementById(&#39;onlyFunctionalChk&#39;).checked;</span></span>
+<span id="cb1-897"><a href="#cb1-897" aria-hidden="true" tabindex="-1"></a><span class="st">      const curatedOnly    = document.getElementById(&#39;curatedOnlyChk&#39;)?.checked;</span></span>
+<span id="cb1-898"><a href="#cb1-898" aria-hidden="true" tabindex="-1"></a><span class="st">      const scoreMinEl     = document.getElementById(&#39;scoreMin&#39;);</span></span>
+<span id="cb1-899"><a href="#cb1-899" aria-hidden="true" tabindex="-1"></a><span class="st">      const scoreMin       = scoreMinEl ? Number(scoreMinEl.value) / 100 : 0;</span></span>
+<span id="cb1-900"><a href="#cb1-900" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-901"><a href="#cb1-901" aria-hidden="true" tabindex="-1"></a><span class="st">      const seedSet = new Set(currentSeeds || []);</span></span>
+<span id="cb1-902"><a href="#cb1-902" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.batch(() =&gt; {</span></span>
+<span id="cb1-903"><a href="#cb1-903" aria-hidden="true" tabindex="-1"></a><span class="st">        cy.edges().forEach(e =&gt; {</span></span>
+<span id="cb1-904"><a href="#cb1-904" aria-hidden="true" tabindex="-1"></a><span class="st">          // curated edges have no composite score and are never filtered by it</span></span>
+<span id="cb1-905"><a href="#cb1-905" aria-hidden="true" tabindex="-1"></a><span class="st">          const s = e.data(&#39;Score&#39;);</span></span>
+<span id="cb1-906"><a href="#cb1-906" aria-hidden="true" tabindex="-1"></a><span class="st">          const passScore = isCuratedEdge(e) || s == null || Number(s) &gt;= scoreMin;</span></span>
+<span id="cb1-907"><a href="#cb1-907" aria-hidden="true" tabindex="-1"></a><span class="st">          const keep = passScore &amp;&amp;</span></span>
+<span id="cb1-908"><a href="#cb1-908" aria-hidden="true" tabindex="-1"></a><span class="st">                       (!curatedOnly || isCuratedEdge(e)) &amp;&amp; (!onlyFunctional || isFunctionalEdge(e));</span></span>
+<span id="cb1-909"><a href="#cb1-909" aria-hidden="true" tabindex="-1"></a><span class="st">          e.style(&#39;display&#39;, keep ? &#39;element&#39; : &#39;none&#39;);</span></span>
+<span id="cb1-910"><a href="#cb1-910" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
+<span id="cb1-911"><a href="#cb1-911" aria-hidden="true" tabindex="-1"></a><span class="st">        cy.nodes().forEach(n =&gt; {</span></span>
+<span id="cb1-912"><a href="#cb1-912" aria-hidden="true" tabindex="-1"></a><span class="st">          const hasVisibleEdge = n.connectedEdges(&#39;:visible&#39;).length &gt; 0;</span></span>
+<span id="cb1-913"><a href="#cb1-913" aria-hidden="true" tabindex="-1"></a><span class="st">          const isSeed = seedSet.has(n.id());</span></span>
+<span id="cb1-914"><a href="#cb1-914" aria-hidden="true" tabindex="-1"></a><span class="st">          const noEdgeFilters = !curatedOnly &amp;&amp; !onlyFunctional &amp;&amp; scoreMin === 0;</span></span>
+<span id="cb1-915"><a href="#cb1-915" aria-hidden="true" tabindex="-1"></a><span class="st">          n.style(&#39;display&#39;, (noEdgeFilters || hasVisibleEdge || isSeed) ? &#39;element&#39; : &#39;none&#39;);</span></span>
+<span id="cb1-916"><a href="#cb1-916" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
+<span id="cb1-917"><a href="#cb1-917" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
+<span id="cb1-918"><a href="#cb1-918" aria-hidden="true" tabindex="-1"></a><span class="st">      if(doLayout){ relayout(document.getElementById(&#39;layoutSel&#39;).value); }</span></span>
+<span id="cb1-919"><a href="#cb1-919" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-920"><a href="#cb1-920" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-921"><a href="#cb1-921" aria-hidden="true" tabindex="-1"></a><span class="st">    const EDGE_COLUMNS = [&#39;From&#39;,&#39;To&#39;,&#39;UniProt&#39;,&#39;Evidence&#39;,&#39;Functional Site?&#39;,&#39;#Sites&#39;,&#39;Sites&#39;,</span></span>
+<span id="cb1-922"><a href="#cb1-922" aria-hidden="true" tabindex="-1"></a><span class="st">                          &#39;Motif percentile&#39;,&#39;Kinase rank for site&#39;,&#39;Functional score&#39;,</span></span>
+<span id="cb1-923"><a href="#cb1-923" aria-hidden="true" tabindex="-1"></a><span class="st">                          &#39;Shared compartments&#39;,&#39;KinaseCanvas score&#39;,&#39;Sources&#39;,&#39;Reference_PMID&#39;];</span></span>
+<span id="cb1-924"><a href="#cb1-924" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-925"><a href="#cb1-925" aria-hidden="true" tabindex="-1"></a><span class="st">    function edgeRow(e){</span></span>
+<span id="cb1-926"><a href="#cb1-926" aria-hidden="true" tabindex="-1"></a><span class="st">      const fmt = v =&gt; (v == null || v === &#39;&#39;) ? &#39;&#39; : v;</span></span>
+<span id="cb1-927"><a href="#cb1-927" aria-hidden="true" tabindex="-1"></a><span class="st">      return [</span></span>
+<span id="cb1-928"><a href="#cb1-928" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;source&#39;),</span></span>
+<span id="cb1-929"><a href="#cb1-929" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;target&#39;),</span></span>
+<span id="cb1-930"><a href="#cb1-930" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;Uniprot&#39;)),</span></span>
+<span id="cb1-931"><a href="#cb1-931" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;evidence&#39;),</span></span>
+<span id="cb1-932"><a href="#cb1-932" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;Likely_functional&#39;),</span></span>
+<span id="cb1-933"><a href="#cb1-933" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;SiteCount&#39;),</span></span>
+<span id="cb1-934"><a href="#cb1-934" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;Sites&#39;),</span></span>
+<span id="cb1-935"><a href="#cb1-935" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;MotifPercentile&#39;)),</span></span>
+<span id="cb1-936"><a href="#cb1-936" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;MotifRank&#39;)),</span></span>
+<span id="cb1-937"><a href="#cb1-937" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;FunctionalScore&#39;)),</span></span>
+<span id="cb1-938"><a href="#cb1-938" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;SharedCompartments&#39;)),</span></span>
+<span id="cb1-939"><a href="#cb1-939" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.data(&#39;Score&#39;)),</span></span>
+<span id="cb1-940"><a href="#cb1-940" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;SourceList&#39;) ?? &#39;&#39;,</span></span>
+<span id="cb1-941"><a href="#cb1-941" aria-hidden="true" tabindex="-1"></a><span class="st">        e.data(&#39;Reference_PMID&#39;)</span></span>
+<span id="cb1-942"><a href="#cb1-942" aria-hidden="true" tabindex="-1"></a><span class="st">      ];</span></span>
+<span id="cb1-943"><a href="#cb1-943" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-944"><a href="#cb1-944" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-945"><a href="#cb1-945" aria-hidden="true" tabindex="-1"></a><span class="st">    // UniProt, Motif percentile, Kinase rank, Functional score, Shared</span></span>
+<span id="cb1-946"><a href="#cb1-946" aria-hidden="true" tabindex="-1"></a><span class="st">    // compartments, KinaseCanvas score -- rendered in the monospace data font.</span></span>
+<span id="cb1-947"><a href="#cb1-947" aria-hidden="true" tabindex="-1"></a><span class="st">    const EDGE_NUMERIC_COLS = [2, 7, 8, 9, 10, 11];</span></span>
 <span id="cb1-948"><a href="#cb1-948" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-949"><a href="#cb1-949" aria-hidden="true" tabindex="-1"></a><span class="st">      const tbody = document.createElement(&#39;tbody&#39;); table.appendChild(tbody); box.appendChild(table);</span></span>
-<span id="cb1-950"><a href="#cb1-950" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-951"><a href="#cb1-951" aria-hidden="true" tabindex="-1"></a><span class="st">      function passes(row, query){</span></span>
-<span id="cb1-952"><a href="#cb1-952" aria-hidden="true" tabindex="-1"></a><span class="st">        for(let i=0;i&lt;query.length;i++){</span></span>
-<span id="cb1-953"><a href="#cb1-953" aria-hidden="true" tabindex="-1"></a><span class="st">          const q = query[i];</span></span>
-<span id="cb1-954"><a href="#cb1-954" aria-hidden="true" tabindex="-1"></a><span class="st">          if(q &amp;&amp; !String(row[i] ?? &#39;&#39;).toLowerCase().includes(q)) return false;</span></span>
-<span id="cb1-955"><a href="#cb1-955" aria-hidden="true" tabindex="-1"></a><span class="st">        }</span></span>
-<span id="cb1-956"><a href="#cb1-956" aria-hidden="true" tabindex="-1"></a><span class="st">        return true;</span></span>
-<span id="cb1-957"><a href="#cb1-957" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
-<span id="cb1-958"><a href="#cb1-958" aria-hidden="true" tabindex="-1"></a><span class="st">      function draw(){</span></span>
-<span id="cb1-959"><a href="#cb1-959" aria-hidden="true" tabindex="-1"></a><span class="st">        const q = filters.map(x =&gt; x.value.trim().toLowerCase());</span></span>
-<span id="cb1-960"><a href="#cb1-960" aria-hidden="true" tabindex="-1"></a><span class="st">        tbody.innerHTML = &#39;&#39;;</span></span>
-<span id="cb1-961"><a href="#cb1-961" aria-hidden="true" tabindex="-1"></a><span class="st">        rows.forEach(r =&gt; {</span></span>
-<span id="cb1-962"><a href="#cb1-962" aria-hidden="true" tabindex="-1"></a><span class="st">          if(!passes(r, q)) return;</span></span>
-<span id="cb1-963"><a href="#cb1-963" aria-hidden="true" tabindex="-1"></a><span class="st">          const tr = document.createElement(&#39;tr&#39;);</span></span>
-<span id="cb1-964"><a href="#cb1-964" aria-hidden="true" tabindex="-1"></a><span class="st">          r.forEach((v, i) =&gt; {</span></span>
-<span id="cb1-965"><a href="#cb1-965" aria-hidden="true" tabindex="-1"></a><span class="st">            const td = document.createElement(&#39;td&#39;);</span></span>
-<span id="cb1-966"><a href="#cb1-966" aria-hidden="true" tabindex="-1"></a><span class="st">            if(numericCols.indexOf(i) &gt;= 0){ td.className = &#39;num&#39;; }</span></span>
-<span id="cb1-967"><a href="#cb1-967" aria-hidden="true" tabindex="-1"></a><span class="st">            td.textContent = (v ?? &#39;&#39;).toString();</span></span>
-<span id="cb1-968"><a href="#cb1-968" aria-hidden="true" tabindex="-1"></a><span class="st">            tr.appendChild(td);</span></span>
-<span id="cb1-969"><a href="#cb1-969" aria-hidden="true" tabindex="-1"></a><span class="st">          });</span></span>
-<span id="cb1-970"><a href="#cb1-970" aria-hidden="true" tabindex="-1"></a><span class="st">          tbody.appendChild(tr);</span></span>
-<span id="cb1-971"><a href="#cb1-971" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
-<span id="cb1-972"><a href="#cb1-972" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
-<span id="cb1-973"><a href="#cb1-973" aria-hidden="true" tabindex="-1"></a><span class="st">      filters.forEach(inp =&gt; inp.addEventListener(&#39;input&#39;, draw));</span></span>
-<span id="cb1-974"><a href="#cb1-974" aria-hidden="true" tabindex="-1"></a><span class="st">      draw();</span></span>
-<span id="cb1-975"><a href="#cb1-975" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-976"><a href="#cb1-976" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-977"><a href="#cb1-977" aria-hidden="true" tabindex="-1"></a><span class="st">    function incidentSubgraph(seeds){</span></span>
-<span id="cb1-978"><a href="#cb1-978" aria-hidden="true" tabindex="-1"></a><span class="st">      const nodeIndex = new Map(data.nodes.map(n =&gt; [n.id, n]));</span></span>
-<span id="cb1-979"><a href="#cb1-979" aria-hidden="true" tabindex="-1"></a><span class="st">      const validSeeds = seeds.filter(s =&gt; nodeIndex.has(s));</span></span>
-<span id="cb1-980"><a href="#cb1-980" aria-hidden="true" tabindex="-1"></a><span class="st">      if(!validSeeds.length){</span></span>
-<span id="cb1-981"><a href="#cb1-981" aria-hidden="true" tabindex="-1"></a><span class="st">        lastTruncation = {shown: 0, total: 0, hidden: 0};</span></span>
-<span id="cb1-982"><a href="#cb1-982" aria-hidden="true" tabindex="-1"></a><span class="st">        return {nodes:[], edges:[]};</span></span>
-<span id="cb1-983"><a href="#cb1-983" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
-<span id="cb1-984"><a href="#cb1-984" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-985"><a href="#cb1-985" aria-hidden="true" tabindex="-1"></a><span class="st">      // Pair mode intersects the two seeds instead of taking their union, which is</span></span>
-<span id="cb1-986"><a href="#cb1-986" aria-hidden="true" tabindex="-1"></a><span class="st">      // what a user asking whether kinase X hits substrate Y, and where, actually wants.</span></span>
-<span id="cb1-987"><a href="#cb1-987" aria-hidden="true" tabindex="-1"></a><span class="st">      const pairMode = document.getElementById(&#39;pairModeChk&#39;)?.checked;</span></span>
-<span id="cb1-988"><a href="#cb1-988" aria-hidden="true" tabindex="-1"></a><span class="st">      const kinSeed = document.getElementById(&#39;kinSel&#39;).value.trim();</span></span>
-<span id="cb1-989"><a href="#cb1-989" aria-hidden="true" tabindex="-1"></a><span class="st">      const subSeed = document.getElementById(&#39;subSel&#39;).value.trim();</span></span>
-<span id="cb1-990"><a href="#cb1-990" aria-hidden="true" tabindex="-1"></a><span class="st">      let edges = (pairMode &amp;&amp; kinSeed &amp;&amp; subSeed)</span></span>
-<span id="cb1-991"><a href="#cb1-991" aria-hidden="true" tabindex="-1"></a><span class="st">        ? data.edges.filter(e =&gt; e.source === kinSeed &amp;&amp; e.target === subSeed)</span></span>
-<span id="cb1-992"><a href="#cb1-992" aria-hidden="true" tabindex="-1"></a><span class="st">        : data.edges.filter(e =&gt; validSeeds.includes(e.source) || validSeeds.includes(e.target));</span></span>
-<span id="cb1-993"><a href="#cb1-993" aria-hidden="true" tabindex="-1"></a><span class="st">      if(!edges.length){</span></span>
-<span id="cb1-994"><a href="#cb1-994" aria-hidden="true" tabindex="-1"></a><span class="st">        // Reset rather than leave a stale banner from a previous, non-empty query --</span></span>
-<span id="cb1-995"><a href="#cb1-995" aria-hidden="true" tabindex="-1"></a><span class="st">        // e.g. pair mode finding no direct edge between two otherwise valid seeds.</span></span>
-<span id="cb1-996"><a href="#cb1-996" aria-hidden="true" tabindex="-1"></a><span class="st">        lastTruncation = {shown: 0, total: 0, hidden: 0, filteredOut: 0};</span></span>
-<span id="cb1-997"><a href="#cb1-997" aria-hidden="true" tabindex="-1"></a><span class="st">        return {nodes:[], edges:[]};</span></span>
-<span id="cb1-998"><a href="#cb1-998" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
-<span id="cb1-999"><a href="#cb1-999" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1000"><a href="#cb1-1000" aria-hidden="true" tabindex="-1"></a><span class="st">      // Filters (curated only, functional only, minimum confidence) act before the cap,</span></span>
-<span id="cb1-1001"><a href="#cb1-1001" aria-hidden="true" tabindex="-1"></a><span class="st">      // so the cap always picks the best-supported interactions among those that pass,</span></span>
-<span id="cb1-1002"><a href="#cb1-1002" aria-hidden="true" tabindex="-1"></a><span class="st">      // and raising the confidence threshold brings in qualifying edges from beyond it.</span></span>
-<span id="cb1-1003"><a href="#cb1-1003" aria-hidden="true" tabindex="-1"></a><span class="st">      const neighbourhoodSize = edges.length;</span></span>
-<span id="cb1-1004"><a href="#cb1-1004" aria-hidden="true" tabindex="-1"></a><span class="st">      edges = edges.filter(edgePassesFilters);</span></span>
-<span id="cb1-1005"><a href="#cb1-1005" aria-hidden="true" tabindex="-1"></a><span class="st">      if(!edges.length){</span></span>
-<span id="cb1-1006"><a href="#cb1-1006" aria-hidden="true" tabindex="-1"></a><span class="st">        lastTruncation = {shown: 0, total: 0, hidden: 0, filteredOut: neighbourhoodSize};</span></span>
-<span id="cb1-1007"><a href="#cb1-1007" aria-hidden="true" tabindex="-1"></a><span class="st">        return {nodes:[], edges:[]};</span></span>
-<span id="cb1-1008"><a href="#cb1-1008" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
-<span id="cb1-1009"><a href="#cb1-1009" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1010"><a href="#cb1-1010" aria-hidden="true" tabindex="-1"></a><span class="st">      // Promiscuous kinases have very large neighbourhoods -- CDK1 alone has 629</span></span>
-<span id="cb1-1011"><a href="#cb1-1011" aria-hidden="true" tabindex="-1"></a><span class="st">      // substrates -- and rendering all of them at once produces a hairball that</span></span>
-<span id="cb1-1012"><a href="#cb1-1012" aria-hidden="true" tabindex="-1"></a><span class="st">      // cannot be read. Unless the user asks for everything, show the most strongly</span></span>
-<span id="cb1-1013"><a href="#cb1-1013" aria-hidden="true" tabindex="-1"></a><span class="st">      // supported subset under an explicit, stated ordering: curated interactions</span></span>
-<span id="cb1-1014"><a href="#cb1-1014" aria-hidden="true" tabindex="-1"></a><span class="st">      // first (they carry direct experimental evidence and no composite score), then</span></span>
-<span id="cb1-1015"><a href="#cb1-1015" aria-hidden="true" tabindex="-1"></a><span class="st">      // predicted ones by descending confidence, ties broken alphabetically so the</span></span>
-<span id="cb1-1016"><a href="#cb1-1016" aria-hidden="true" tabindex="-1"></a><span class="st">      // same seed always yields the same view.</span></span>
-<span id="cb1-1017"><a href="#cb1-1017" aria-hidden="true" tabindex="-1"></a><span class="st">      // The Interactions shown slider sets how many of them are drawn, in that same</span></span>
-<span id="cb1-1018"><a href="#cb1-1018" aria-hidden="true" tabindex="-1"></a><span class="st">      // order, from 1 up to all that pass the filters. A new query starts again at</span></span>
-<span id="cb1-1019"><a href="#cb1-1019" aria-hidden="true" tabindex="-1"></a><span class="st">      // NEIGHBOURHOOD_CAP so a hub never opens as a hairball; a user who had chosen</span></span>
-<span id="cb1-1020"><a href="#cb1-1020" aria-hidden="true" tabindex="-1"></a><span class="st">      // to see everything keeps seeing everything when the filters change.</span></span>
-<span id="cb1-1021"><a href="#cb1-1021" aria-hidden="true" tabindex="-1"></a><span class="st">      const total = edges.length;</span></span>
-<span id="cb1-1022"><a href="#cb1-1022" aria-hidden="true" tabindex="-1"></a><span class="st">      const capEl = document.getElementById(&#39;capN&#39;);</span></span>
-<span id="cb1-1023"><a href="#cb1-1023" aria-hidden="true" tabindex="-1"></a><span class="st">      const queryKey = [kinSeed, subSeed, pairMode].join(&#39;|&#39;);</span></span>
-<span id="cb1-1024"><a href="#cb1-1024" aria-hidden="true" tabindex="-1"></a><span class="st">      let cap = Math.min(NEIGHBOURHOOD_CAP, total);</span></span>
-<span id="cb1-1025"><a href="#cb1-1025" aria-hidden="true" tabindex="-1"></a><span class="st">      if(capEl){</span></span>
-<span id="cb1-1026"><a href="#cb1-1026" aria-hidden="true" tabindex="-1"></a><span class="st">        const wasAll = Number(capEl.value) &gt;= Number(capEl.max);</span></span>
-<span id="cb1-1027"><a href="#cb1-1027" aria-hidden="true" tabindex="-1"></a><span class="st">        const newQuery = queryKey !== lastCapQuery;</span></span>
-<span id="cb1-1028"><a href="#cb1-1028" aria-hidden="true" tabindex="-1"></a><span class="st">        capEl.max = String(total);</span></span>
-<span id="cb1-1029"><a href="#cb1-1029" aria-hidden="true" tabindex="-1"></a><span class="st">        capEl.disabled = total &lt;= 1;</span></span>
-<span id="cb1-1030"><a href="#cb1-1030" aria-hidden="true" tabindex="-1"></a><span class="st">        if(newQuery){ lastCapQuery = queryKey; }</span></span>
-<span id="cb1-1031"><a href="#cb1-1031" aria-hidden="true" tabindex="-1"></a><span class="st">        else { cap = wasAll ? total : Math.min(Number(capEl.value), total); }</span></span>
-<span id="cb1-1032"><a href="#cb1-1032" aria-hidden="true" tabindex="-1"></a><span class="st">        capEl.value = String(cap);</span></span>
-<span id="cb1-1033"><a href="#cb1-1033" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
-<span id="cb1-1034"><a href="#cb1-1034" aria-hidden="true" tabindex="-1"></a><span class="st">      let truncated = 0;</span></span>
-<span id="cb1-1035"><a href="#cb1-1035" aria-hidden="true" tabindex="-1"></a><span class="st">      if(total &gt; cap){</span></span>
-<span id="cb1-1036"><a href="#cb1-1036" aria-hidden="true" tabindex="-1"></a><span class="st">        edges = edges.slice().sort(edgeRankCompare).slice(0, cap);</span></span>
-<span id="cb1-1037"><a href="#cb1-1037" aria-hidden="true" tabindex="-1"></a><span class="st">        truncated = total - edges.length;</span></span>
-<span id="cb1-1038"><a href="#cb1-1038" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
-<span id="cb1-1039"><a href="#cb1-1039" aria-hidden="true" tabindex="-1"></a><span class="st">      lastTruncation = {shown: edges.length, total: total, hidden: truncated,</span></span>
-<span id="cb1-1040"><a href="#cb1-1040" aria-hidden="true" tabindex="-1"></a><span class="st">                        filteredOut: neighbourhoodSize - total,</span></span>
-<span id="cb1-1041"><a href="#cb1-1041" aria-hidden="true" tabindex="-1"></a><span class="st">                        predictedShown: edges.filter(e =&gt; (e.evidence ?? &#39;&#39;).trim() !== &#39;Curated&#39;).length};</span></span>
-<span id="cb1-1042"><a href="#cb1-1042" aria-hidden="true" tabindex="-1"></a><span class="st">      updateCapBadge();</span></span>
-<span id="cb1-1043"><a href="#cb1-1043" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1044"><a href="#cb1-1044" aria-hidden="true" tabindex="-1"></a><span class="st">      const nset = new Set(); edges.forEach(e =&gt; { nset.add(e.source); nset.add(e.target); });</span></span>
-<span id="cb1-1045"><a href="#cb1-1045" aria-hidden="true" tabindex="-1"></a><span class="st">      const nodes = Array.from(nset).map(id =&gt; ({</span></span>
-<span id="cb1-1046"><a href="#cb1-1046" aria-hidden="true" tabindex="-1"></a><span class="st">        data: nodeIndex.get(id),</span></span>
-<span id="cb1-1047"><a href="#cb1-1047" aria-hidden="true" tabindex="-1"></a><span class="st">        classes: (validSeeds.includes(id) ? (seeds[0]===id ? &#39;qk&#39; : (seeds[1]===id ? &#39;qs&#39; : &#39;&#39;)) : &#39;&#39;)</span></span>
-<span id="cb1-1048"><a href="#cb1-1048" aria-hidden="true" tabindex="-1"></a><span class="st">      }));</span></span>
-<span id="cb1-1049"><a href="#cb1-1049" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1050"><a href="#cb1-1050" aria-hidden="true" tabindex="-1"></a><span class="st">      return {nodes: nodes.map(n =&gt; ({ data: n.data, classes: n.classes })), edges: edges.map(e =&gt; ({ data: e }))};</span></span>
-<span id="cb1-1051"><a href="#cb1-1051" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-1052"><a href="#cb1-1052" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1053"><a href="#cb1-1053" aria-hidden="true" tabindex="-1"></a><span class="st">    function relayout(name){</span></span>
-<span id="cb1-1054"><a href="#cb1-1054" aria-hidden="true" tabindex="-1"></a><span class="st">      const opts = (name===&#39;concentric&#39;) ? { name, minNodeSpacing: 20 } :</span></span>
-<span id="cb1-1055"><a href="#cb1-1055" aria-hidden="true" tabindex="-1"></a><span class="st">                   (name===&#39;breadthfirst&#39;) ? { name, directed: true, padding: 10 } :</span></span>
-<span id="cb1-1056"><a href="#cb1-1056" aria-hidden="true" tabindex="-1"></a><span class="st">                   (name===&#39;fcose&#39;) ? {</span></span>
-<span id="cb1-1057"><a href="#cb1-1057" aria-hidden="true" tabindex="-1"></a><span class="st">                     name,</span></span>
-<span id="cb1-1058"><a href="#cb1-1058" aria-hidden="true" tabindex="-1"></a><span class="st">                     quality: &#39;default&#39;,</span></span>
-<span id="cb1-1059"><a href="#cb1-1059" aria-hidden="true" tabindex="-1"></a><span class="st">                     randomize: true,</span></span>
-<span id="cb1-1060"><a href="#cb1-1060" aria-hidden="true" tabindex="-1"></a><span class="st">                     randomSeed: 42,</span></span>
-<span id="cb1-1061"><a href="#cb1-1061" aria-hidden="true" tabindex="-1"></a><span class="st">                     animate: false,</span></span>
-<span id="cb1-1062"><a href="#cb1-1062" aria-hidden="true" tabindex="-1"></a><span class="st">                     animationDuration: 1000,</span></span>
-<span id="cb1-1063"><a href="#cb1-1063" aria-hidden="true" tabindex="-1"></a><span class="st">                     fit: true,</span></span>
-<span id="cb1-1064"><a href="#cb1-1064" aria-hidden="true" tabindex="-1"></a><span class="st">                     padding: 30,</span></span>
-<span id="cb1-1065"><a href="#cb1-1065" aria-hidden="true" tabindex="-1"></a><span class="st">                     nodeDimensionsIncludeLabels: false,</span></span>
-<span id="cb1-1066"><a href="#cb1-1066" aria-hidden="true" tabindex="-1"></a><span class="st">                     uniformNodeDimensions: false,</span></span>
-<span id="cb1-1067"><a href="#cb1-1067" aria-hidden="true" tabindex="-1"></a><span class="st">                     packComponents: false,</span></span>
-<span id="cb1-1068"><a href="#cb1-1068" aria-hidden="true" tabindex="-1"></a><span class="st">                     tile: true,</span></span>
-<span id="cb1-1069"><a href="#cb1-1069" aria-hidden="true" tabindex="-1"></a><span class="st">                     samplingType: true,</span></span>
-<span id="cb1-1070"><a href="#cb1-1070" aria-hidden="true" tabindex="-1"></a><span class="st">                     sampleSize: 25,</span></span>
-<span id="cb1-1071"><a href="#cb1-1071" aria-hidden="true" tabindex="-1"></a><span class="st">                     nodeSeparation: 90,</span></span>
-<span id="cb1-1072"><a href="#cb1-1072" aria-hidden="true" tabindex="-1"></a><span class="st">                     nodeRepulsion: node =&gt; 4500,</span></span>
-<span id="cb1-1073"><a href="#cb1-1073" aria-hidden="true" tabindex="-1"></a><span class="st">                     idealEdgeLength: edge =&gt; 80,</span></span>
-<span id="cb1-1074"><a href="#cb1-1074" aria-hidden="true" tabindex="-1"></a><span class="st">                     edgeElasticity: edge =&gt; 0.45,</span></span>
-<span id="cb1-1075"><a href="#cb1-1075" aria-hidden="true" tabindex="-1"></a><span class="st">                     nestingFactor: 0.1,</span></span>
-<span id="cb1-1076"><a href="#cb1-1076" aria-hidden="true" tabindex="-1"></a><span class="st">                     numIter: 2500,</span></span>
-<span id="cb1-1077"><a href="#cb1-1077" aria-hidden="true" tabindex="-1"></a><span class="st">                     gravity: 0.25,</span></span>
-<span id="cb1-1078"><a href="#cb1-1078" aria-hidden="true" tabindex="-1"></a><span class="st">                     gravityRangeCompound: 1.5,</span></span>
-<span id="cb1-1079"><a href="#cb1-1079" aria-hidden="true" tabindex="-1"></a><span class="st">                     gravityCompound: 1.0,</span></span>
-<span id="cb1-1080"><a href="#cb1-1080" aria-hidden="true" tabindex="-1"></a><span class="st">                     gravityRange: 3.8,</span></span>
-<span id="cb1-1081"><a href="#cb1-1081" aria-hidden="true" tabindex="-1"></a><span class="st">                     initialEnergyOnIncremental: 0.3</span></span>
-<span id="cb1-1082"><a href="#cb1-1082" aria-hidden="true" tabindex="-1"></a><span class="st">                   } :</span></span>
-<span id="cb1-1083"><a href="#cb1-1083" aria-hidden="true" tabindex="-1"></a><span class="st">                   (name===&#39;cose-bilkent&#39;) ? {</span></span>
+<span id="cb1-949"><a href="#cb1-949" aria-hidden="true" tabindex="-1"></a><span class="st">    function refreshEdgesTable(){</span></span>
+<span id="cb1-950"><a href="#cb1-950" aria-hidden="true" tabindex="-1"></a><span class="st">      const rows = cy.edges(&#39;:visible&#39;).map(edgeRow);</span></span>
+<span id="cb1-951"><a href="#cb1-951" aria-hidden="true" tabindex="-1"></a><span class="st">      renderFilterableTable(&#39;edgesFilters&#39;,&#39;edgesTable&#39;, EDGE_COLUMNS, rows, EDGE_NUMERIC_COLS);</span></span>
+<span id="cb1-952"><a href="#cb1-952" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-953"><a href="#cb1-953" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-954"><a href="#cb1-954" aria-hidden="true" tabindex="-1"></a><span class="st">    function renderFilterableTable(filtersId, tableBoxId, headers, rows, numericCols){</span></span>
+<span id="cb1-955"><a href="#cb1-955" aria-hidden="true" tabindex="-1"></a><span class="st">      numericCols = numericCols || [];</span></span>
+<span id="cb1-956"><a href="#cb1-956" aria-hidden="true" tabindex="-1"></a><span class="st">      const fwrap = document.getElementById(filtersId);</span></span>
+<span id="cb1-957"><a href="#cb1-957" aria-hidden="true" tabindex="-1"></a><span class="st">      const box   = document.getElementById(tableBoxId);</span></span>
+<span id="cb1-958"><a href="#cb1-958" aria-hidden="true" tabindex="-1"></a><span class="st">      fwrap.innerHTML = &#39;&#39;;</span></span>
+<span id="cb1-959"><a href="#cb1-959" aria-hidden="true" tabindex="-1"></a><span class="st">      box.innerHTML   = &#39;&#39;;</span></span>
+<span id="cb1-960"><a href="#cb1-960" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-961"><a href="#cb1-961" aria-hidden="true" tabindex="-1"></a><span class="st">      const filters = headers.map(h =&gt; {</span></span>
+<span id="cb1-962"><a href="#cb1-962" aria-hidden="true" tabindex="-1"></a><span class="st">        const inp = document.createElement(&#39;input&#39;);</span></span>
+<span id="cb1-963"><a href="#cb1-963" aria-hidden="true" tabindex="-1"></a><span class="st">        inp.type = &#39;text&#39;;</span></span>
+<span id="cb1-964"><a href="#cb1-964" aria-hidden="true" tabindex="-1"></a><span class="st">        inp.placeholder = &#39;Filter &#39; + h;</span></span>
+<span id="cb1-965"><a href="#cb1-965" aria-hidden="true" tabindex="-1"></a><span class="st">        fwrap.appendChild(inp);</span></span>
+<span id="cb1-966"><a href="#cb1-966" aria-hidden="true" tabindex="-1"></a><span class="st">        return inp;</span></span>
+<span id="cb1-967"><a href="#cb1-967" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
+<span id="cb1-968"><a href="#cb1-968" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-969"><a href="#cb1-969" aria-hidden="true" tabindex="-1"></a><span class="st">      const table = document.createElement(&#39;table&#39;);</span></span>
+<span id="cb1-970"><a href="#cb1-970" aria-hidden="true" tabindex="-1"></a><span class="st">      table.className = &#39;tbl&#39;;</span></span>
+<span id="cb1-971"><a href="#cb1-971" aria-hidden="true" tabindex="-1"></a><span class="st">      const thead = document.createElement(&#39;thead&#39;);</span></span>
+<span id="cb1-972"><a href="#cb1-972" aria-hidden="true" tabindex="-1"></a><span class="st">      const trh   = document.createElement(&#39;tr&#39;);</span></span>
+<span id="cb1-973"><a href="#cb1-973" aria-hidden="true" tabindex="-1"></a><span class="st">      headers.forEach(h =&gt; { const th = document.createElement(&#39;th&#39;); th.textContent = h; trh.appendChild(th); });</span></span>
+<span id="cb1-974"><a href="#cb1-974" aria-hidden="true" tabindex="-1"></a><span class="st">      thead.appendChild(trh); table.appendChild(thead);</span></span>
+<span id="cb1-975"><a href="#cb1-975" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-976"><a href="#cb1-976" aria-hidden="true" tabindex="-1"></a><span class="st">      const tbody = document.createElement(&#39;tbody&#39;); table.appendChild(tbody); box.appendChild(table);</span></span>
+<span id="cb1-977"><a href="#cb1-977" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-978"><a href="#cb1-978" aria-hidden="true" tabindex="-1"></a><span class="st">      function passes(row, query){</span></span>
+<span id="cb1-979"><a href="#cb1-979" aria-hidden="true" tabindex="-1"></a><span class="st">        for(let i=0;i&lt;query.length;i++){</span></span>
+<span id="cb1-980"><a href="#cb1-980" aria-hidden="true" tabindex="-1"></a><span class="st">          const q = query[i];</span></span>
+<span id="cb1-981"><a href="#cb1-981" aria-hidden="true" tabindex="-1"></a><span class="st">          if(q &amp;&amp; !String(row[i] ?? &#39;&#39;).toLowerCase().includes(q)) return false;</span></span>
+<span id="cb1-982"><a href="#cb1-982" aria-hidden="true" tabindex="-1"></a><span class="st">        }</span></span>
+<span id="cb1-983"><a href="#cb1-983" aria-hidden="true" tabindex="-1"></a><span class="st">        return true;</span></span>
+<span id="cb1-984"><a href="#cb1-984" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-985"><a href="#cb1-985" aria-hidden="true" tabindex="-1"></a><span class="st">      function draw(){</span></span>
+<span id="cb1-986"><a href="#cb1-986" aria-hidden="true" tabindex="-1"></a><span class="st">        const q = filters.map(x =&gt; x.value.trim().toLowerCase());</span></span>
+<span id="cb1-987"><a href="#cb1-987" aria-hidden="true" tabindex="-1"></a><span class="st">        tbody.innerHTML = &#39;&#39;;</span></span>
+<span id="cb1-988"><a href="#cb1-988" aria-hidden="true" tabindex="-1"></a><span class="st">        rows.forEach(r =&gt; {</span></span>
+<span id="cb1-989"><a href="#cb1-989" aria-hidden="true" tabindex="-1"></a><span class="st">          if(!passes(r, q)) return;</span></span>
+<span id="cb1-990"><a href="#cb1-990" aria-hidden="true" tabindex="-1"></a><span class="st">          const tr = document.createElement(&#39;tr&#39;);</span></span>
+<span id="cb1-991"><a href="#cb1-991" aria-hidden="true" tabindex="-1"></a><span class="st">          r.forEach((v, i) =&gt; {</span></span>
+<span id="cb1-992"><a href="#cb1-992" aria-hidden="true" tabindex="-1"></a><span class="st">            const td = document.createElement(&#39;td&#39;);</span></span>
+<span id="cb1-993"><a href="#cb1-993" aria-hidden="true" tabindex="-1"></a><span class="st">            if(numericCols.indexOf(i) &gt;= 0){ td.className = &#39;num&#39;; }</span></span>
+<span id="cb1-994"><a href="#cb1-994" aria-hidden="true" tabindex="-1"></a><span class="st">            td.textContent = (v ?? &#39;&#39;).toString();</span></span>
+<span id="cb1-995"><a href="#cb1-995" aria-hidden="true" tabindex="-1"></a><span class="st">            tr.appendChild(td);</span></span>
+<span id="cb1-996"><a href="#cb1-996" aria-hidden="true" tabindex="-1"></a><span class="st">          });</span></span>
+<span id="cb1-997"><a href="#cb1-997" aria-hidden="true" tabindex="-1"></a><span class="st">          tbody.appendChild(tr);</span></span>
+<span id="cb1-998"><a href="#cb1-998" aria-hidden="true" tabindex="-1"></a><span class="st">        });</span></span>
+<span id="cb1-999"><a href="#cb1-999" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-1000"><a href="#cb1-1000" aria-hidden="true" tabindex="-1"></a><span class="st">      filters.forEach(inp =&gt; inp.addEventListener(&#39;input&#39;, draw));</span></span>
+<span id="cb1-1001"><a href="#cb1-1001" aria-hidden="true" tabindex="-1"></a><span class="st">      draw();</span></span>
+<span id="cb1-1002"><a href="#cb1-1002" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-1003"><a href="#cb1-1003" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1004"><a href="#cb1-1004" aria-hidden="true" tabindex="-1"></a><span class="st">    function incidentSubgraph(seeds){</span></span>
+<span id="cb1-1005"><a href="#cb1-1005" aria-hidden="true" tabindex="-1"></a><span class="st">      const nodeIndex = new Map(data.nodes.map(n =&gt; [n.id, n]));</span></span>
+<span id="cb1-1006"><a href="#cb1-1006" aria-hidden="true" tabindex="-1"></a><span class="st">      const validSeeds = seeds.filter(s =&gt; nodeIndex.has(s));</span></span>
+<span id="cb1-1007"><a href="#cb1-1007" aria-hidden="true" tabindex="-1"></a><span class="st">      if(!validSeeds.length){</span></span>
+<span id="cb1-1008"><a href="#cb1-1008" aria-hidden="true" tabindex="-1"></a><span class="st">        lastTruncation = {shown: 0, total: 0, hidden: 0};</span></span>
+<span id="cb1-1009"><a href="#cb1-1009" aria-hidden="true" tabindex="-1"></a><span class="st">        return {nodes:[], edges:[]};</span></span>
+<span id="cb1-1010"><a href="#cb1-1010" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-1011"><a href="#cb1-1011" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1012"><a href="#cb1-1012" aria-hidden="true" tabindex="-1"></a><span class="st">      // Pair mode intersects the two seeds instead of taking their union, which is</span></span>
+<span id="cb1-1013"><a href="#cb1-1013" aria-hidden="true" tabindex="-1"></a><span class="st">      // what a user asking whether kinase X hits substrate Y, and where, actually wants.</span></span>
+<span id="cb1-1014"><a href="#cb1-1014" aria-hidden="true" tabindex="-1"></a><span class="st">      const pairMode = document.getElementById(&#39;pairModeChk&#39;)?.checked;</span></span>
+<span id="cb1-1015"><a href="#cb1-1015" aria-hidden="true" tabindex="-1"></a><span class="st">      const kinSeed = document.getElementById(&#39;kinSel&#39;).value.trim();</span></span>
+<span id="cb1-1016"><a href="#cb1-1016" aria-hidden="true" tabindex="-1"></a><span class="st">      const subSeed = document.getElementById(&#39;subSel&#39;).value.trim();</span></span>
+<span id="cb1-1017"><a href="#cb1-1017" aria-hidden="true" tabindex="-1"></a><span class="st">      let edges = (pairMode &amp;&amp; kinSeed &amp;&amp; subSeed)</span></span>
+<span id="cb1-1018"><a href="#cb1-1018" aria-hidden="true" tabindex="-1"></a><span class="st">        ? data.edges.filter(e =&gt; e.source === kinSeed &amp;&amp; e.target === subSeed)</span></span>
+<span id="cb1-1019"><a href="#cb1-1019" aria-hidden="true" tabindex="-1"></a><span class="st">        : data.edges.filter(e =&gt; validSeeds.includes(e.source) || validSeeds.includes(e.target));</span></span>
+<span id="cb1-1020"><a href="#cb1-1020" aria-hidden="true" tabindex="-1"></a><span class="st">      if(!edges.length){</span></span>
+<span id="cb1-1021"><a href="#cb1-1021" aria-hidden="true" tabindex="-1"></a><span class="st">        // Reset rather than leave a stale banner from a previous, non-empty query --</span></span>
+<span id="cb1-1022"><a href="#cb1-1022" aria-hidden="true" tabindex="-1"></a><span class="st">        // e.g. pair mode finding no direct edge between two otherwise valid seeds.</span></span>
+<span id="cb1-1023"><a href="#cb1-1023" aria-hidden="true" tabindex="-1"></a><span class="st">        lastTruncation = {shown: 0, total: 0, hidden: 0, filteredOut: 0};</span></span>
+<span id="cb1-1024"><a href="#cb1-1024" aria-hidden="true" tabindex="-1"></a><span class="st">        return {nodes:[], edges:[]};</span></span>
+<span id="cb1-1025"><a href="#cb1-1025" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-1026"><a href="#cb1-1026" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1027"><a href="#cb1-1027" aria-hidden="true" tabindex="-1"></a><span class="st">      // Filters (curated only, functional only, minimum confidence) act before the cap,</span></span>
+<span id="cb1-1028"><a href="#cb1-1028" aria-hidden="true" tabindex="-1"></a><span class="st">      // so the cap always picks the best-supported interactions among those that pass,</span></span>
+<span id="cb1-1029"><a href="#cb1-1029" aria-hidden="true" tabindex="-1"></a><span class="st">      // and raising the confidence threshold brings in qualifying edges from beyond it.</span></span>
+<span id="cb1-1030"><a href="#cb1-1030" aria-hidden="true" tabindex="-1"></a><span class="st">      const neighbourhoodSize = edges.length;</span></span>
+<span id="cb1-1031"><a href="#cb1-1031" aria-hidden="true" tabindex="-1"></a><span class="st">      edges = edges.filter(edgePassesFilters);</span></span>
+<span id="cb1-1032"><a href="#cb1-1032" aria-hidden="true" tabindex="-1"></a><span class="st">      if(!edges.length){</span></span>
+<span id="cb1-1033"><a href="#cb1-1033" aria-hidden="true" tabindex="-1"></a><span class="st">        lastTruncation = {shown: 0, total: 0, hidden: 0, filteredOut: neighbourhoodSize};</span></span>
+<span id="cb1-1034"><a href="#cb1-1034" aria-hidden="true" tabindex="-1"></a><span class="st">        return {nodes:[], edges:[]};</span></span>
+<span id="cb1-1035"><a href="#cb1-1035" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-1036"><a href="#cb1-1036" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1037"><a href="#cb1-1037" aria-hidden="true" tabindex="-1"></a><span class="st">      // Promiscuous kinases have very large neighbourhoods -- CDK1 alone has 629</span></span>
+<span id="cb1-1038"><a href="#cb1-1038" aria-hidden="true" tabindex="-1"></a><span class="st">      // substrates -- and rendering all of them at once produces a hairball that</span></span>
+<span id="cb1-1039"><a href="#cb1-1039" aria-hidden="true" tabindex="-1"></a><span class="st">      // cannot be read. Unless the user asks for everything, show the most strongly</span></span>
+<span id="cb1-1040"><a href="#cb1-1040" aria-hidden="true" tabindex="-1"></a><span class="st">      // supported subset under an explicit, stated ordering: curated interactions</span></span>
+<span id="cb1-1041"><a href="#cb1-1041" aria-hidden="true" tabindex="-1"></a><span class="st">      // first (they carry direct experimental evidence and no composite score), then</span></span>
+<span id="cb1-1042"><a href="#cb1-1042" aria-hidden="true" tabindex="-1"></a><span class="st">      // predicted ones by descending confidence, ties broken alphabetically so the</span></span>
+<span id="cb1-1043"><a href="#cb1-1043" aria-hidden="true" tabindex="-1"></a><span class="st">      // same seed always yields the same view.</span></span>
+<span id="cb1-1044"><a href="#cb1-1044" aria-hidden="true" tabindex="-1"></a><span class="st">      // The Interactions shown slider sets how many of them are drawn, in that same</span></span>
+<span id="cb1-1045"><a href="#cb1-1045" aria-hidden="true" tabindex="-1"></a><span class="st">      // order, from 1 up to all that pass the filters. A new query starts again at</span></span>
+<span id="cb1-1046"><a href="#cb1-1046" aria-hidden="true" tabindex="-1"></a><span class="st">      // NEIGHBOURHOOD_CAP so a hub never opens as a hairball; a user who had chosen</span></span>
+<span id="cb1-1047"><a href="#cb1-1047" aria-hidden="true" tabindex="-1"></a><span class="st">      // to see everything keeps seeing everything when the filters change.</span></span>
+<span id="cb1-1048"><a href="#cb1-1048" aria-hidden="true" tabindex="-1"></a><span class="st">      const total = edges.length;</span></span>
+<span id="cb1-1049"><a href="#cb1-1049" aria-hidden="true" tabindex="-1"></a><span class="st">      const capEl = document.getElementById(&#39;capN&#39;);</span></span>
+<span id="cb1-1050"><a href="#cb1-1050" aria-hidden="true" tabindex="-1"></a><span class="st">      const queryKey = [kinSeed, subSeed, pairMode].join(&#39;|&#39;);</span></span>
+<span id="cb1-1051"><a href="#cb1-1051" aria-hidden="true" tabindex="-1"></a><span class="st">      let cap = Math.min(NEIGHBOURHOOD_CAP, total);</span></span>
+<span id="cb1-1052"><a href="#cb1-1052" aria-hidden="true" tabindex="-1"></a><span class="st">      if(capEl){</span></span>
+<span id="cb1-1053"><a href="#cb1-1053" aria-hidden="true" tabindex="-1"></a><span class="st">        const wasAll = Number(capEl.value) &gt;= Number(capEl.max);</span></span>
+<span id="cb1-1054"><a href="#cb1-1054" aria-hidden="true" tabindex="-1"></a><span class="st">        const newQuery = queryKey !== lastCapQuery;</span></span>
+<span id="cb1-1055"><a href="#cb1-1055" aria-hidden="true" tabindex="-1"></a><span class="st">        capEl.max = String(total);</span></span>
+<span id="cb1-1056"><a href="#cb1-1056" aria-hidden="true" tabindex="-1"></a><span class="st">        capEl.disabled = total &lt;= 1;</span></span>
+<span id="cb1-1057"><a href="#cb1-1057" aria-hidden="true" tabindex="-1"></a><span class="st">        if(newQuery){ lastCapQuery = queryKey; }</span></span>
+<span id="cb1-1058"><a href="#cb1-1058" aria-hidden="true" tabindex="-1"></a><span class="st">        else { cap = wasAll ? total : Math.min(Number(capEl.value), total); }</span></span>
+<span id="cb1-1059"><a href="#cb1-1059" aria-hidden="true" tabindex="-1"></a><span class="st">        capEl.value = String(cap);</span></span>
+<span id="cb1-1060"><a href="#cb1-1060" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-1061"><a href="#cb1-1061" aria-hidden="true" tabindex="-1"></a><span class="st">      let truncated = 0;</span></span>
+<span id="cb1-1062"><a href="#cb1-1062" aria-hidden="true" tabindex="-1"></a><span class="st">      if(total &gt; cap){</span></span>
+<span id="cb1-1063"><a href="#cb1-1063" aria-hidden="true" tabindex="-1"></a><span class="st">        edges = edges.slice().sort(edgeRankCompare).slice(0, cap);</span></span>
+<span id="cb1-1064"><a href="#cb1-1064" aria-hidden="true" tabindex="-1"></a><span class="st">        truncated = total - edges.length;</span></span>
+<span id="cb1-1065"><a href="#cb1-1065" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-1066"><a href="#cb1-1066" aria-hidden="true" tabindex="-1"></a><span class="st">      lastTruncation = {shown: edges.length, total: total, hidden: truncated,</span></span>
+<span id="cb1-1067"><a href="#cb1-1067" aria-hidden="true" tabindex="-1"></a><span class="st">                        filteredOut: neighbourhoodSize - total,</span></span>
+<span id="cb1-1068"><a href="#cb1-1068" aria-hidden="true" tabindex="-1"></a><span class="st">                        predictedShown: edges.filter(e =&gt; (e.evidence ?? &#39;&#39;).trim() !== &#39;Curated&#39;).length};</span></span>
+<span id="cb1-1069"><a href="#cb1-1069" aria-hidden="true" tabindex="-1"></a><span class="st">      updateCapBadge();</span></span>
+<span id="cb1-1070"><a href="#cb1-1070" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1071"><a href="#cb1-1071" aria-hidden="true" tabindex="-1"></a><span class="st">      const nset = new Set(); edges.forEach(e =&gt; { nset.add(e.source); nset.add(e.target); });</span></span>
+<span id="cb1-1072"><a href="#cb1-1072" aria-hidden="true" tabindex="-1"></a><span class="st">      const nodes = Array.from(nset).map(id =&gt; ({</span></span>
+<span id="cb1-1073"><a href="#cb1-1073" aria-hidden="true" tabindex="-1"></a><span class="st">        data: nodeIndex.get(id),</span></span>
+<span id="cb1-1074"><a href="#cb1-1074" aria-hidden="true" tabindex="-1"></a><span class="st">        classes: (validSeeds.includes(id) ? (seeds[0]===id ? &#39;qk&#39; : (seeds[1]===id ? &#39;qs&#39; : &#39;&#39;)) : &#39;&#39;)</span></span>
+<span id="cb1-1075"><a href="#cb1-1075" aria-hidden="true" tabindex="-1"></a><span class="st">      }));</span></span>
+<span id="cb1-1076"><a href="#cb1-1076" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1077"><a href="#cb1-1077" aria-hidden="true" tabindex="-1"></a><span class="st">      return {nodes: nodes.map(n =&gt; ({ data: n.data, classes: n.classes })), edges: edges.map(e =&gt; ({ data: e }))};</span></span>
+<span id="cb1-1078"><a href="#cb1-1078" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-1079"><a href="#cb1-1079" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1080"><a href="#cb1-1080" aria-hidden="true" tabindex="-1"></a><span class="st">    function relayout(name){</span></span>
+<span id="cb1-1081"><a href="#cb1-1081" aria-hidden="true" tabindex="-1"></a><span class="st">      const opts = (name===&#39;concentric&#39;) ? { name, minNodeSpacing: 20 } :</span></span>
+<span id="cb1-1082"><a href="#cb1-1082" aria-hidden="true" tabindex="-1"></a><span class="st">                   (name===&#39;breadthfirst&#39;) ? { name, directed: true, padding: 10 } :</span></span>
+<span id="cb1-1083"><a href="#cb1-1083" aria-hidden="true" tabindex="-1"></a><span class="st">                   (name===&#39;fcose&#39;) ? {</span></span>
 <span id="cb1-1084"><a href="#cb1-1084" aria-hidden="true" tabindex="-1"></a><span class="st">                     name,</span></span>
-<span id="cb1-1085"><a href="#cb1-1085" aria-hidden="true" tabindex="-1"></a><span class="st">                     animate: false,</span></span>
-<span id="cb1-1086"><a href="#cb1-1086" aria-hidden="true" tabindex="-1"></a><span class="st">                     quality: &#39;draft&#39;,</span></span>
-<span id="cb1-1087"><a href="#cb1-1087" aria-hidden="true" tabindex="-1"></a><span class="st">                     nodeRepulsion: 30000,</span></span>
-<span id="cb1-1088"><a href="#cb1-1088" aria-hidden="true" tabindex="-1"></a><span class="st">                     idealEdgeLength: 140,</span></span>
-<span id="cb1-1089"><a href="#cb1-1089" aria-hidden="true" tabindex="-1"></a><span class="st">                     gravity: 0.8,</span></span>
-<span id="cb1-1090"><a href="#cb1-1090" aria-hidden="true" tabindex="-1"></a><span class="st">                     tile: true,</span></span>
-<span id="cb1-1091"><a href="#cb1-1091" aria-hidden="true" tabindex="-1"></a><span class="st">                     nodeDimensionsIncludeLabels: true,</span></span>
-<span id="cb1-1092"><a href="#cb1-1092" aria-hidden="true" tabindex="-1"></a><span class="st">                     padding: 30</span></span>
-<span id="cb1-1093"><a href="#cb1-1093" aria-hidden="true" tabindex="-1"></a><span class="st">                   } :</span></span>
-<span id="cb1-1094"><a href="#cb1-1094" aria-hidden="true" tabindex="-1"></a><span class="st">                   { name: &#39;cose&#39;, animate: false };</span></span>
-<span id="cb1-1095"><a href="#cb1-1095" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.layout(opts).run();</span></span>
-<span id="cb1-1096"><a href="#cb1-1096" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-1097"><a href="#cb1-1097" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1098"><a href="#cb1-1098" aria-hidden="true" tabindex="-1"></a><span class="st">    function render(){</span></span>
-<span id="cb1-1099"><a href="#cb1-1099" aria-hidden="true" tabindex="-1"></a><span class="st">      const kin   = document.getElementById(&#39;kinSel&#39;).value.trim();</span></span>
-<span id="cb1-1100"><a href="#cb1-1100" aria-hidden="true" tabindex="-1"></a><span class="st">      const sub   = document.getElementById(&#39;subSel&#39;).value.trim();</span></span>
-<span id="cb1-1101"><a href="#cb1-1101" aria-hidden="true" tabindex="-1"></a><span class="st">      const seeds = [kin, sub].filter(s =&gt; s &amp;&amp; s.length);</span></span>
-<span id="cb1-1102"><a href="#cb1-1102" aria-hidden="true" tabindex="-1"></a><span class="st">      if(!seeds.length) return;</span></span>
-<span id="cb1-1103"><a href="#cb1-1103" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1104"><a href="#cb1-1104" aria-hidden="true" tabindex="-1"></a><span class="st">      currentSeeds = seeds;</span></span>
-<span id="cb1-1105"><a href="#cb1-1105" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1106"><a href="#cb1-1106" aria-hidden="true" tabindex="-1"></a><span class="st">      const elems = incidentSubgraph(seeds);</span></span>
-<span id="cb1-1107"><a href="#cb1-1107" aria-hidden="true" tabindex="-1"></a><span class="st">      const note = document.getElementById(&#39;truncNote&#39;);</span></span>
-<span id="cb1-1108"><a href="#cb1-1108" aria-hidden="true" tabindex="-1"></a><span class="st">      if(note){</span></span>
-<span id="cb1-1109"><a href="#cb1-1109" aria-hidden="true" tabindex="-1"></a><span class="st">        const pairMode = document.getElementById(&#39;pairModeChk&#39;)?.checked;</span></span>
-<span id="cb1-1110"><a href="#cb1-1110" aria-hidden="true" tabindex="-1"></a><span class="st">        const scoreMinNow = Number(document.getElementById(&#39;scoreMin&#39;)?.value || 0);</span></span>
-<span id="cb1-1111"><a href="#cb1-1111" aria-hidden="true" tabindex="-1"></a><span class="st">        const allCurated = scoreMinNow &gt; 0 &amp;&amp; lastTruncation.shown &gt; 0 &amp;&amp; lastTruncation.predictedShown === 0</span></span>
-<span id="cb1-1112"><a href="#cb1-1112" aria-hidden="true" tabindex="-1"></a><span class="st">          ? &#39; Every interaction in view is curated; the confidence filter applies only to predicted ones.&#39; : &#39;&#39;;</span></span>
-<span id="cb1-1113"><a href="#cb1-1113" aria-hidden="true" tabindex="-1"></a><span class="st">        const filtered = (lastTruncation.filteredOut &gt; 0</span></span>
-<span id="cb1-1114"><a href="#cb1-1114" aria-hidden="true" tabindex="-1"></a><span class="st">          ? &#39; &#39; + lastTruncation.filteredOut + &#39; more removed by the filters.&#39; : &#39;&#39;) + allCurated;</span></span>
-<span id="cb1-1115"><a href="#cb1-1115" aria-hidden="true" tabindex="-1"></a><span class="st">        note.textContent = lastTruncation.hidden &gt; 0</span></span>
-<span id="cb1-1116"><a href="#cb1-1116" aria-hidden="true" tabindex="-1"></a><span class="st">          ? &#39;Showing the &#39; + lastTruncation.shown + &#39; best-supported of &#39; +</span></span>
-<span id="cb1-1117"><a href="#cb1-1117" aria-hidden="true" tabindex="-1"></a><span class="st">            lastTruncation.total + &#39; interactions (curated first, then by confidence). &#39; +</span></span>
-<span id="cb1-1118"><a href="#cb1-1118" aria-hidden="true" tabindex="-1"></a><span class="st">            lastTruncation.hidden + &#39; hidden; move the Interactions shown slider to see more.&#39; + filtered</span></span>
-<span id="cb1-1119"><a href="#cb1-1119" aria-hidden="true" tabindex="-1"></a><span class="st">          : (elems.edges.length === 0 &amp;&amp; lastTruncation.filteredOut &gt; 0)</span></span>
-<span id="cb1-1120"><a href="#cb1-1120" aria-hidden="true" tabindex="-1"></a><span class="st">            ? &#39;No interactions pass the current filters (&#39; + lastTruncation.filteredOut + &#39; removed).&#39;</span></span>
-<span id="cb1-1121"><a href="#cb1-1121" aria-hidden="true" tabindex="-1"></a><span class="st">          : (pairMode &amp;&amp; elems.edges.length === 0)</span></span>
-<span id="cb1-1122"><a href="#cb1-1122" aria-hidden="true" tabindex="-1"></a><span class="st">            ? &#39;No interaction between these two in the resource.&#39;</span></span>
-<span id="cb1-1123"><a href="#cb1-1123" aria-hidden="true" tabindex="-1"></a><span class="st">            : filtered.trim();</span></span>
-<span id="cb1-1124"><a href="#cb1-1124" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
-<span id="cb1-1125"><a href="#cb1-1125" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.elements().remove();</span></span>
-<span id="cb1-1126"><a href="#cb1-1126" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.add(elems.nodes);</span></span>
-<span id="cb1-1127"><a href="#cb1-1127" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.add(elems.edges);</span></span>
-<span id="cb1-1128"><a href="#cb1-1128" aria-hidden="true" tabindex="-1"></a><span class="st">      applyNodeSizing();</span></span>
-<span id="cb1-1129"><a href="#cb1-1129" aria-hidden="true" tabindex="-1"></a><span class="st">      applyFilters(true);</span></span>
-<span id="cb1-1130"><a href="#cb1-1130" aria-hidden="true" tabindex="-1"></a><span class="st">      refreshEdgesTable();</span></span>
-<span id="cb1-1131"><a href="#cb1-1131" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-1085"><a href="#cb1-1085" aria-hidden="true" tabindex="-1"></a><span class="st">                     quality: &#39;default&#39;,</span></span>
+<span id="cb1-1086"><a href="#cb1-1086" aria-hidden="true" tabindex="-1"></a><span class="st">                     randomize: true,</span></span>
+<span id="cb1-1087"><a href="#cb1-1087" aria-hidden="true" tabindex="-1"></a><span class="st">                     randomSeed: 42,</span></span>
+<span id="cb1-1088"><a href="#cb1-1088" aria-hidden="true" tabindex="-1"></a><span class="st">                     animate: false,</span></span>
+<span id="cb1-1089"><a href="#cb1-1089" aria-hidden="true" tabindex="-1"></a><span class="st">                     animationDuration: 1000,</span></span>
+<span id="cb1-1090"><a href="#cb1-1090" aria-hidden="true" tabindex="-1"></a><span class="st">                     fit: true,</span></span>
+<span id="cb1-1091"><a href="#cb1-1091" aria-hidden="true" tabindex="-1"></a><span class="st">                     padding: 30,</span></span>
+<span id="cb1-1092"><a href="#cb1-1092" aria-hidden="true" tabindex="-1"></a><span class="st">                     nodeDimensionsIncludeLabels: false,</span></span>
+<span id="cb1-1093"><a href="#cb1-1093" aria-hidden="true" tabindex="-1"></a><span class="st">                     uniformNodeDimensions: false,</span></span>
+<span id="cb1-1094"><a href="#cb1-1094" aria-hidden="true" tabindex="-1"></a><span class="st">                     packComponents: false,</span></span>
+<span id="cb1-1095"><a href="#cb1-1095" aria-hidden="true" tabindex="-1"></a><span class="st">                     tile: true,</span></span>
+<span id="cb1-1096"><a href="#cb1-1096" aria-hidden="true" tabindex="-1"></a><span class="st">                     samplingType: true,</span></span>
+<span id="cb1-1097"><a href="#cb1-1097" aria-hidden="true" tabindex="-1"></a><span class="st">                     sampleSize: 25,</span></span>
+<span id="cb1-1098"><a href="#cb1-1098" aria-hidden="true" tabindex="-1"></a><span class="st">                     nodeSeparation: 90,</span></span>
+<span id="cb1-1099"><a href="#cb1-1099" aria-hidden="true" tabindex="-1"></a><span class="st">                     nodeRepulsion: node =&gt; 4500,</span></span>
+<span id="cb1-1100"><a href="#cb1-1100" aria-hidden="true" tabindex="-1"></a><span class="st">                     idealEdgeLength: edge =&gt; 80,</span></span>
+<span id="cb1-1101"><a href="#cb1-1101" aria-hidden="true" tabindex="-1"></a><span class="st">                     edgeElasticity: edge =&gt; 0.45,</span></span>
+<span id="cb1-1102"><a href="#cb1-1102" aria-hidden="true" tabindex="-1"></a><span class="st">                     nestingFactor: 0.1,</span></span>
+<span id="cb1-1103"><a href="#cb1-1103" aria-hidden="true" tabindex="-1"></a><span class="st">                     numIter: 2500,</span></span>
+<span id="cb1-1104"><a href="#cb1-1104" aria-hidden="true" tabindex="-1"></a><span class="st">                     gravity: 0.25,</span></span>
+<span id="cb1-1105"><a href="#cb1-1105" aria-hidden="true" tabindex="-1"></a><span class="st">                     gravityRangeCompound: 1.5,</span></span>
+<span id="cb1-1106"><a href="#cb1-1106" aria-hidden="true" tabindex="-1"></a><span class="st">                     gravityCompound: 1.0,</span></span>
+<span id="cb1-1107"><a href="#cb1-1107" aria-hidden="true" tabindex="-1"></a><span class="st">                     gravityRange: 3.8,</span></span>
+<span id="cb1-1108"><a href="#cb1-1108" aria-hidden="true" tabindex="-1"></a><span class="st">                     initialEnergyOnIncremental: 0.3</span></span>
+<span id="cb1-1109"><a href="#cb1-1109" aria-hidden="true" tabindex="-1"></a><span class="st">                   } :</span></span>
+<span id="cb1-1110"><a href="#cb1-1110" aria-hidden="true" tabindex="-1"></a><span class="st">                   (name===&#39;cose-bilkent&#39;) ? {</span></span>
+<span id="cb1-1111"><a href="#cb1-1111" aria-hidden="true" tabindex="-1"></a><span class="st">                     name,</span></span>
+<span id="cb1-1112"><a href="#cb1-1112" aria-hidden="true" tabindex="-1"></a><span class="st">                     animate: false,</span></span>
+<span id="cb1-1113"><a href="#cb1-1113" aria-hidden="true" tabindex="-1"></a><span class="st">                     quality: &#39;draft&#39;,</span></span>
+<span id="cb1-1114"><a href="#cb1-1114" aria-hidden="true" tabindex="-1"></a><span class="st">                     nodeRepulsion: 30000,</span></span>
+<span id="cb1-1115"><a href="#cb1-1115" aria-hidden="true" tabindex="-1"></a><span class="st">                     idealEdgeLength: 140,</span></span>
+<span id="cb1-1116"><a href="#cb1-1116" aria-hidden="true" tabindex="-1"></a><span class="st">                     gravity: 0.8,</span></span>
+<span id="cb1-1117"><a href="#cb1-1117" aria-hidden="true" tabindex="-1"></a><span class="st">                     tile: true,</span></span>
+<span id="cb1-1118"><a href="#cb1-1118" aria-hidden="true" tabindex="-1"></a><span class="st">                     nodeDimensionsIncludeLabels: true,</span></span>
+<span id="cb1-1119"><a href="#cb1-1119" aria-hidden="true" tabindex="-1"></a><span class="st">                     padding: 30</span></span>
+<span id="cb1-1120"><a href="#cb1-1120" aria-hidden="true" tabindex="-1"></a><span class="st">                   } :</span></span>
+<span id="cb1-1121"><a href="#cb1-1121" aria-hidden="true" tabindex="-1"></a><span class="st">                   { name: &#39;cose&#39;, animate: false };</span></span>
+<span id="cb1-1122"><a href="#cb1-1122" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.layout(opts).run();</span></span>
+<span id="cb1-1123"><a href="#cb1-1123" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-1124"><a href="#cb1-1124" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1125"><a href="#cb1-1125" aria-hidden="true" tabindex="-1"></a><span class="st">    function render(){</span></span>
+<span id="cb1-1126"><a href="#cb1-1126" aria-hidden="true" tabindex="-1"></a><span class="st">      const kin   = document.getElementById(&#39;kinSel&#39;).value.trim();</span></span>
+<span id="cb1-1127"><a href="#cb1-1127" aria-hidden="true" tabindex="-1"></a><span class="st">      const sub   = document.getElementById(&#39;subSel&#39;).value.trim();</span></span>
+<span id="cb1-1128"><a href="#cb1-1128" aria-hidden="true" tabindex="-1"></a><span class="st">      const seeds = [kin, sub].filter(s =&gt; s &amp;&amp; s.length);</span></span>
+<span id="cb1-1129"><a href="#cb1-1129" aria-hidden="true" tabindex="-1"></a><span class="st">      if(!seeds.length) return;</span></span>
+<span id="cb1-1130"><a href="#cb1-1130" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1131"><a href="#cb1-1131" aria-hidden="true" tabindex="-1"></a><span class="st">      currentSeeds = seeds;</span></span>
 <span id="cb1-1132"><a href="#cb1-1132" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1133"><a href="#cb1-1133" aria-hidden="true" tabindex="-1"></a><span class="st">    const triggerRender = () =&gt; render();</span></span>
-<span id="cb1-1134"><a href="#cb1-1134" aria-hidden="true" tabindex="-1"></a><span class="st">    const triggerOnEnter = el =&gt; el.addEventListener(&#39;keyup&#39;, e =&gt; { if(e.key === &#39;Enter&#39;) render(); });</span></span>
-<span id="cb1-1135"><a href="#cb1-1135" aria-hidden="true" tabindex="-1"></a><span class="st">    kinInput.addEventListener(&#39;change&#39;, triggerRender);</span></span>
-<span id="cb1-1136"><a href="#cb1-1136" aria-hidden="true" tabindex="-1"></a><span class="st">    subInput.addEventListener(&#39;change&#39;, triggerRender);</span></span>
-<span id="cb1-1137"><a href="#cb1-1137" aria-hidden="true" tabindex="-1"></a><span class="st">    triggerOnEnter(kinInput);</span></span>
-<span id="cb1-1138"><a href="#cb1-1138" aria-hidden="true" tabindex="-1"></a><span class="st">    triggerOnEnter(subInput);</span></span>
-<span id="cb1-1139"><a href="#cb1-1139" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;layoutSel&#39;).addEventListener(&#39;change&#39;, () =&gt; render());</span></span>
-<span id="cb1-1140"><a href="#cb1-1140" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;edgeLabelsChk&#39;).addEventListener(&#39;change&#39;, e =&gt; setEdgeLabels(e.target.checked));</span></span>
-<span id="cb1-1141"><a href="#cb1-1141" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;arrowsChk&#39;).addEventListener(&#39;change&#39;, e =&gt; setArrows(e.target.checked));</span></span>
-<span id="cb1-1142"><a href="#cb1-1142" aria-hidden="true" tabindex="-1"></a><span class="st">    // Filters change which interactions compete for the cap, so they re-render the</span></span>
-<span id="cb1-1143"><a href="#cb1-1143" aria-hidden="true" tabindex="-1"></a><span class="st">    // neighbourhood. Sliders update their readout while dragging and re-render on release.</span></span>
-<span id="cb1-1144"><a href="#cb1-1144" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;onlyFunctionalChk&#39;).addEventListener(&#39;change&#39;, () =&gt; render());</span></span>
-<span id="cb1-1145"><a href="#cb1-1145" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;curatedOnlyChk&#39;).addEventListener(&#39;change&#39;, () =&gt; render());</span></span>
-<span id="cb1-1146"><a href="#cb1-1146" aria-hidden="true" tabindex="-1"></a><span class="st">    const scoreMinEl = document.getElementById(&#39;scoreMin&#39;);</span></span>
-<span id="cb1-1147"><a href="#cb1-1147" aria-hidden="true" tabindex="-1"></a><span class="st">    if(scoreMinEl){</span></span>
-<span id="cb1-1148"><a href="#cb1-1148" aria-hidden="true" tabindex="-1"></a><span class="st">      scoreMinEl.addEventListener(&#39;input&#39;, () =&gt; {</span></span>
-<span id="cb1-1149"><a href="#cb1-1149" aria-hidden="true" tabindex="-1"></a><span class="st">        document.getElementById(&#39;scoreMinVal&#39;).textContent =</span></span>
-<span id="cb1-1150"><a href="#cb1-1150" aria-hidden="true" tabindex="-1"></a><span class="st">          (Number(scoreMinEl.value) / 100).toFixed(2);</span></span>
-<span id="cb1-1151"><a href="#cb1-1151" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
-<span id="cb1-1152"><a href="#cb1-1152" aria-hidden="true" tabindex="-1"></a><span class="st">      scoreMinEl.addEventListener(&#39;change&#39;, () =&gt; render());</span></span>
-<span id="cb1-1153"><a href="#cb1-1153" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-1154"><a href="#cb1-1154" aria-hidden="true" tabindex="-1"></a><span class="st">    const pairModeEl = document.getElementById(&#39;pairModeChk&#39;);</span></span>
-<span id="cb1-1155"><a href="#cb1-1155" aria-hidden="true" tabindex="-1"></a><span class="st">    if(pairModeEl){ pairModeEl.addEventListener(&#39;change&#39;, () =&gt; render()); }</span></span>
-<span id="cb1-1156"><a href="#cb1-1156" aria-hidden="true" tabindex="-1"></a><span class="st">    const capNEl = document.getElementById(&#39;capN&#39;);</span></span>
-<span id="cb1-1157"><a href="#cb1-1157" aria-hidden="true" tabindex="-1"></a><span class="st">    if(capNEl){</span></span>
-<span id="cb1-1158"><a href="#cb1-1158" aria-hidden="true" tabindex="-1"></a><span class="st">      capNEl.addEventListener(&#39;input&#39;, updateCapBadge);</span></span>
-<span id="cb1-1159"><a href="#cb1-1159" aria-hidden="true" tabindex="-1"></a><span class="st">      capNEl.addEventListener(&#39;change&#39;, () =&gt; render());</span></span>
-<span id="cb1-1160"><a href="#cb1-1160" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-1161"><a href="#cb1-1161" aria-hidden="true" tabindex="-1"></a><span class="st">    labelScale.addEventListener(&#39;input&#39;, applyNodeSizing);</span></span>
-<span id="cb1-1162"><a href="#cb1-1162" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1163"><a href="#cb1-1163" aria-hidden="true" tabindex="-1"></a><span class="st">    function download(filename, blob){</span></span>
-<span id="cb1-1164"><a href="#cb1-1164" aria-hidden="true" tabindex="-1"></a><span class="st">      const a = document.createElement(&#39;a&#39;);</span></span>
-<span id="cb1-1165"><a href="#cb1-1165" aria-hidden="true" tabindex="-1"></a><span class="st">      a.href = URL.createObjectURL(blob);</span></span>
-<span id="cb1-1166"><a href="#cb1-1166" aria-hidden="true" tabindex="-1"></a><span class="st">      a.download = filename;</span></span>
-<span id="cb1-1167"><a href="#cb1-1167" aria-hidden="true" tabindex="-1"></a><span class="st">      document.body.appendChild(a); a.click(); a.remove();</span></span>
-<span id="cb1-1168"><a href="#cb1-1168" aria-hidden="true" tabindex="-1"></a><span class="st">      setTimeout(() =&gt; URL.revokeObjectURL(a.href), 5000);</span></span>
-<span id="cb1-1169"><a href="#cb1-1169" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-1170"><a href="#cb1-1170" aria-hidden="true" tabindex="-1"></a><span class="st">    function csvBlob(rows, header){</span></span>
-<span id="cb1-1171"><a href="#cb1-1171" aria-hidden="true" tabindex="-1"></a><span class="st">      const esc = v =&gt; &#39;</span><span class="sc">\&quot;</span><span class="st">&#39; + String(v ?? &#39;&#39;).replaceAll(&#39;</span><span class="sc">\&quot;</span><span class="st">&#39;,&#39;</span><span class="sc">\&quot;\&quot;</span><span class="st">&#39;) + &#39;</span><span class="sc">\&quot;</span><span class="st">&#39;;</span></span>
-<span id="cb1-1172"><a href="#cb1-1172" aria-hidden="true" tabindex="-1"></a><span class="st">      const lines = [header.map(esc).join(&#39;,&#39;)].concat(rows.map(r =&gt; r.map(esc).join(&#39;,&#39;)));</span></span>
-<span id="cb1-1173"><a href="#cb1-1173" aria-hidden="true" tabindex="-1"></a><span class="st">      const newline = String.fromCharCode(10);</span></span>
-<span id="cb1-1174"><a href="#cb1-1174" aria-hidden="true" tabindex="-1"></a><span class="st">      const csv = lines.join(newline);</span></span>
-<span id="cb1-1175"><a href="#cb1-1175" aria-hidden="true" tabindex="-1"></a><span class="st">      return new Blob([csv], {type:&#39;text/csv&#39;});</span></span>
-<span id="cb1-1176"><a href="#cb1-1176" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-1177"><a href="#cb1-1177" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;btnPng&#39;).addEventListener(&#39;click&#39;, () =&gt; {</span></span>
-<span id="cb1-1178"><a href="#cb1-1178" aria-hidden="true" tabindex="-1"></a><span class="st">      const uri = cy.png({full:true, scale:2});</span></span>
-<span id="cb1-1179"><a href="#cb1-1179" aria-hidden="true" tabindex="-1"></a><span class="st">      fetch(uri).then(r =&gt; r.blob()).then(b =&gt; download(&#39;kinome_network.png&#39;, b));</span></span>
-<span id="cb1-1180"><a href="#cb1-1180" aria-hidden="true" tabindex="-1"></a><span class="st">    });</span></span>
-<span id="cb1-1181"><a href="#cb1-1181" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;btnPdf&#39;).addEventListener(&#39;click&#39;, () =&gt; {</span></span>
-<span id="cb1-1182"><a href="#cb1-1182" aria-hidden="true" tabindex="-1"></a><span class="st">      const uri = cy.png({full:true, scale:2});</span></span>
-<span id="cb1-1183"><a href="#cb1-1183" aria-hidden="true" tabindex="-1"></a><span class="st">      fetch(uri).then(r =&gt; r.blob()).then(b =&gt; {</span></span>
-<span id="cb1-1184"><a href="#cb1-1184" aria-hidden="true" tabindex="-1"></a><span class="st">        const reader = new FileReader();</span></span>
-<span id="cb1-1185"><a href="#cb1-1185" aria-hidden="true" tabindex="-1"></a><span class="st">        reader.onload = function(){</span></span>
-<span id="cb1-1186"><a href="#cb1-1186" aria-hidden="true" tabindex="-1"></a><span class="st">          const { jsPDF } = window.jspdf;</span></span>
-<span id="cb1-1187"><a href="#cb1-1187" aria-hidden="true" tabindex="-1"></a><span class="st">          const pdf  = new jsPDF({orientation:&#39;landscape&#39;, unit:&#39;pt&#39;, format:&#39;a4&#39;});</span></span>
-<span id="cb1-1188"><a href="#cb1-1188" aria-hidden="true" tabindex="-1"></a><span class="st">          const img  = reader.result;</span></span>
-<span id="cb1-1189"><a href="#cb1-1189" aria-hidden="true" tabindex="-1"></a><span class="st">          const pageW = pdf.internal.pageSize.getWidth();</span></span>
-<span id="cb1-1190"><a href="#cb1-1190" aria-hidden="true" tabindex="-1"></a><span class="st">          const pageH = pdf.internal.pageSize.getHeight();</span></span>
-<span id="cb1-1191"><a href="#cb1-1191" aria-hidden="true" tabindex="-1"></a><span class="st">          pdf.addImage(img, &#39;PNG&#39;, 20, 20, pageW-40, pageH-40);</span></span>
-<span id="cb1-1192"><a href="#cb1-1192" aria-hidden="true" tabindex="-1"></a><span class="st">          pdf.save(&#39;kinome_network.pdf&#39;);</span></span>
-<span id="cb1-1193"><a href="#cb1-1193" aria-hidden="true" tabindex="-1"></a><span class="st">        };</span></span>
-<span id="cb1-1194"><a href="#cb1-1194" aria-hidden="true" tabindex="-1"></a><span class="st">        reader.readAsDataURL(b);</span></span>
-<span id="cb1-1195"><a href="#cb1-1195" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
-<span id="cb1-1196"><a href="#cb1-1196" aria-hidden="true" tabindex="-1"></a><span class="st">    });</span></span>
-<span id="cb1-1197"><a href="#cb1-1197" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;btnCsvEdges&#39;).addEventListener(&#39;click&#39;, () =&gt; {</span></span>
-<span id="cb1-1198"><a href="#cb1-1198" aria-hidden="true" tabindex="-1"></a><span class="st">      const rows = cy.edges(&#39;:visible&#39;).map(edgeRow);</span></span>
-<span id="cb1-1199"><a href="#cb1-1199" aria-hidden="true" tabindex="-1"></a><span class="st">      download(&#39;kinome_edges.csv&#39;, csvBlob(rows, EDGE_COLUMNS));</span></span>
-<span id="cb1-1200"><a href="#cb1-1200" aria-hidden="true" tabindex="-1"></a><span class="st">    });</span></span>
-<span id="cb1-1201"><a href="#cb1-1201" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1202"><a href="#cb1-1202" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;btnFullNetwork&#39;).addEventListener(&#39;click&#39;, () =&gt; {</span></span>
-<span id="cb1-1203"><a href="#cb1-1203" aria-hidden="true" tabindex="-1"></a><span class="st">      // Export every edge in the network, not just the visible subgraph.</span></span>
-<span id="cb1-1204"><a href="#cb1-1204" aria-hidden="true" tabindex="-1"></a><span class="st">      const fmt = v =&gt; (v == null || v === &#39;&#39;) ? &#39;&#39; : v;</span></span>
-<span id="cb1-1205"><a href="#cb1-1205" aria-hidden="true" tabindex="-1"></a><span class="st">      const rows = data.edges.map(e =&gt; [</span></span>
-<span id="cb1-1206"><a href="#cb1-1206" aria-hidden="true" tabindex="-1"></a><span class="st">        e.source, e.target, fmt(e.Uniprot), e.evidence, e.Likely_functional,</span></span>
-<span id="cb1-1207"><a href="#cb1-1207" aria-hidden="true" tabindex="-1"></a><span class="st">        e.SiteCount, e.Sites, fmt(e.MotifPercentile), fmt(e.MotifRank),</span></span>
-<span id="cb1-1208"><a href="#cb1-1208" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.FunctionalScore), fmt(e.SharedCompartments), fmt(e.Score),</span></span>
-<span id="cb1-1209"><a href="#cb1-1209" aria-hidden="true" tabindex="-1"></a><span class="st">        e.SourceList ?? &#39;&#39;, e.Reference_PMID</span></span>
-<span id="cb1-1210"><a href="#cb1-1210" aria-hidden="true" tabindex="-1"></a><span class="st">      ]);</span></span>
-<span id="cb1-1211"><a href="#cb1-1211" aria-hidden="true" tabindex="-1"></a><span class="st">      download(&#39;kinome_full_network.csv&#39;, csvBlob(rows, EDGE_COLUMNS));</span></span>
-<span id="cb1-1212"><a href="#cb1-1212" aria-hidden="true" tabindex="-1"></a><span class="st">    });</span></span>
-<span id="cb1-1213"><a href="#cb1-1213" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1214"><a href="#cb1-1214" aria-hidden="true" tabindex="-1"></a><span class="st">    // Site-level export: one row per kinase-substrate-site triad, with the</span></span>
-<span id="cb1-1215"><a href="#cb1-1215" aria-hidden="true" tabindex="-1"></a><span class="st">    // individual evidence values behind each classification.</span></span>
-<span id="cb1-1216"><a href="#cb1-1216" aria-hidden="true" tabindex="-1"></a><span class="st">    const SITE_COLUMNS = [&#39;Kinase&#39;,&#39;Substrate&#39;,&#39;UniProt&#39;,&#39;Site&#39;,&#39;Sequence (+/-7)&#39;,&#39;Evidence&#39;,</span></span>
-<span id="cb1-1217"><a href="#cb1-1217" aria-hidden="true" tabindex="-1"></a><span class="st">                          &#39;Curated site&#39;,&#39;Likely functional&#39;,&#39;Motif percentile&#39;,</span></span>
-<span id="cb1-1218"><a href="#cb1-1218" aria-hidden="true" tabindex="-1"></a><span class="st">                          &#39;Kinase rank for site&#39;,&#39;Functional score&#39;,&#39;Shared compartments&#39;,</span></span>
-<span id="cb1-1219"><a href="#cb1-1219" aria-hidden="true" tabindex="-1"></a><span class="st">                          &#39;KinaseCanvas score&#39;];</span></span>
-<span id="cb1-1220"><a href="#cb1-1220" aria-hidden="true" tabindex="-1"></a><span class="st">    const siteBtn = document.getElementById(&#39;btnCsvSites&#39;);</span></span>
-<span id="cb1-1221"><a href="#cb1-1221" aria-hidden="true" tabindex="-1"></a><span class="st">    if(siteBtn){</span></span>
-<span id="cb1-1222"><a href="#cb1-1222" aria-hidden="true" tabindex="-1"></a><span class="st">      siteBtn.addEventListener(&#39;click&#39;, () =&gt; {</span></span>
-<span id="cb1-1223"><a href="#cb1-1223" aria-hidden="true" tabindex="-1"></a><span class="st">        const fmt = v =&gt; (v == null || v === &#39;&#39;) ? &#39;&#39; : v;</span></span>
-<span id="cb1-1224"><a href="#cb1-1224" aria-hidden="true" tabindex="-1"></a><span class="st">        const visible = new Set(cy.edges(&#39;:visible&#39;).map(e =&gt; e.data(&#39;source&#39;) + &#39;||&#39; + e.data(&#39;target&#39;)));</span></span>
-<span id="cb1-1225"><a href="#cb1-1225" aria-hidden="true" tabindex="-1"></a><span class="st">        const subset = siteData.filter(s =&gt; visible.has(s.kinase + &#39;||&#39; + s.substrate));</span></span>
-<span id="cb1-1226"><a href="#cb1-1226" aria-hidden="true" tabindex="-1"></a><span class="st">        const rows = (subset.length ? subset : siteData).map(s =&gt; [</span></span>
-<span id="cb1-1227"><a href="#cb1-1227" aria-hidden="true" tabindex="-1"></a><span class="st">          s.kinase, s.substrate, fmt(s.uniprot), s.site, fmt(s.flankingSequence), s.evidence,</span></span>
-<span id="cb1-1228"><a href="#cb1-1228" aria-hidden="true" tabindex="-1"></a><span class="st">          s.curatedSite, s.likelyFunctional, fmt(s.motifPercentile), fmt(s.motifRank),</span></span>
-<span id="cb1-1229"><a href="#cb1-1229" aria-hidden="true" tabindex="-1"></a><span class="st">          fmt(s.functionalScore), fmt(s.sharedCompartments), fmt(s.score)</span></span>
-<span id="cb1-1230"><a href="#cb1-1230" aria-hidden="true" tabindex="-1"></a><span class="st">        ]);</span></span>
-<span id="cb1-1231"><a href="#cb1-1231" aria-hidden="true" tabindex="-1"></a><span class="st">        download(subset.length ? &#39;kinasecanvas_sites_selection.csv&#39;</span></span>
-<span id="cb1-1232"><a href="#cb1-1232" aria-hidden="true" tabindex="-1"></a><span class="st">                               : &#39;kinasecanvas_sites_all.csv&#39;,</span></span>
-<span id="cb1-1233"><a href="#cb1-1233" aria-hidden="true" tabindex="-1"></a><span class="st">                 csvBlob(rows, SITE_COLUMNS));</span></span>
-<span id="cb1-1234"><a href="#cb1-1234" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
-<span id="cb1-1235"><a href="#cb1-1235" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
-<span id="cb1-1236"><a href="#cb1-1236" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1237"><a href="#cb1-1237" aria-hidden="true" tabindex="-1"></a><span class="st">    setEdgeLabels(false);</span></span>
-<span id="cb1-1238"><a href="#cb1-1238" aria-hidden="true" tabindex="-1"></a><span class="st">    setArrows(true);</span></span>
-<span id="cb1-1239"><a href="#cb1-1239" aria-hidden="true" tabindex="-1"></a><span class="st">    applyNodeSizing();</span></span>
-<span id="cb1-1240"><a href="#cb1-1240" aria-hidden="true" tabindex="-1"></a><span class="st">    render();</span></span>
-<span id="cb1-1241"><a href="#cb1-1241" aria-hidden="true" tabindex="-1"></a><span class="st">  })();</span></span>
-<span id="cb1-1242"><a href="#cb1-1242" aria-hidden="true" tabindex="-1"></a><span class="st">  &quot;</span>))</span>
-<span id="cb1-1243"><a href="#cb1-1243" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb1-1244"><a href="#cb1-1244" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-1245"><a href="#cb1-1245" aria-hidden="true" tabindex="-1"></a><span class="fu">browsable</span>(<span class="fu">tagList</span>(data_tags, viewer_tags))</span>
-<span id="cb1-1246"><a href="#cb1-1246" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb1-1133"><a href="#cb1-1133" aria-hidden="true" tabindex="-1"></a><span class="st">      const elems = incidentSubgraph(seeds);</span></span>
+<span id="cb1-1134"><a href="#cb1-1134" aria-hidden="true" tabindex="-1"></a><span class="st">      const note = document.getElementById(&#39;truncNote&#39;);</span></span>
+<span id="cb1-1135"><a href="#cb1-1135" aria-hidden="true" tabindex="-1"></a><span class="st">      if(note){</span></span>
+<span id="cb1-1136"><a href="#cb1-1136" aria-hidden="true" tabindex="-1"></a><span class="st">        const pairMode = document.getElementById(&#39;pairModeChk&#39;)?.checked;</span></span>
+<span id="cb1-1137"><a href="#cb1-1137" aria-hidden="true" tabindex="-1"></a><span class="st">        const scoreMinNow = Number(document.getElementById(&#39;scoreMin&#39;)?.value || 0);</span></span>
+<span id="cb1-1138"><a href="#cb1-1138" aria-hidden="true" tabindex="-1"></a><span class="st">        const allCurated = scoreMinNow &gt; 0 &amp;&amp; lastTruncation.shown &gt; 0 &amp;&amp; lastTruncation.predictedShown === 0</span></span>
+<span id="cb1-1139"><a href="#cb1-1139" aria-hidden="true" tabindex="-1"></a><span class="st">          ? &#39; Every interaction in view is curated; the confidence filter applies only to predicted ones.&#39; : &#39;&#39;;</span></span>
+<span id="cb1-1140"><a href="#cb1-1140" aria-hidden="true" tabindex="-1"></a><span class="st">        const filtered = (lastTruncation.filteredOut &gt; 0</span></span>
+<span id="cb1-1141"><a href="#cb1-1141" aria-hidden="true" tabindex="-1"></a><span class="st">          ? &#39; &#39; + lastTruncation.filteredOut + &#39; more removed by the filters.&#39; : &#39;&#39;) + allCurated;</span></span>
+<span id="cb1-1142"><a href="#cb1-1142" aria-hidden="true" tabindex="-1"></a><span class="st">        note.textContent = lastTruncation.hidden &gt; 0</span></span>
+<span id="cb1-1143"><a href="#cb1-1143" aria-hidden="true" tabindex="-1"></a><span class="st">          ? &#39;Showing &#39; + lastTruncation.shown + &#39; of &#39; + lastTruncation.total +</span></span>
+<span id="cb1-1144"><a href="#cb1-1144" aria-hidden="true" tabindex="-1"></a><span class="st">            &#39; interactions, curated first, then by confidence; use Interactions shown to see more.&#39; + filtered</span></span>
+<span id="cb1-1145"><a href="#cb1-1145" aria-hidden="true" tabindex="-1"></a><span class="st">          : (elems.edges.length === 0 &amp;&amp; lastTruncation.filteredOut &gt; 0)</span></span>
+<span id="cb1-1146"><a href="#cb1-1146" aria-hidden="true" tabindex="-1"></a><span class="st">            ? &#39;No interactions pass the current filters (&#39; + lastTruncation.filteredOut + &#39; removed).&#39;</span></span>
+<span id="cb1-1147"><a href="#cb1-1147" aria-hidden="true" tabindex="-1"></a><span class="st">          : (pairMode &amp;&amp; elems.edges.length === 0)</span></span>
+<span id="cb1-1148"><a href="#cb1-1148" aria-hidden="true" tabindex="-1"></a><span class="st">            ? &#39;No interaction between these two in the resource.&#39;</span></span>
+<span id="cb1-1149"><a href="#cb1-1149" aria-hidden="true" tabindex="-1"></a><span class="st">            : filtered.trim();</span></span>
+<span id="cb1-1150"><a href="#cb1-1150" aria-hidden="true" tabindex="-1"></a><span class="st">      }</span></span>
+<span id="cb1-1151"><a href="#cb1-1151" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.elements().remove();</span></span>
+<span id="cb1-1152"><a href="#cb1-1152" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.add(elems.nodes);</span></span>
+<span id="cb1-1153"><a href="#cb1-1153" aria-hidden="true" tabindex="-1"></a><span class="st">      cy.add(elems.edges);</span></span>
+<span id="cb1-1154"><a href="#cb1-1154" aria-hidden="true" tabindex="-1"></a><span class="st">      applyNodeSizing();</span></span>
+<span id="cb1-1155"><a href="#cb1-1155" aria-hidden="true" tabindex="-1"></a><span class="st">      applyFilters(true);</span></span>
+<span id="cb1-1156"><a href="#cb1-1156" aria-hidden="true" tabindex="-1"></a><span class="st">      refreshEdgesTable();</span></span>
+<span id="cb1-1157"><a href="#cb1-1157" aria-hidden="true" tabindex="-1"></a><span class="st">      restoreOrDefaultDetail();</span></span>
+<span id="cb1-1158"><a href="#cb1-1158" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-1159"><a href="#cb1-1159" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1160"><a href="#cb1-1160" aria-hidden="true" tabindex="-1"></a><span class="st">    const triggerRender = () =&gt; render();</span></span>
+<span id="cb1-1161"><a href="#cb1-1161" aria-hidden="true" tabindex="-1"></a><span class="st">    const triggerOnEnter = el =&gt; el.addEventListener(&#39;keyup&#39;, e =&gt; { if(e.key === &#39;Enter&#39;) render(); });</span></span>
+<span id="cb1-1162"><a href="#cb1-1162" aria-hidden="true" tabindex="-1"></a><span class="st">    kinInput.addEventListener(&#39;change&#39;, triggerRender);</span></span>
+<span id="cb1-1163"><a href="#cb1-1163" aria-hidden="true" tabindex="-1"></a><span class="st">    subInput.addEventListener(&#39;change&#39;, triggerRender);</span></span>
+<span id="cb1-1164"><a href="#cb1-1164" aria-hidden="true" tabindex="-1"></a><span class="st">    triggerOnEnter(kinInput);</span></span>
+<span id="cb1-1165"><a href="#cb1-1165" aria-hidden="true" tabindex="-1"></a><span class="st">    triggerOnEnter(subInput);</span></span>
+<span id="cb1-1166"><a href="#cb1-1166" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;layoutSel&#39;).addEventListener(&#39;change&#39;, () =&gt; render());</span></span>
+<span id="cb1-1167"><a href="#cb1-1167" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;edgeLabelsChk&#39;).addEventListener(&#39;change&#39;, e =&gt; setEdgeLabels(e.target.checked));</span></span>
+<span id="cb1-1168"><a href="#cb1-1168" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;arrowsChk&#39;).addEventListener(&#39;change&#39;, e =&gt; setArrows(e.target.checked));</span></span>
+<span id="cb1-1169"><a href="#cb1-1169" aria-hidden="true" tabindex="-1"></a><span class="st">    // Filters change which interactions compete for the cap, so they re-render the</span></span>
+<span id="cb1-1170"><a href="#cb1-1170" aria-hidden="true" tabindex="-1"></a><span class="st">    // neighbourhood. Sliders update their readout while dragging and re-render on release.</span></span>
+<span id="cb1-1171"><a href="#cb1-1171" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;onlyFunctionalChk&#39;).addEventListener(&#39;change&#39;, () =&gt; render());</span></span>
+<span id="cb1-1172"><a href="#cb1-1172" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;curatedOnlyChk&#39;).addEventListener(&#39;change&#39;, () =&gt; render());</span></span>
+<span id="cb1-1173"><a href="#cb1-1173" aria-hidden="true" tabindex="-1"></a><span class="st">    const scoreMinEl = document.getElementById(&#39;scoreMin&#39;);</span></span>
+<span id="cb1-1174"><a href="#cb1-1174" aria-hidden="true" tabindex="-1"></a><span class="st">    if(scoreMinEl){</span></span>
+<span id="cb1-1175"><a href="#cb1-1175" aria-hidden="true" tabindex="-1"></a><span class="st">      scoreMinEl.addEventListener(&#39;input&#39;, () =&gt; {</span></span>
+<span id="cb1-1176"><a href="#cb1-1176" aria-hidden="true" tabindex="-1"></a><span class="st">        document.getElementById(&#39;scoreMinVal&#39;).textContent =</span></span>
+<span id="cb1-1177"><a href="#cb1-1177" aria-hidden="true" tabindex="-1"></a><span class="st">          (Number(scoreMinEl.value) / 100).toFixed(2);</span></span>
+<span id="cb1-1178"><a href="#cb1-1178" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
+<span id="cb1-1179"><a href="#cb1-1179" aria-hidden="true" tabindex="-1"></a><span class="st">      scoreMinEl.addEventListener(&#39;change&#39;, () =&gt; render());</span></span>
+<span id="cb1-1180"><a href="#cb1-1180" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-1181"><a href="#cb1-1181" aria-hidden="true" tabindex="-1"></a><span class="st">    const pairModeEl = document.getElementById(&#39;pairModeChk&#39;);</span></span>
+<span id="cb1-1182"><a href="#cb1-1182" aria-hidden="true" tabindex="-1"></a><span class="st">    if(pairModeEl){ pairModeEl.addEventListener(&#39;change&#39;, () =&gt; render()); }</span></span>
+<span id="cb1-1183"><a href="#cb1-1183" aria-hidden="true" tabindex="-1"></a><span class="st">    const capNEl = document.getElementById(&#39;capN&#39;);</span></span>
+<span id="cb1-1184"><a href="#cb1-1184" aria-hidden="true" tabindex="-1"></a><span class="st">    if(capNEl){</span></span>
+<span id="cb1-1185"><a href="#cb1-1185" aria-hidden="true" tabindex="-1"></a><span class="st">      capNEl.addEventListener(&#39;input&#39;, updateCapBadge);</span></span>
+<span id="cb1-1186"><a href="#cb1-1186" aria-hidden="true" tabindex="-1"></a><span class="st">      capNEl.addEventListener(&#39;change&#39;, () =&gt; render());</span></span>
+<span id="cb1-1187"><a href="#cb1-1187" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-1188"><a href="#cb1-1188" aria-hidden="true" tabindex="-1"></a><span class="st">    labelScale.addEventListener(&#39;input&#39;, applyNodeSizing);</span></span>
+<span id="cb1-1189"><a href="#cb1-1189" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1190"><a href="#cb1-1190" aria-hidden="true" tabindex="-1"></a><span class="st">    function download(filename, blob){</span></span>
+<span id="cb1-1191"><a href="#cb1-1191" aria-hidden="true" tabindex="-1"></a><span class="st">      const a = document.createElement(&#39;a&#39;);</span></span>
+<span id="cb1-1192"><a href="#cb1-1192" aria-hidden="true" tabindex="-1"></a><span class="st">      a.href = URL.createObjectURL(blob);</span></span>
+<span id="cb1-1193"><a href="#cb1-1193" aria-hidden="true" tabindex="-1"></a><span class="st">      a.download = filename;</span></span>
+<span id="cb1-1194"><a href="#cb1-1194" aria-hidden="true" tabindex="-1"></a><span class="st">      document.body.appendChild(a); a.click(); a.remove();</span></span>
+<span id="cb1-1195"><a href="#cb1-1195" aria-hidden="true" tabindex="-1"></a><span class="st">      setTimeout(() =&gt; URL.revokeObjectURL(a.href), 5000);</span></span>
+<span id="cb1-1196"><a href="#cb1-1196" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-1197"><a href="#cb1-1197" aria-hidden="true" tabindex="-1"></a><span class="st">    function csvBlob(rows, header){</span></span>
+<span id="cb1-1198"><a href="#cb1-1198" aria-hidden="true" tabindex="-1"></a><span class="st">      const esc = v =&gt; &#39;</span><span class="sc">\&quot;</span><span class="st">&#39; + String(v ?? &#39;&#39;).replaceAll(&#39;</span><span class="sc">\&quot;</span><span class="st">&#39;,&#39;</span><span class="sc">\&quot;\&quot;</span><span class="st">&#39;) + &#39;</span><span class="sc">\&quot;</span><span class="st">&#39;;</span></span>
+<span id="cb1-1199"><a href="#cb1-1199" aria-hidden="true" tabindex="-1"></a><span class="st">      const lines = [header.map(esc).join(&#39;,&#39;)].concat(rows.map(r =&gt; r.map(esc).join(&#39;,&#39;)));</span></span>
+<span id="cb1-1200"><a href="#cb1-1200" aria-hidden="true" tabindex="-1"></a><span class="st">      const newline = String.fromCharCode(10);</span></span>
+<span id="cb1-1201"><a href="#cb1-1201" aria-hidden="true" tabindex="-1"></a><span class="st">      const csv = lines.join(newline);</span></span>
+<span id="cb1-1202"><a href="#cb1-1202" aria-hidden="true" tabindex="-1"></a><span class="st">      return new Blob([csv], {type:&#39;text/csv&#39;});</span></span>
+<span id="cb1-1203"><a href="#cb1-1203" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-1204"><a href="#cb1-1204" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;btnPng&#39;).addEventListener(&#39;click&#39;, () =&gt; {</span></span>
+<span id="cb1-1205"><a href="#cb1-1205" aria-hidden="true" tabindex="-1"></a><span class="st">      const uri = cy.png({full:true, scale:2});</span></span>
+<span id="cb1-1206"><a href="#cb1-1206" aria-hidden="true" tabindex="-1"></a><span class="st">      fetch(uri).then(r =&gt; r.blob()).then(b =&gt; download(&#39;kinome_network.png&#39;, b));</span></span>
+<span id="cb1-1207"><a href="#cb1-1207" aria-hidden="true" tabindex="-1"></a><span class="st">    });</span></span>
+<span id="cb1-1208"><a href="#cb1-1208" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;btnPdf&#39;).addEventListener(&#39;click&#39;, () =&gt; {</span></span>
+<span id="cb1-1209"><a href="#cb1-1209" aria-hidden="true" tabindex="-1"></a><span class="st">      const uri = cy.png({full:true, scale:2});</span></span>
+<span id="cb1-1210"><a href="#cb1-1210" aria-hidden="true" tabindex="-1"></a><span class="st">      fetch(uri).then(r =&gt; r.blob()).then(b =&gt; {</span></span>
+<span id="cb1-1211"><a href="#cb1-1211" aria-hidden="true" tabindex="-1"></a><span class="st">        const reader = new FileReader();</span></span>
+<span id="cb1-1212"><a href="#cb1-1212" aria-hidden="true" tabindex="-1"></a><span class="st">        reader.onload = function(){</span></span>
+<span id="cb1-1213"><a href="#cb1-1213" aria-hidden="true" tabindex="-1"></a><span class="st">          const { jsPDF } = window.jspdf;</span></span>
+<span id="cb1-1214"><a href="#cb1-1214" aria-hidden="true" tabindex="-1"></a><span class="st">          const pdf  = new jsPDF({orientation:&#39;landscape&#39;, unit:&#39;pt&#39;, format:&#39;a4&#39;});</span></span>
+<span id="cb1-1215"><a href="#cb1-1215" aria-hidden="true" tabindex="-1"></a><span class="st">          const img  = reader.result;</span></span>
+<span id="cb1-1216"><a href="#cb1-1216" aria-hidden="true" tabindex="-1"></a><span class="st">          const pageW = pdf.internal.pageSize.getWidth();</span></span>
+<span id="cb1-1217"><a href="#cb1-1217" aria-hidden="true" tabindex="-1"></a><span class="st">          const pageH = pdf.internal.pageSize.getHeight();</span></span>
+<span id="cb1-1218"><a href="#cb1-1218" aria-hidden="true" tabindex="-1"></a><span class="st">          pdf.addImage(img, &#39;PNG&#39;, 20, 20, pageW-40, pageH-40);</span></span>
+<span id="cb1-1219"><a href="#cb1-1219" aria-hidden="true" tabindex="-1"></a><span class="st">          pdf.save(&#39;kinome_network.pdf&#39;);</span></span>
+<span id="cb1-1220"><a href="#cb1-1220" aria-hidden="true" tabindex="-1"></a><span class="st">        };</span></span>
+<span id="cb1-1221"><a href="#cb1-1221" aria-hidden="true" tabindex="-1"></a><span class="st">        reader.readAsDataURL(b);</span></span>
+<span id="cb1-1222"><a href="#cb1-1222" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
+<span id="cb1-1223"><a href="#cb1-1223" aria-hidden="true" tabindex="-1"></a><span class="st">    });</span></span>
+<span id="cb1-1224"><a href="#cb1-1224" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;btnCsvEdges&#39;).addEventListener(&#39;click&#39;, () =&gt; {</span></span>
+<span id="cb1-1225"><a href="#cb1-1225" aria-hidden="true" tabindex="-1"></a><span class="st">      const rows = cy.edges(&#39;:visible&#39;).map(edgeRow);</span></span>
+<span id="cb1-1226"><a href="#cb1-1226" aria-hidden="true" tabindex="-1"></a><span class="st">      download(&#39;kinome_edges.csv&#39;, csvBlob(rows, EDGE_COLUMNS));</span></span>
+<span id="cb1-1227"><a href="#cb1-1227" aria-hidden="true" tabindex="-1"></a><span class="st">    });</span></span>
+<span id="cb1-1228"><a href="#cb1-1228" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1229"><a href="#cb1-1229" aria-hidden="true" tabindex="-1"></a><span class="st">    document.getElementById(&#39;btnFullNetwork&#39;).addEventListener(&#39;click&#39;, () =&gt; {</span></span>
+<span id="cb1-1230"><a href="#cb1-1230" aria-hidden="true" tabindex="-1"></a><span class="st">      // Export every edge in the network, not just the visible subgraph.</span></span>
+<span id="cb1-1231"><a href="#cb1-1231" aria-hidden="true" tabindex="-1"></a><span class="st">      const fmt = v =&gt; (v == null || v === &#39;&#39;) ? &#39;&#39; : v;</span></span>
+<span id="cb1-1232"><a href="#cb1-1232" aria-hidden="true" tabindex="-1"></a><span class="st">      const rows = data.edges.map(e =&gt; [</span></span>
+<span id="cb1-1233"><a href="#cb1-1233" aria-hidden="true" tabindex="-1"></a><span class="st">        e.source, e.target, fmt(e.Uniprot), e.evidence, e.Likely_functional,</span></span>
+<span id="cb1-1234"><a href="#cb1-1234" aria-hidden="true" tabindex="-1"></a><span class="st">        e.SiteCount, e.Sites, fmt(e.MotifPercentile), fmt(e.MotifRank),</span></span>
+<span id="cb1-1235"><a href="#cb1-1235" aria-hidden="true" tabindex="-1"></a><span class="st">        fmt(e.FunctionalScore), fmt(e.SharedCompartments), fmt(e.Score),</span></span>
+<span id="cb1-1236"><a href="#cb1-1236" aria-hidden="true" tabindex="-1"></a><span class="st">        e.SourceList ?? &#39;&#39;, e.Reference_PMID</span></span>
+<span id="cb1-1237"><a href="#cb1-1237" aria-hidden="true" tabindex="-1"></a><span class="st">      ]);</span></span>
+<span id="cb1-1238"><a href="#cb1-1238" aria-hidden="true" tabindex="-1"></a><span class="st">      download(&#39;kinome_full_network.csv&#39;, csvBlob(rows, EDGE_COLUMNS));</span></span>
+<span id="cb1-1239"><a href="#cb1-1239" aria-hidden="true" tabindex="-1"></a><span class="st">    });</span></span>
+<span id="cb1-1240"><a href="#cb1-1240" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1241"><a href="#cb1-1241" aria-hidden="true" tabindex="-1"></a><span class="st">    // Site-level export: one row per kinase-substrate-site triad, with the</span></span>
+<span id="cb1-1242"><a href="#cb1-1242" aria-hidden="true" tabindex="-1"></a><span class="st">    // individual evidence values behind each classification.</span></span>
+<span id="cb1-1243"><a href="#cb1-1243" aria-hidden="true" tabindex="-1"></a><span class="st">    const SITE_COLUMNS = [&#39;Kinase&#39;,&#39;Substrate&#39;,&#39;UniProt&#39;,&#39;Site&#39;,&#39;Sequence (+/-7)&#39;,&#39;Evidence&#39;,</span></span>
+<span id="cb1-1244"><a href="#cb1-1244" aria-hidden="true" tabindex="-1"></a><span class="st">                          &#39;Curated site&#39;,&#39;Likely functional&#39;,&#39;Motif percentile&#39;,</span></span>
+<span id="cb1-1245"><a href="#cb1-1245" aria-hidden="true" tabindex="-1"></a><span class="st">                          &#39;Kinase rank for site&#39;,&#39;Functional score&#39;,&#39;Shared compartments&#39;,</span></span>
+<span id="cb1-1246"><a href="#cb1-1246" aria-hidden="true" tabindex="-1"></a><span class="st">                          &#39;KinaseCanvas score&#39;];</span></span>
+<span id="cb1-1247"><a href="#cb1-1247" aria-hidden="true" tabindex="-1"></a><span class="st">    const siteBtn = document.getElementById(&#39;btnCsvSites&#39;);</span></span>
+<span id="cb1-1248"><a href="#cb1-1248" aria-hidden="true" tabindex="-1"></a><span class="st">    if(siteBtn){</span></span>
+<span id="cb1-1249"><a href="#cb1-1249" aria-hidden="true" tabindex="-1"></a><span class="st">      siteBtn.addEventListener(&#39;click&#39;, () =&gt; {</span></span>
+<span id="cb1-1250"><a href="#cb1-1250" aria-hidden="true" tabindex="-1"></a><span class="st">        const fmt = v =&gt; (v == null || v === &#39;&#39;) ? &#39;&#39; : v;</span></span>
+<span id="cb1-1251"><a href="#cb1-1251" aria-hidden="true" tabindex="-1"></a><span class="st">        const visible = new Set(cy.edges(&#39;:visible&#39;).map(e =&gt; e.data(&#39;source&#39;) + &#39;||&#39; + e.data(&#39;target&#39;)));</span></span>
+<span id="cb1-1252"><a href="#cb1-1252" aria-hidden="true" tabindex="-1"></a><span class="st">        const subset = siteData.filter(s =&gt; visible.has(s.kinase + &#39;||&#39; + s.substrate));</span></span>
+<span id="cb1-1253"><a href="#cb1-1253" aria-hidden="true" tabindex="-1"></a><span class="st">        const rows = (subset.length ? subset : siteData).map(s =&gt; [</span></span>
+<span id="cb1-1254"><a href="#cb1-1254" aria-hidden="true" tabindex="-1"></a><span class="st">          s.kinase, s.substrate, fmt(s.uniprot), s.site, fmt(s.flankingSequence), s.evidence,</span></span>
+<span id="cb1-1255"><a href="#cb1-1255" aria-hidden="true" tabindex="-1"></a><span class="st">          s.curatedSite, s.likelyFunctional, fmt(s.motifPercentile), fmt(s.motifRank),</span></span>
+<span id="cb1-1256"><a href="#cb1-1256" aria-hidden="true" tabindex="-1"></a><span class="st">          fmt(s.functionalScore), fmt(s.sharedCompartments), fmt(s.score)</span></span>
+<span id="cb1-1257"><a href="#cb1-1257" aria-hidden="true" tabindex="-1"></a><span class="st">        ]);</span></span>
+<span id="cb1-1258"><a href="#cb1-1258" aria-hidden="true" tabindex="-1"></a><span class="st">        download(subset.length ? &#39;kinasecanvas_sites_selection.csv&#39;</span></span>
+<span id="cb1-1259"><a href="#cb1-1259" aria-hidden="true" tabindex="-1"></a><span class="st">                               : &#39;kinasecanvas_sites_all.csv&#39;,</span></span>
+<span id="cb1-1260"><a href="#cb1-1260" aria-hidden="true" tabindex="-1"></a><span class="st">                 csvBlob(rows, SITE_COLUMNS));</span></span>
+<span id="cb1-1261"><a href="#cb1-1261" aria-hidden="true" tabindex="-1"></a><span class="st">      });</span></span>
+<span id="cb1-1262"><a href="#cb1-1262" aria-hidden="true" tabindex="-1"></a><span class="st">    }</span></span>
+<span id="cb1-1263"><a href="#cb1-1263" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1264"><a href="#cb1-1264" aria-hidden="true" tabindex="-1"></a><span class="st">    setEdgeLabels(false);</span></span>
+<span id="cb1-1265"><a href="#cb1-1265" aria-hidden="true" tabindex="-1"></a><span class="st">    setArrows(true);</span></span>
+<span id="cb1-1266"><a href="#cb1-1266" aria-hidden="true" tabindex="-1"></a><span class="st">    applyNodeSizing();</span></span>
+<span id="cb1-1267"><a href="#cb1-1267" aria-hidden="true" tabindex="-1"></a><span class="st">    render();</span></span>
+<span id="cb1-1268"><a href="#cb1-1268" aria-hidden="true" tabindex="-1"></a><span class="st">  })();</span></span>
+<span id="cb1-1269"><a href="#cb1-1269" aria-hidden="true" tabindex="-1"></a><span class="st">  &quot;</span>))</span>
+<span id="cb1-1270"><a href="#cb1-1270" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-1271"><a href="#cb1-1271" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-1272"><a href="#cb1-1272" aria-hidden="true" tabindex="-1"></a><span class="fu">browsable</span>(<span class="fu">tagList</span>(data_tags, viewer_tags))</span>
+<span id="cb1-1273"><a href="#cb1-1273" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
