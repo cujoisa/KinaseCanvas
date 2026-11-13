@@ -33,7 +33,7 @@ Thank you for the opportunity to submit a minor revision of our manuscript descr
 
 * **Comparison with PhosphoNET.** The MAPK15-RING1 case study now reports that PhosphoNET favors other MAPKs for this site.
 
-* **Explorer.** The neighborhood cap for promiscuous kinases is replaced by a slider that adds interactions 75 at a time, up to the full neighborhood (Figure 4 updated).
+* **Explorer.** The neighborhood cap for promiscuous kinases is replaced by a slider that sets how many interactions are drawn, from the default 75 up to the full neighborhood (Figure 4 updated).
 
 * **Future directions.** Transfer of interactions from orthologous sites in other species, stimulus-resolved co-regulation data, and experimental validation of a random sample of predictions.
 

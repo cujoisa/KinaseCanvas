@@ -136,9 +136,9 @@ Only 13 of the 48 atypical kinases in our kinome reference are profiled in the s
 
 > Page 29, Lines 19 – 27 – It is unfortunate that there is a cap of 75 interactions with the output of neighbourhoods for promiscuous protein kinases. I suggest to the authors that they may add addition layer of interactions that can be viewed with a toggle/progression switch, similar to what has been used on www.kinector.ca to solve this problem.
 
-We have adopted this suggestion. The Explorer's on/off switch is replaced by an "Interactions shown" slider: a neighborhood opens with its 75 best-supported interactions, and each step adds the next 75 in the same order until the full neighborhood is shown. Figure 4B shows the new control, and Results, "Interactive exploration and visualization" now reads:
+We have adopted this suggestion. The Explorer's on/off switch is replaced by an "Interactions shown" slider: a neighborhood opens with its 75 best-supported interactions, and the slider sets any number from one to the full neighborhood, in the same order. The sidebar filters now act before the cap, so raising the minimum confidence brings in qualifying interactions from beyond it rather than only thinning the current view. Figure 4B shows the new control, and Results, "Interactive exploration and visualization" now reads:
 
-> *A seeded neighborhood is therefore capped at 75 interactions by default, chosen under a stated ordering (curated first, then by descending composite confidence, ties broken alphabetically), with the number of hidden interactions shown and a slider that adds them back 75 at a time, in the same order, up to the full neighborhood.*
+> *A seeded neighborhood is therefore capped at 75 interactions by default, chosen under a stated ordering (curated first, then by descending composite confidence, ties broken alphabetically), with the number of hidden interactions shown and a slider that sets how many are drawn, in the same order, up to the full neighborhood. The filters act before the cap, so it always selects among the interactions that pass them.*
 
 References
 
