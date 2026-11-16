@@ -64,7 +64,7 @@ We agree that the direction of each change is what such a layer needs. We expand
 
 > I am not suggesting that the following is necessary for the publication, but it would have strengthen the publication if some examples of the novel predicted substrates of certain kinases could have been confirmed in vitro with purified proteins and Mg•ATP. If some 20 predicted KSI were tested, it would be interesting to know how many of them turned out to be true, at least in vitro.
 
-We agree that this would be the most direct test of the resource, and we have not done it. Discussion, "Future directions" now states this and describes the experiment:
+Discussion, "Future directions" now describes the experiment and how it would measure the true-positive rate directly:
 
 > *We have not tested novel predictions experimentally. Assaying a random sample in vitro with purified kinase, substrate and Mg-ATP, then confirming positives in cells by kinase knockdown or inhibition with site-specific phosphoproteomics, or by proximity labeling (e.g., BioID), would measure the true-positive rate of the predicted set directly.*
 
@@ -76,7 +76,7 @@ Specific comments
 
 > PDF Page 13, second paragraph – PhosphoNET has been affected by high traffic and has been slow to respond at times. This is currently being rectified by upgrades in internet connectivity. RANGAP1 is a known to be phosphorylated at S334. PhosphoNET predicts CDK1 as the 8th highest ranked kinase for this site, after JNK1/3>JNK2>CDK2>ERK1>ERK2>CDKL1. All of their scores are very close, so it would appear that PhosphoNET and KinaseCANVAS are in good agreement about this KSI.
 
-We thank the reviewer for running this check, and for explaining PhosphoNET's availability; it still did not respond when we tried again on 12 November 2026, so we could not repeat the check ourselves. Residue 334 of canonical RANGAP1 (UniProt P46060) is a glycine. The serine-proline motifs in this region are at S428 and S442, and the proline-directed kinases the reviewer lists fit either, so we assume PhosphoNET numbers the protein differently. If the ranking refers to S442, it agrees with ours: the specificity atlas ranks CDK2, CDK3 and CDK1 highest for this site, and CDK1 is retained after the localization filter. Because we cannot yet confirm which site the ranking refers to, we have not added it to the manuscript, where the CDK1 assignment rests on the study that first reported the site [@Swaminathan2004-rg].
+We thank the reviewer for running this check, and for explaining PhosphoNET's availability. We could not match S334 to the RANGAP1 sequence: residue 334 of canonical RANGAP1 (UniProt P46060) is a glycine, and none of the human RANGAP1 sequences in UniProt or RefSeq has a serine at this position. The protein's only serine-proline motifs are S428 and S442, and the proline-directed kinases the reviewer lists fit either, so we assume PhosphoNET numbers the protein differently. If the ranking refers to S442, it is consistent with ours: the specificity atlas ranks CDK2, CDK3 and CDK1 highest for this site, so it too places CDK2 above CDK1, and CDK1 is one of the two kinases retained after the localization filter. Because we cannot yet confirm which site the ranking refers to, we have not added it to the manuscript, where the CDK1 assignment rests on the study that first reported the site [@Swaminathan2004-rg].
 
 **2\.**
 
@@ -124,7 +124,7 @@ We added the comma. We kept the hyphenated "co-localization", which the manuscri
 
 This question can be tested with the data in hand. The atlas motifs are measured with peptide libraries rather than derived from known substrates, so each kinase's curated sites are an independent test of its motif. We added a Methods subsection, "Recovery of curated sites by the motif layer":
 
-> *A kinase's percentiles are uniform across all sites it is scored on, so a motif carrying no information about real substrates would place curated sites at a mean of the 50th percentile, with 10% at or above the 90th; the mean percentile divided by 100 is therefore the area under the receiver operating characteristic curve (AUROC) for curated sites against all scored sites.*
+> *Each kinase's percentiles are uniform across the sites it is scored on, so an uninformative motif would place curated sites at the 50th percentile on average, with 10% at or above the 90th. The mean percentile divided by 100 therefore equals the area under the receiver operating characteristic curve (AUROC) for curated sites against all scored sites.*
 
 The result, added to Results, "Functional and family-level properties", runs against the expectation for atypical kinases as a group, but supports the reviewer's caution for some of them:
 

@@ -181,7 +181,7 @@ To assess how the integrated network covers dark kinases, we used the DarkKinase
 
 ## [Recovery of curated sites by the motif layer]{.rev}
 
-[To test how well each kinase's measured motif identifies its known substrates, we took the motif percentile that the atlas assigns to every curated kinase-site pair it scores.]{.rev} [A kinase's percentiles are uniform across all sites it is scored on, so a motif carrying no information about real substrates would place curated sites at a mean of the 50th percentile, with 10% at or above the 90th; the mean percentile divided by 100 is therefore the area under the receiver operating characteristic curve (AUROC) for curated sites against all scored sites.]{.rev} [Because the atlas motifs were measured with peptide libraries rather than derived from known substrates, the comparison is not circular.]{.rev} [Recovery was summarized by kinase family.]{.rev}
+[To test whether the atlas motifs identify known substrates, we took the percentile the atlas assigns to each curated kinase-site pair.]{.rev} [The motifs were measured with peptide libraries rather than derived from known substrates, so the test is not circular.]{.rev} [Each kinase's percentiles are uniform across the sites it is scored on, so an uninformative motif would place curated sites at the 50th percentile on average, with 10% at or above the 90th.]{.rev} [The mean percentile divided by 100 therefore equals the area under the receiver operating characteristic curve (AUROC) for curated sites against all scored sites.]{.rev} [We summarized recovery by kinase family.]{.rev}
 
 ## Implementation
 

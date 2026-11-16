@@ -1,0 +1,145 @@
+---
+title: "Response to Reviewers (second revision)"
+subtitle: "KinaseCanvas: An Integrated Resource for Curated and Novel Kinase-Substrate Interactions (DATABASE-2026-0054.R1)"
+author: "Chinmaya U. Joisa, Ian C. McCabe, Michael P. East, Xianlu L. Peng, Shawn M. Gomez, Jen Jen Yeh"
+date: today
+format:
+  pdf:
+    documentclass: article
+    geometry: margin=1in
+    colorlinks: true
+    # article's title block sets the author line in a single-column tabular that cannot wrap,
+    # so a long author list runs past the right margin; give the column the text width instead.
+    include-in-header:
+      text: |
+        \usepackage{etoolbox}
+        \usepackage{array}
+        \makeatletter
+        \patchcmd{\@maketitle}{\begin{tabular}[t]{c}}{\begin{tabular}[t]{>{\centering\arraybackslash}p{\dimexpr\linewidth-2\tabcolsep\relax}}}{}{\typeout{WARNING: author wrap patch failed}}
+        \makeatother
+  docx: default
+bibliography: ../refs/references.bib
+csl: https://www.zotero.org/styles/database
+---
+
+We thank the editors and both reviewers. We have addressed every comment from Reviewer 2 below; where we took a different approach from the one suggested (specific comments 1 and 6), we explain why. Manuscript text is quoted exactly as it now appears.
+
+In line with the editor's instructions:
+
+- **Highlighted changes.** Text added or changed in this revision is shown in blue in the tracked-changes manuscript, relative to the first revision. A clean copy is also provided.
+- **Alt text.** Every figure now has alt text below its legend. We added it for Supplementary Figure 2, which lacked it, and rewrote the alt text for Figure 2, which did not describe panel C.
+- **Redundant files.** Files from the previous round that this revision supersedes have been deleted from the submission.
+
+**Reviewer 1**
+
+> None
+
+We thank Reviewer 1 for reviewing the revised manuscript.
+
+**Reviewer 2**
+
+&nbsp;
+
+We thank the reviewer for a second careful reading and for checking two of our examples against PhosphoNET.
+
+General comments
+
+**G1\.**
+
+> One question that I did not consider previously was whether the existence of a kinase-substrate relationship not necessarily identified in human data, may exist in results from kinases and their substrates in other animal models. It seems from page 24/5219, third paragraph, that it does not. If these kinases and their substrates are highly conserved (especially the phosphorylation site in the substrate), it could be useful if Kinase Canvas use this information in the future for prediction in a human context. This refinement might be suggested at the end of the manuscript in terms of future directions.
+
+That is correct: the resource currently includes only sites reported on the human protein. We added this to Discussion, "Future directions":
+
+> *Fourth, kinase-substrate relationships established in other species could be transferred to human orthologs where the kinase, the substrate and the phosphosite with its flanking sequence are conserved, adding interactions not yet reported in human.*
+
+**G2\.**
+
+> Another criteria that might be applied in future studies is whether diverse stimuli in vivo correlate with the activation of the kinase and increased phosphorylation of the phosphosite of the substrate pair. Such information is partly available from PhosphositePlus, but unfortunately the directionality of the effect (i.e., increased or decreased) is not provided. Some low quality (antibody microarray) information in this regard might be available from www.kinet-am.ca. On page 34/5219 lines 46-48, this appears to be briefly mentioned, but perhaps the authors can expand on this.
+
+We agree that the direction of each change is what such a layer needs. We expanded the limitation on co-regulation (Discussion, "Limitations and caveats"):
+
+> *Such a layer would test whether stimuli that activate a kinase also increase phosphorylation of its candidate sites, which requires signed, stimulus-resolved measurements of the kind provided by perturbation phosphoproteomics or, at lower resolution, antibody microarrays (e.g., KiNET-AM, <http://www.kinet-am.ca>).*
+
+**G3\.**
+
+> I am not suggesting that the following is necessary for the publication, but it would have strengthen the publication if some examples of the novel predicted substrates of certain kinases could have been confirmed in vitro with purified proteins and Mg•ATP. If some 20 predicted KSI were tested, it would be interesting to know how many of them turned out to be true, at least in vitro.
+
+Discussion, "Future directions" now describes the experiment and how it would measure the true-positive rate directly:
+
+> *We have not tested novel predictions experimentally. Assaying a random sample in vitro with purified kinase, substrate and Mg-ATP, then confirming positives in cells by kinase knockdown or inhibition with site-specific phosphoproteomics, or by proximity labeling (e.g., BioID), would measure the true-positive rate of the predicted set directly.*
+
+The analysis under specific comment 7 provides a computational counterpart: how well the motif layer recovers each kinase's known sites.
+
+Specific comments
+
+**1\.**
+
+> PDF Page 13, second paragraph – PhosphoNET has been affected by high traffic and has been slow to respond at times. This is currently being rectified by upgrades in internet connectivity. RANGAP1 is a known to be phosphorylated at S334. PhosphoNET predicts CDK1 as the 8th highest ranked kinase for this site, after JNK1/3>JNK2>CDK2>ERK1>ERK2>CDKL1. All of their scores are very close, so it would appear that PhosphoNET and KinaseCANVAS are in good agreement about this KSI.
+
+We thank the reviewer for running this check, and for explaining PhosphoNET's availability. We could not match S334 to the RANGAP1 sequence: residue 334 of canonical RANGAP1 (UniProt P46060) is a glycine, and none of the human RANGAP1 sequences in UniProt or RefSeq has a serine at this position. The protein's only serine-proline motifs are S428 and S442, and the proline-directed kinases the reviewer lists fit either, so we assume PhosphoNET numbers the protein differently. If the ranking refers to S442, it is consistent with ours: the specificity atlas ranks CDK2, CDK3 and CDK1 highest for this site, so it too places CDK2 above CDK1, and CDK1 is one of the two kinases retained after the localization filter. Because we cannot yet confirm which site the ranking refers to, we have not added it to the manuscript, where the CDK1 assignment rests on the study that first reported the site [@Swaminathan2004-rg].
+
+**2\.**
+
+> PDF Page 14, lines 27-29 – With PhosphoNET, MAPK15 is not predicted amongst the top 10% (scores of 379 or higher) of 500 kinases to phosphorylate RING1 S38, although the prediction scores for the top 50 kinases are all high. The top predicted scorers for this were MAPK8/MAPK10>MAPK9>MAPK1>CDK5>MAPK13>MAPK3>MAPK14/MAPK7 with scores that ranged from 572 to 489. Thus it is feasible that MAPK15 might target RING1 S38, but it does not appear to be the most likely amongst the kinases for this.
+
+We have added this result to the MAPK15 case study (Discussion, "Biological insights from the integrated network"):
+
+> *PhosphoNET, which infers specificity from kinase sequence, does not place MAPK15 among its top 10% of kinases for this site; its highest-scoring kinases are other MAPKs and CDK5 [@Safaei2011-pn]. Three of these, MAPK1, MAPK3 and MAPK7, are among the six kinases our pipeline retains, so the two approaches agree that a MAPK-family kinase is likely but not on which one.*
+
+In the specificity atlas, MAPK3, MAPK1 and MAPK7 rank second, sixth and seventh for this site. The disagreement over which MAPK is most likely reinforces our presentation of RING1 S38 as a hypothesis for experimental testing, and the paragraph now draws that conclusion explicitly ("We therefore present it as a prioritized hypothesis").
+
+**3\.**
+
+> I noticed when the figures are referenced in the main text, the alphabet characters used to designate the panels are shown in brackets. It is best to remove the brackets, unless this is a journal style requirement.
+
+We have removed the brackets throughout (e.g., "Figure 1A", "Figure 3A and B"). Because this change touches about 50 references, it is not highlighted individually in the tracked-changes manuscript.
+
+**4\.**
+
+> PDF Page 16, Line 50.5 – change to "Public repositories now catalog over 250,000 human"
+
+Changed (Introduction):
+
+> *Public repositories now catalog over 250,000 human phosphosites across most of the proteome [@Hornbeck2019-psp; @Vlastaridis2017-hz].*
+
+**5\.**
+
+> PDF Page 20, Line 31 – change to “(e.g., “S123)”
+
+Changed (Methods, "Curated kinase-substrate interactions"):
+
+> *Phosphosite notation was standardized to a single-letter residue code plus position (e.g., “S123”).*
+
+**6\.**
+
+> PDF Page 24, Line 10 – change to "(e.g., transient colocalization"
+
+We added the comma. We kept the hyphenated "co-localization", which the manuscript, its figures and the Explorer use consistently, and will change it throughout if the journal prefers the closed form:
+
+> *Although some true interactions will undoubtedly be excluded (e.g., transient co-localization not captured by HPA, functional sites below the threshold, or kinases with context-dependent specificity), we deliberately favor specificity over sensitivity to generate a conservative, high-confidence prediction set.*
+
+**7\.**
+
+> PDF Page 27, Figure 3A - Many of the atypical kinases have relatively few substrates that have been identified, and it is difficult to establish consensus phosphorylation site recognition motifs for them. It makes one wonder whether the motif-predicted KSI's for atypical kinases would be very successful.
+
+This question can be tested with the data in hand. The atlas motifs are measured with peptide libraries rather than derived from known substrates, so each kinase's curated sites are an independent test of its motif. We added a Methods subsection, "Recovery of curated sites by the motif layer":
+
+> *Each kinase's percentiles are uniform across the sites it is scored on, so an uninformative motif would place curated sites at the 50th percentile on average, with 10% at or above the 90th. The mean percentile divided by 100 therefore equals the area under the receiver operating characteristic curve (AUROC) for curated sites against all scored sites.*
+
+The result, added to Results, "Functional and family-level properties", runs against the expectation for atypical kinases as a group, but supports the reviewer's caution for some of them:
+
+> *Recovery is highest for atypical kinases (AUROC 0.84; 65.6% at or above the 90th percentile) and lowest for tyrosine kinases (0.61) and CK1 (0.64), consistent with their reliance on docking and priming (see Limitations). The atypical result rests mainly on ATM, ATR and DNA-PK, whose SQ/TQ motif is well established; among the seven atypical kinases with at least five scored curated sites, which account for 98% of the family's 1,137 novel pairs, AUROC ranges from 0.66 (MTOR) to 0.99 (SMG1). Curated sites are themselves biased toward canonical motifs, so these values likely overstate accuracy at novel sites.*
+
+Only 13 of the 48 atypical kinases in our kinome reference are profiled in the specificity atlas, and five PI3K-related kinases among them (ATM, ATR, DNA-PK, MTOR and SMG1) account for 90% of the family's novel pairs. Many of the atypical kinases with few known substrates that the reviewer has in mind are therefore absent from the predictions rather than poorly predicted, and MTOR, the PI3K-related kinase whose curated sites the atlas ranks least well, is the case that most warrants caution. The analysis script (`scripts/curated_site_recovery.R`) and its per-kinase and per-family results are in the GitHub repository.
+
+**8\.**
+
+> Page 29, Lines 19 – 27 – It is unfortunate that there is a cap of 75 interactions with the output of neighbourhoods for promiscuous protein kinases. I suggest to the authors that they may add addition layer of interactions that can be viewed with a toggle/progression switch, similar to what has been used on www.kinector.ca to solve this problem.
+
+We have adopted this suggestion. The Explorer's on/off switch is replaced by an "Interactions shown" slider: a neighborhood opens with its 75 best-supported interactions, and the slider sets any number from one to the full neighborhood, in the same order. The sidebar filters now act before the cap, so raising the minimum confidence brings in qualifying interactions from beyond it rather than only thinning the current view. Figure 4B shows the new control, and Results, "Interactive exploration and visualization" now reads:
+
+> *A seeded neighborhood is therefore capped at 75 interactions by default, chosen under a stated ordering (curated first, then by descending composite confidence, ties broken alphabetically), with the number of hidden interactions shown and a slider that sets how many are drawn, in the same order, up to the full neighborhood. The filters act before the cap, so it always selects among the interactions that pass them.*
+
+References
+
+&nbsp;
